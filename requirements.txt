@@ -7,3 +7,8 @@ python-docx
 requests
 plotly
 streamlit-authenticator
+streamlit
+pandas
+openpyxl
+plotly
+fpdf2
