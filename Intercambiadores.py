@@ -102,7 +102,7 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
     
     # 2. Equipo y Unidad
     pdf.set_font("Arial", "B", 10)
-    txt_equipo_unidad = f"EQUIPO: {sanitizar_para_pdf(val_equipo)}   |   UNIDAD DE PROCESO: {sanitizar_para_pdf(val_unidad)}"
+    txt_equipo_unidad = f"EQUIPO: {sanitizar_para_pdf(val_equipo)}    |    UNIDAD DE PROCESO: {sanitizar_para_pdf(val_unidad)}"
     pdf.cell(0, 5, txt_equipo_unidad, ln=True, align="C")
     pdf.ln(2)
     
@@ -199,7 +199,6 @@ def cargar_datos(sheet_id, nombre_hoja):
     
     data = pd.read_csv(sheet_url)
     
-    # Renombrar columnas duplicadas (ej. múltiples columnas de Conexiones "Conn.")
     columnas = []
     conteo_columnas = {}
     for col in data.columns:
@@ -215,7 +214,6 @@ def cargar_datos(sheet_id, nombre_hoja):
     data = data.fillna("Sin información")
     data = data.astype(str)
     
-    # Normalización del campo STATUS
     for col in data.columns:
         if 'STATUS' in col.upper() or 'ESTATUS' in col.upper():
             data[col] = data[col].str.strip().str.upper()
