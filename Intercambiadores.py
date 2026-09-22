@@ -272,7 +272,7 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         ("QT", 15),
         ("DESCRIPTION", 68),
         ("PROCESS", 30),
-        ("AUXILIARIES", 45)
+        ("AUXILLARIES", 45)
     ]
     
     # Encabezados
@@ -430,14 +430,14 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
 
     # DIBUJAR PLANO ESQUEMÁTICO Y NOZZLE SCHEDULE EN EL PDF
     if config_equipo:
-        if pdf.get_y() + 65 > 270:
+        if pdf.get_y() + 80 > 270:
             pdf.add_page()
             
         pdf.ln(3)
         pdf.set_font("Arial", "B", 10)
         pdf.set_text_color(*rgb)
         pdf.cell(0, 6, "Plano Esquematico de Boquillas", ln=True)
-        pdf.ln(1)
+        pdf.ln(6)  # Espaciado extra para evitar que la imagen o boquillas tapen el título
         
         y_esquema = pdf.get_y()
         dibujado_ok = False
@@ -448,7 +448,8 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
                 svg_code = generate_modular_exchanger_svg(config_equipo)
                 png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
                 cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp)
-                pdf.image(png_temp, x=15, w=180)
+                pdf.image(png_temp, x=15, y=y_esquema, w=180)
+                pdf.set_y(y_esquema + 88)  # Avanzar posición Y tras la imagen
                 if os.path.exists(png_temp):
                     os.remove(png_temp)
                 dibujado_ok = True
@@ -456,7 +457,7 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
                 dibujado_ok = False
                 
         if not dibujado_ok:
-            dibujar_esquema_fpdf(pdf, config_equipo, x_offset=15, y_offset=y_esquema)
+            dibujar_esquema_fpdf(pdf, config_equipo, x_offset=15, y_offset=y_esquema + 10)
             
         agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb)
 
@@ -683,11 +684,11 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
                     "QT": 1,
                     "DESCRIPTION": desc_full,
                     "PROCESS": noz.get("service", "INLET"),
-                    "AUXILIARIES": aux_combined
+                    "AUXILLARIES": aux_combined
                 })
 
             table_rows.append({
-                "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILIARIES": f"{global_aux_rating} CPLGS."
+                "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILLARIES": f"{global_aux_rating} CPLGS."
             })
 
             df_nozzles = pd.DataFrame(table_rows)
