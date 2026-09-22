@@ -382,13 +382,32 @@ with col_view:
     })
 
     df_nozzles = pd.DataFrame(table_rows)
-    
-    # Renderizado directo e nativo mediante dataframe con autosize automático
-    st.dataframe(
-        df_nozzles, 
-        use_container_width=True, 
-        hide_index=True
-    )
+
+    # Estilizado CSS compacto para reducir tamaño de fuente y espacio interno
+    st.markdown("""
+        <style>
+        [data-testid="stTable"] {
+            width: auto !important;
+            margin-top: 5px;
+        }
+        [data-testid="stTable"] th {
+            font-size: 11px !important;
+            padding: 4px 10px !important;
+            font-weight: 700 !important;
+            white-space: nowrap !important;
+            background-color: #f1f5f9 !important;
+        }
+        [data-testid="stTable"] td {
+            font-size: 11px !important;
+            padding: 4px 10px !important;
+            white-space: nowrap !important;
+            line-height: 1.2 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Renderizado nativo con auto-ajuste de columnas y sin índice
+    st.table(df_nozzles.style.hide(axis='index'))
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
