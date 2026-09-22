@@ -167,7 +167,7 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         coords[comp] = {"start": curr_x, "end": curr_x + w_scaled, "width": w_scaled}
         curr_x += w_scaled + 2
         
-    # Eje central
+    # Eje central (Línea roja)
     pdf.set_draw_color(239, 68, 68)
     pdf.line(x_offset + 10, cy, curr_x + 10, cy)
     
@@ -180,23 +180,43 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         pdf.set_draw_color(15, 23, 42)
         pdf.rect(sad_x - 4, cy + r_shell, 8, 7, 'FD')
         
-    # Componentes
+    # Componentes (CHANNEL, SHELL, BONNET con forma bombeada)
     for idx, comp in enumerate(seq):
         c_info = coords[comp]
         cx = c_info["start"]
         cw = c_info["width"]
         
+        # Junta de brida (Flange joint) entre componentes
         if idx > 0:
             pdf.set_fill_color(71, 85, 105)
             pdf.rect(cx - 2, cy - r_shell - 2, 2, r_shell * 2 + 4, 'FD')
             
         pdf.set_fill_color(226, 232, 240)
         pdf.set_draw_color(51, 65, 85)
-        pdf.rect(cx, cy - r_shell, cw, r_shell * 2, 'FD')
+        
+        if comp == "BONNET":
+            dome_w = min(12.0, cw * 0.4)
+            if idx == len(seq) - 1: # Bonnet a la derecha
+                pdf.ellipse(cx + cw - 2*dome_w, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
+                pdf.rect(cx, cy - r_bonnet, cw - dome_w + 0.5, 2*r_bonnet, style='F')
+                pdf.line(cx, cy - r_bonnet, cx + cw - dome_w, cy - r_bonnet)
+                pdf.line(cx, cy + r_bonnet, cx + cw - dome_w, cy + r_bonnet)
+                pdf.line(cx, cy - r_bonnet, cx, cy + r_bonnet)
+                label_x = cx + (cw - dome_w)/2 - 5
+            else: # Bonnet a la izquierda
+                pdf.ellipse(cx, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
+                pdf.rect(cx + dome_w - 0.5, cy - r_bonnet, cw - dome_w + 0.5, 2*r_bonnet, style='F')
+                pdf.line(cx + dome_w, cy - r_bonnet, cx + cw, cy - r_bonnet)
+                pdf.line(cx + dome_w, cy + r_bonnet, cx + cw, cy + r_bonnet)
+                pdf.line(cx + cw, cy - r_bonnet, cx + cw, cy + r_bonnet)
+                label_x = cx + dome_w + (cw - dome_w)/2 - 5
+        else:
+            pdf.rect(cx, cy - r_shell, cw, r_shell * 2, 'FD')
+            label_x = cx + cw / 2 - 5
         
         pdf.set_font("Arial", "B", 7)
         pdf.set_text_color(51, 65, 85)
-        pdf.text(cx + cw / 2 - 4, cy + 1, comp)
+        pdf.text(label_x, cy + 1, comp)
 
     # Boquillas
     for noz in config.get("nozzles", []):
@@ -210,46 +230,90 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         tag_str = sanitizar_para_pdf(noz.get("tag", ""))
         
         auxs = noz.get("auxiliaries", [])
-        aux_txt = sanitizar_para_pdf("/".join([a.get("position", "") for a in auxs if a.get("position")]))
-        
         active_r = r_bonnet if comp == "BONNET" else r_shell
         
         if side == "TOP":
             ny = cy - active_r
             if style_type == "FLANGED":
+                # Cuello de boquilla
                 pdf.set_fill_color(203, 213, 225)
                 pdf.set_draw_color(30, 41, 59)
-                pdf.rect(nx - 2, ny - 9, 4, 9, 'FD')
-                pdf.rect(nx - 4, ny - 11, 8, 2, 'FD')
+                pdf.rect(nx - 3.25, ny - 12, 6.5, 12, 'FD')
+                # Brida
+                pdf.rect(nx - 5.5, ny - 14.5, 11, 2.5, 'FD')
+                # Tag arriba de brida
                 pdf.set_font("Arial", "B", 7)
                 pdf.set_text_color(15, 23, 42)
-                pdf.text(nx - 3, ny - 13, tag_str)
-                if aux_txt:
-                    pdf.set_font("Arial", "", 5)
-                    pdf.text(nx - 3, ny - 4, aux_txt)
-            else:
+                pdf.text(nx - 2.5, ny - 16, tag_str)
+                
+                # Círculos para Auxiliares (NS, FS) dentro del cuello
+                if len(auxs) == 2:
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.set_draw_color(15, 23, 42)
+                    pdf.ellipse(nx - 2.2, ny - 9.0 - 2.2, 4.4, 4.4, 'FD')
+                    pdf.set_font("Arial", "B", 4.5)
+                    pdf.set_text_color(15, 23, 42)
+                    pdf.text(nx - 1.5, ny - 9.0 + 0.8, sanitizar_para_pdf(auxs[0].get("position", "NS")))
+                    
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.ellipse(nx - 2.2, ny - 3.5 - 2.2, 4.4, 4.4, 'FD')
+                    pdf.set_font("Arial", "B", 4.5)
+                    pdf.text(nx - 1.5, ny - 3.5 + 0.8, sanitizar_para_pdf(auxs[1].get("position", "FS")))
+                elif len(auxs) == 1:
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.set_draw_color(15, 23, 42)
+                    pdf.ellipse(nx - 2.2, ny - 6.0 - 2.2, 4.4, 4.4, 'FD')
+                    pdf.set_font("Arial", "B", 4.5)
+                    pdf.set_text_color(15, 23, 42)
+                    pdf.text(nx - 1.5, ny - 6.0 + 0.8, sanitizar_para_pdf(auxs[0].get("position", "NS")))
+            else: # Tapón / Coupling
                 pdf.set_fill_color(148, 163, 184)
-                pdf.rect(nx - 1.5, ny - 5, 3, 5, 'FD')
+                pdf.set_draw_color(30, 41, 59)
+                pdf.rect(nx - 1.5, ny - 6, 3, 6, 'FD')
                 pdf.set_font("Arial", "B", 7)
-                pdf.text(nx - 3, ny - 7, tag_str)
+                pdf.set_text_color(15, 23, 42)
+                pdf.text(nx - 2.5, ny - 8, tag_str)
         else: # BOTTOM
             ny = cy + active_r
             if style_type == "FLANGED":
+                # Cuello de boquilla
                 pdf.set_fill_color(203, 213, 225)
                 pdf.set_draw_color(30, 41, 59)
-                pdf.rect(nx - 2, ny, 4, 9, 'FD')
-                pdf.rect(nx - 4, ny + 9, 8, 2, 'FD')
+                pdf.rect(nx - 3.25, ny, 6.5, 12, 'FD')
+                # Brida
+                pdf.rect(nx - 5.5, ny + 12, 11, 2.5, 'FD')
+                # Tag debajo de brida
                 pdf.set_font("Arial", "B", 7)
                 pdf.set_text_color(15, 23, 42)
-                pdf.text(nx - 3, ny + 15, tag_str)
-                if aux_txt:
-                    pdf.set_font("Arial", "", 5)
-                    pdf.text(nx - 3, ny + 5, aux_txt)
-            else:
+                pdf.text(nx - 2.5, ny + 18, tag_str)
+                
+                # Círculos para Auxiliares (NS, FS) dentro del cuello
+                if len(auxs) == 2:
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.set_draw_color(15, 23, 42)
+                    pdf.ellipse(nx - 2.2, ny + 3.5 - 2.2, 4.4, 4.4, 'FD')
+                    pdf.set_font("Arial", "B", 4.5)
+                    pdf.set_text_color(15, 23, 42)
+                    pdf.text(nx - 1.5, ny + 3.5 + 0.8, sanitizar_para_pdf(auxs[0].get("position", "NS")))
+                    
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.ellipse(nx - 2.2, ny + 8.5 - 2.2, 4.4, 4.4, 'FD')
+                    pdf.set_font("Arial", "B", 4.5)
+                    pdf.text(nx - 1.5, ny + 8.5 + 0.8, sanitizar_para_pdf(auxs[1].get("position", "FS")))
+                elif len(auxs) == 1:
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.set_draw_color(15, 23, 42)
+                    pdf.ellipse(nx - 2.2, ny + 6.0 - 2.2, 4.4, 4.4, 'FD')
+                    pdf.set_font("Arial", "B", 4.5)
+                    pdf.set_text_color(15, 23, 42)
+                    pdf.text(nx - 1.5, ny + 6.0 + 0.8, sanitizar_para_pdf(auxs[0].get("position", "NS")))
+            else: # Tapón / Coupling
                 pdf.set_fill_color(148, 163, 184)
-                pdf.rect(nx - 1.5, ny, 3, 5, 'FD')
+                pdf.set_draw_color(30, 41, 59)
+                pdf.rect(nx - 1.5, ny, 3, 6, 'FD')
                 pdf.set_font("Arial", "B", 7)
-                pdf.text(nx - 3, ny + 10, tag_str)
+                pdf.set_text_color(15, 23, 42)
+                pdf.text(nx - 2.5, ny + 10, tag_str)
                 
     pdf.set_y(y_offset + 60)
 
@@ -437,7 +501,7 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
         pdf.set_font("Arial", "B", 10)
         pdf.set_text_color(*rgb)
         pdf.cell(0, 6, "Plano Esquematico de Boquillas", ln=True)
-        pdf.ln(6)  # Espaciado extra para evitar que la imagen o boquillas tapen el título
+        pdf.ln(6)
         
         y_esquema = pdf.get_y()
         dibujado_ok = False
@@ -449,7 +513,7 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
                 png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
                 cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp)
                 pdf.image(png_temp, x=15, y=y_esquema, w=180)
-                pdf.set_y(y_esquema + 88)  # Avanzar posición Y tras la imagen
+                pdf.set_y(y_esquema + 88)
                 if os.path.exists(png_temp):
                     os.remove(png_temp)
                 dibujado_ok = True
