@@ -1,11 +1,24 @@
 import os
 import re
+import json
 import unicodedata
 import urllib.parse
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import streamlit.components.v1 as components
 from fpdf import FPDF
+
+# Intentar importar el motor SVG desde la subpágina de diseño
+try:
+    from pages.diseno import generate_modular_exchanger_svg
+except ImportError:
+    try:
+        import importlib
+        diseno_module = importlib.import_module("pages.diseno")
+        generate_modular_exchanger_svg = diseno_module.generate_modular_exchanger_svg
+    except Exception:
+        generate_modular_exchanger_svg = None
 
 # Configuración de página de Streamlit
 st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
@@ -80,7 +93,7 @@ def extraer_coordenadas(coordenadas):
         return lat, lon
     return None, None
 
-def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_hex, titulo_doc):
+def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_hex, titulo_doc, config_equipo=None):
     pdf = PDFCustom()
     pdf.set_auto_page_break(auto=True, margin=22)
     pdf.add_page()
@@ -170,10 +183,29 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             max_y = y_fin_izq
             
         pdf.set_xy(x_inicio, max_y + 1)
+
+    # Inclusión opcional de la imagen SVG convertida a PNG si CairoSVG está presente
+    if config_equipo and generate_modular_exchanger_svg:
+        try:
+            import cairosvg
+            svg_code = generate_modular_exchanger_svg(config_equipo)
+            png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
+            cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp)
+            
+            if pdf.get_y() + 85 > 270:
+                pdf.add_page()
+            pdf.ln(5)
+            pdf.set_font("Arial", "B", 10)
+            pdf.cell(0, 5, "Plano Esquematico del Equipo", ln=True)
+            pdf.ln(2)
+            pdf.image(png_temp, x=15, w=180)
+            if os.path.exists(png_temp):
+                os.remove(png_temp)
+        except Exception:
+            pass
         
     pdf.set_draw_color(0, 0, 0)
     
-    # ✅ Retorno de bytes compatible con Python 3 y FPDF
     pdf_out = pdf.output()
     if isinstance(pdf_out, str):
         return pdf_out.encode('latin-1')
@@ -330,6 +362,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
     with col_detalles:
         val_equipo = registro[col_equipo] if col_equipo else "Detalle"
         val_unidad = registro[col_unidad] if col_unidad else "Sin unidad"
+        val_equipo_clean = str(val_equipo).strip()
         
         st.subheader(f"📋 Ficha Técnica - Equipo {val_equipo}")
         
@@ -340,6 +373,36 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         
         df_ficha = pd.DataFrame(list(datos_mostrar.items()), columns=['Parámetro / Conexión', 'Detalle'])
         st.table(df_ficha)
+
+        # Cargar archivo JSON del equipo si existe
+        archivo_json = f"config_{val_equipo_clean}.json"
+        config_equipo = None
+        if os.path.exists(archivo_json):
+            try:
+                with open(archivo_json, "r", encoding="utf-8") as f:
+                    config_equipo = json.load(f)
+            except Exception:
+                config_equipo = None
+
+        st.markdown("### 📐 Plano Esquemático de Boquillas")
+        if config_equipo and generate_modular_exchanger_svg:
+            svg_code = generate_modular_exchanger_svg(config_equipo)
+            components.html(
+                f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
+                height=480
+            )
+            col_plan1, col_plan2 = st.columns([3, 1])
+            with col_plan1:
+                st.success(f"✅ Plano esquemático cargado correctamente para **{val_equipo_clean}**.")
+            with col_plan2:
+                if st.button("✏️ Editar Plano Esquemático"):
+                    st.session_state["tag_para_diseño"] = val_equipo_clean
+                    st.switch_page("pages/diseno.py")
+        else:
+            st.info(f"ℹ️ El equipo **{val_equipo_clean}** aún no tiene un plano esquemático guardado.")
+            if st.button(f"🛠️ Diseñar Plano Esquemático para {val_equipo_clean}", type="primary"):
+                st.session_state["tag_para_diseño"] = val_equipo_clean
+                st.switch_page("pages/diseno.py")
 
     with col_enlaces:
         color_principal = "#005ce6"
@@ -369,7 +432,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             st.write("") 
 
         titulo_doc = f"Intercambiador {val_equipo} ({val_unidad})"
-        pdf_bytes = generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_principal, titulo_doc)
+        pdf_bytes = generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_principal, titulo_doc, config_equipo=config_equipo)
         
         st.download_button(
             label="📄 Descargar Ficha PDF para Terreno",
