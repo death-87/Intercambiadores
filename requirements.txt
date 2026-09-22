@@ -12,3 +12,6 @@ pandas
 openpyxl
 plotly
 fpdf2
+pandas
+plotly
+fpdf
