@@ -1,14 +1,39 @@
 import os
 import json
+import urllib.parse
+import pandas as pd
 import streamlit as st
 import xml.etree.ElementTree as ET
 import streamlit.components.v1 as components
-import pandas as pd
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout="wide")
+
+# ==========================================
+# OBTENER LISTA REAL DE EQUIPOS DESDE GOOGLE SHEETS
+# ==========================================
+@st.cache_data(ttl=600)
+def obtener_lista_equipos_oficiales():
+    try:
+        sheet_id = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
+        nombre_hoja = "Hoja 1"
+        nombre_hoja_encoded = urllib.parse.quote(nombre_hoja)
+        sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={nombre_hoja_encoded}"
+        
+        data = pd.read_csv(sheet_url)
+        col_eq = next((c for c in data.columns if 'EQUIPO' in c.upper()), None)
+        if col_eq:
+            lista = sorted([
+                str(x).strip() for x in data[col_eq].dropna().unique() 
+                if str(x).strip() not in ["Sin información", "nan", "NAN", ""]
+            ])
+            return lista
+    except Exception:
+        pass
+    return []
+
 
 # ==========================================
 # 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
@@ -236,7 +261,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 # ==========================================
 if "exchanger_data" not in st.session_state:
     st.session_state.exchanger_data = {
-        "equipment": {"tag": "E-101", "shell_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
+        "equipment": {"tag": "C702", "shell_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
         "components": {
             "channel_length": 150,
             "shell_length": 420,
@@ -279,8 +304,37 @@ if "tag_para_diseño" in st.session_state:
 # ==========================================
 # 3. INTERFAZ Y BARRA LATERAL
 # ==========================================
-st.sidebar.markdown("### 💾 Guardar / Cargar Equipo (JSON)")
-tag_actual = st.sidebar.text_input("TAG del Intercambiador:", value=st.session_state.exchanger_data["equipment"].get("tag", "E-101"))
+st.sidebar.markdown("### 🏷️ Equipo Seleccionado (Tabla Google Sheets)")
+
+# Obtener lista real de equipos desde la planilla
+lista_equipos_oficiales = obtener_lista_equipos_oficiales()
+tag_actual = st.session_state.exchanger_data["equipment"].get("tag", "C702")
+
+if lista_equipos_oficiales:
+    idx_default = lista_equipos_oficiales.index(tag_actual) if tag_actual in lista_equipos_oficiales else 0
+    selected_tag_from_list = st.sidebar.selectbox(
+        "Seleccionar TAG oficial (Columna 'Equipo'):", 
+        options=lista_equipos_oficiales, 
+        index=idx_default,
+        key="select_official_tag"
+    )
+    
+    # Auto-cargar el archivo JSON si el usuario cambia la selección del TAG en el selectbox
+    if selected_tag_from_list != st.session_state.exchanger_data["equipment"].get("tag"):
+        st.session_state.exchanger_data["equipment"]["tag"] = selected_tag_from_list
+        archivo_sel = f"config_{selected_tag_from_list}.json"
+        if os.path.exists(archivo_sel):
+            try:
+                with open(archivo_sel, "r", encoding="utf-8") as f:
+                    st.session_state.exchanger_data = json.load(f)
+            except Exception:
+                pass
+        st.rerun()
+    tag_actual = selected_tag_from_list
+else:
+    tag_actual = st.sidebar.text_input("TAG del Intercambiador:", value=tag_actual)
+    st.session_state.exchanger_data["equipment"]["tag"] = tag_actual
+
 archivo_json = f"config_{tag_actual}.json"
 
 col_save1, col_save2 = st.sidebar.columns(2)
@@ -289,7 +343,7 @@ with col_save1:
         st.session_state.exchanger_data["equipment"]["tag"] = tag_actual
         with open(archivo_json, "w", encoding="utf-8") as f:
             json.dump(st.session_state.exchanger_data, f, indent=4, ensure_ascii=False)
-        st.sidebar.success(f"¡Guardado en {archivo_json}!")
+        st.sidebar.success(f"¡Guardado para {tag_actual}!")
 
 with col_save2:
     if os.path.exists(archivo_json):
