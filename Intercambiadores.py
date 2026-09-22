@@ -42,6 +42,36 @@ for mod_path in ["pages.diseno", "pages.Diseño", "pages.diseño", "pages.Diseno
 # Configuración de página de Streamlit
 st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
 
+# Estilizado global para tablas compactas y legibles
+st.markdown("""
+    <style>
+    [data-testid="stTable"] {
+        width: fit-content !important;
+        max-width: 100% !important;
+        margin-top: 5px;
+    }
+    [data-testid="stTable"] table {
+        width: auto !important;
+    }
+    [data-testid="stTable"] th {
+        font-size: 11px !important;
+        padding: 6px 12px !important;
+        font-weight: 700 !important;
+        white-space: nowrap !important;
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: 1px solid #334155 !important;
+    }
+    [data-testid="stTable"] td {
+        font-size: 11px !important;
+        padding: 5px 12px !important;
+        white-space: nowrap !important;
+        line-height: 1.2 !important;
+        border: 1px solid #334155 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # -----------------------------------------------------------------------------
 # CABECERA VISUAL
 # -----------------------------------------------------------------------------
@@ -136,18 +166,10 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
     
     pdf.ln(3)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 5, "Detalle Tecnico y Conexiones del Intercambiador", ln=True)
+    pdf.cell(0, 5, "Ficha Tecnica del Intercambiador", ln=True)
     pdf.ln(1)
     
-    items_filtrados = []
-    palabras_excluidas = ["unnamed", "status", "estatus", "foto de referencia"]
-    
-    for k, v in datos_mostrar.items():
-        k_str = str(k)
-        if any(p in normalizar_texto(k_str) for p in palabras_excluidas):
-            continue
-        if str(v).strip() != "" and str(v).strip().lower() != "sin información":
-            items_filtrados.append((k_str, str(v)))
+    items_filtrados = [(str(k), str(v)) for k, v in datos_mostrar.items() if str(v).strip() != ""]
     
     ancho_columna = 93
     pdf.set_draw_color(*rgb)
@@ -203,7 +225,6 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             
         pdf.set_xy(x_inicio, max_y + 1)
 
-    # Inclusión opcional del plano SVG en el PDF si cairosvg está disponible
     if config_equipo and generate_modular_exchanger_svg:
         try:
             import cairosvg
@@ -385,15 +406,21 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         
         st.subheader(f"📋 Ficha Técnica - Equipo {val_equipo}")
         
-        datos_mostrar = {
-            k: v for k, v in registro.items() 
-            if k != col_status and str(v).strip() != "" and str(v).strip().lower() != "sin información"
-        }
+        # 1. FICHA TÉCNICA FILTRADA (Únicamente Unidad de Proceso, Equipo y Comentario)
+        datos_ficha_reducida = {}
+        for k, v in registro.items():
+            k_upper = str(k).upper()
+            if 'UNIDAD' in k_upper and 'Unidad de Proceso' not in datos_ficha_reducida:
+                datos_ficha_reducida['Unidad de Proceso'] = v
+            elif 'EQUIPO' in k_upper and 'Equipo' not in datos_ficha_reducida:
+                datos_ficha_reducida['Equipo'] = v
+            elif 'COMENTARIO' in k_upper and 'Comentario' not in datos_ficha_reducida:
+                datos_ficha_reducida['Comentario'] = v
         
-        df_ficha = pd.DataFrame(list(datos_mostrar.items()), columns=['Parámetro / Conexión', 'Detalle'])
-        st.table(df_ficha)
+        df_ficha = pd.DataFrame(list(datos_ficha_reducida.items()), columns=['Parámetro', 'Detalle'])
+        st.table(df_ficha.style.hide(axis='index'))
 
-        # Cargar archivo JSON del equipo si existe
+        # Cargar archivo JSON de configuración del equipo si existe
         archivo_json = f"config_{val_equipo_clean}.json"
         config_equipo = None
         if os.path.exists(archivo_json):
@@ -405,14 +432,52 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
 
         st.markdown("### 📐 Plano Esquemático de Boquillas")
         if config_equipo and generate_modular_exchanger_svg:
+            # Dibujo visual SVG
             svg_code = generate_modular_exchanger_svg(config_equipo)
             components.html(
                 f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
                 height=480
             )
+            
+            # 2. TABLA NOZZLE SCHEDULE DEBAJO DEL ESQUEMA
+            st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
+            
+            table_rows = []
+            global_aux_rating = config_equipo.get("equipment", {}).get("aux_rating", "6000#")
+
+            for noz in config_equipo.get("nozzles", []):
+                auxs = noz.get("auxiliaries", [])
+                aux_parts = [f"{aux.get('size', '')} {aux.get('position', '')}" for aux in auxs]
+                aux_combined = "  ".join(aux_parts) if aux_parts else ""
+
+                size_desc = str(noz.get("size", "")).strip()
+                rating_desc = str(noz.get("rating", "")).strip()
+                type_desc = str(noz.get("type", "")).strip()
+                
+                rating_type = f"{rating_desc} {type_desc}".strip()
+                if size_desc and rating_type:
+                    desc_full = f"{size_desc} - {rating_type}"
+                else:
+                    desc_full = size_desc or rating_type
+
+                table_rows.append({
+                    "MK": noz.get("tag", ""),
+                    "QT": 1,
+                    "DESCRIPTION": desc_full,
+                    "PROCESS": noz.get("service", "INLET"),
+                    "AUXILIARIES": aux_combined
+                })
+
+            table_rows.append({
+                "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILIARIES": f"{global_aux_rating} CPLGS."
+            })
+
+            df_nozzles = pd.DataFrame(table_rows)
+            st.table(df_nozzles.style.hide(axis='index'))
+
             col_plan1, col_plan2 = st.columns([3, 1])
             with col_plan1:
-                st.success(f"✅ Plano esquemático cargado correctamente para **{val_equipo_clean}**.")
+                st.success(f"✅ Plano esquemático y tabla de boquillas cargados para **{val_equipo_clean}**.")
             with col_plan2:
                 if st.button("✏️ Editar Plano Esquemático"):
                     st.session_state["tag_para_diseño"] = val_equipo_clean
@@ -451,7 +516,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             st.write("") 
 
         titulo_doc = f"Intercambiador {val_equipo} ({val_unidad})"
-        pdf_bytes = generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_principal, titulo_doc, config_equipo=config_equipo)
+        pdf_bytes = generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_ficha_reducida, color_principal, titulo_doc, config_equipo=config_equipo)
         
         st.download_button(
             label="📄 Descargar Ficha PDF para Terreno",
