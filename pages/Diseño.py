@@ -12,7 +12,8 @@ st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout
 # 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
-    width, height = 1000, 520
+    # Se amplía el lienzo a 540px de alto para asegurar aire inferior
+    width, height = 1000, 540
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
@@ -342,7 +343,8 @@ col_view, col_control = st.columns([2.3, 1])
 with col_view:
     st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
-    components.html(f'<div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:8px;">{svg_code}</div>', height=460)
+    # Se aumenta la altura del contenedor iframe a 560px
+    components.html(f'<div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:8px; display:flex; justify-content:center;">{svg_code}</div>', height=560)
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
     
