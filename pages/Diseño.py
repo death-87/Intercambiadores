@@ -344,7 +344,6 @@ with col_view:
     st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
-    # Altura incrementada a 520px para holgura total
     components.html(
         f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
         height=520
@@ -385,10 +384,11 @@ with col_view:
         "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILIARIES": f"{global_aux_rating} CPLGS."
     })
 
-    # Construcción de string HTML de la tabla SIN sangría inicial por línea para evitar bloque de código
+    # Tabla HTML con autosize en las columnas y SIN efecto hover
     html_table = """<style>
 .nozzle-schedule-table {
     width: 100%;
+    table-layout: auto;
     border-collapse: collapse;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 13px;
@@ -406,6 +406,7 @@ with col_view:
     padding: 9px 12px;
     border-bottom: 2px solid #cbd5e1;
     border-right: 1px solid #cbd5e1;
+    white-space: nowrap;
 }
 .nozzle-schedule-table td {
     padding: 8px 12px;
@@ -417,18 +418,15 @@ with col_view:
 .nozzle-schedule-table tr:nth-child(even) {
     background-color: #f8fafc;
 }
-.nozzle-schedule-table tr:hover {
-    background-color: #f1f5f9;
-}
 </style>
 <table class="nozzle-schedule-table">
 <thead>
 <tr>
-    <th style="width: 10%;">MK</th>
-    <th style="width: 8%;">QT</th>
-    <th style="width: 40%;">DESCRIPTION</th>
-    <th style="width: 20%;">PROCESS</th>
-    <th style="width: 22%;">AUXILIARIES</th>
+    <th>MK</th>
+    <th>QT</th>
+    <th>DESCRIPTION</th>
+    <th>PROCESS</th>
+    <th>AUXILIARIES</th>
 </tr>
 </thead>
 <tbody>"""
@@ -444,7 +442,6 @@ with col_view:
 
     html_table += "</tbody></table>"
 
-    # Uso de st.html nativo para renderizado directo
     st.html(html_table)
 
 with col_control:
