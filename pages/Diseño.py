@@ -12,14 +12,13 @@ st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout
 # 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
-    # Lienzo optimizado con centro vertical en cy = 230
-    width, height = 1000, 490
+    # Lienzo optimizado (1000x460) con márgenes seguros
+    width, height = 1000, 460
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
         "preserveAspectRatio": "xMidYMid meet",
-        "width": "100%",
-        "height": "100%",
+        "style": "width: 100%; height: 100%; max-width: 100%; max-height: 100%; display: block;",
         "id": "exchanger-svg"
     })
 
@@ -62,8 +61,8 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
-    # Centro vertical ajustado a 230px para dar más espacio abajo
-    cy = 230
+    # Centro vertical calibrado
+    cy = 220
     r_shell = config["equipment"]["shell_diameter"] / 2
     r_bonnet = config["equipment"].get("bonnet_diameter", config["equipment"]["shell_diameter"]) / 2
     
@@ -160,7 +159,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         auxiliaries = noz.get("auxiliaries", [])
         
         neck_width = 24
-        neck_height = 55
+        neck_height = 52
         flange_width = 44
 
         active_r = r_bonnet if comp == "BONNET" else r_shell
@@ -178,14 +177,14 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(ny_flange - 12), "class": "nozzle-text"}).text = label_str
                 
                 if len(auxiliaries) == 2:
-                    y_first = ny_flange + 36
+                    y_first = ny_flange + 34
                     y_second = ny_flange + 18
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_first), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_first), "class": "text-aux"}).text = auxiliaries[0]["position"]
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_second), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_second), "class": "text-aux"}).text = auxiliaries[1]["position"]
                 elif len(auxiliaries) == 1:
-                    y_single = ny_flange + 28
+                    y_single = ny_flange + 26
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_single), "r": "8", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_single), "class": "text-aux"}).text = auxiliaries[0]["position"]
             else:
@@ -211,13 +210,13 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 
                 if len(auxiliaries) == 2:
                     y_first = ny_base + 18
-                    y_second = ny_base + 36
+                    y_second = ny_base + 34
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_first), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_first), "class": "text-aux"}).text = auxiliaries[0]["position"]
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_second), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_second), "class": "text-aux"}).text = auxiliaries[1]["position"]
                 elif len(auxiliaries) == 1:
-                    y_single = ny_base + 28
+                    y_single = ny_base + 26
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_single), "r": "8", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_single), "class": "text-aux"}).text = auxiliaries[0]["position"]
             else:
@@ -249,10 +248,10 @@ if "exchanger_data" not in st.session_state:
             {"id": "sad_2", "tag": "Soporte 2", "position_ratio": 0.70}
         ],
         "nozzles": [
-            {"id": "noz_1", "tag": "S1", "service": "INLET", "component": "SHELL", "side": "TOP", "position_ratio": 0.10, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "WN RF", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
-            {"id": "noz_2", "tag": "S2", "service": "OUTLET", "component": "SHELL", "side": "BOTTOM", "position_ratio": 0.90, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "WN RF", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
-            {"id": "noz_3", "tag": "T1", "service": "INLET", "component": "CHANNEL", "side": "TOP", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "WN RF", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]},
-            {"id": "noz_4", "tag": "T2", "service": "OUTLET", "component": "CHANNEL", "side": "BOTTOM", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "WN RF", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]}
+            {"id": "noz_1", "tag": "S1", "service": "INLET", "component": "SHELL", "side": "TOP", "position_ratio": 0.10, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_2", "tag": "S2", "service": "OUTLET", "component": "SHELL", "side": "BOTTOM", "position_ratio": 0.90, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_3", "tag": "T1", "service": "INLET", "component": "CHANNEL", "side": "TOP", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_4", "tag": "T2", "service": "OUTLET", "component": "CHANNEL", "side": "BOTTOM", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]}
         ]
     }
 
@@ -316,8 +315,9 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
         new_style = st.selectbox("Estilo", ["FLANGED", "TAPÓN / COUPLING"])
         new_comp = st.selectbox("Componente", ["SHELL", "CHANNEL", "BONNET"])
         new_side = st.selectbox("Lado", ["TOP", "BOTTOM"])
-        new_size = st.text_input("Tamaño (ej. 3\")", value="3\"")
-        new_rating = st.text_input("Rating / Tipo (ej. 350# RF WN)", value="300# RF WN")
+        new_size = st.text_input("Tamaño", value="8\"")
+        new_rating = st.text_input("Rating", value="300#")
+        new_type = st.text_input("Tipo / Tipo Brida", value="RF WN")
         
         if st.form_submit_button("Crear"):
             default_ratio = 0.20 if new_srv in ["VENT", "DRAIN"] else 0.50
@@ -325,7 +325,7 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
                 "id": f"noz_{len(st.session_state.exchanger_data['nozzles'])+1}",
                 "tag": new_tag, "service": new_srv, "style": new_style,
                 "component": new_comp, "side": new_side, "position_ratio": default_ratio,
-                "size": new_size, "rating": new_rating, "type": "", "auxiliaries": []
+                "size": new_size, "rating": new_rating, "type": new_type, "auxiliaries": []
             })
             st.rerun()
 
@@ -346,10 +346,10 @@ with col_view:
     st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
-    # Contenedor flexible para ajuste automático
+    # Renderizado con marco responsive
     components.html(
-        f'<div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:12px; width:100%; box-sizing:border-box;">{svg_code}</div>', 
-        height=510
+        f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
+        height=480
     )
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
@@ -362,25 +362,93 @@ with col_view:
         aux_parts = [f"{aux.get('size', '')} {aux.get('position', '')}" for aux in auxs]
         aux_combined = "  ".join(aux_parts) if aux_parts else ""
 
-        size_desc = noz.get("size", "").strip()
-        rating_desc = noz.get("rating", "").strip()
-        desc_full = f"{size_desc} - {rating_desc}".strip()
+        size_desc = str(noz.get("size", "")).strip()
+        rating_desc = str(noz.get("rating", "")).strip()
+        type_desc = str(noz.get("type", "")).strip()
+        
+        rating_type = f"{rating_desc}{type_desc}".strip()
+        if rating_desc and type_desc:
+            rating_type = f"{rating_desc} {type_desc}"
+            
+        if size_desc and rating_type:
+            desc_full = f"{size_desc} - {rating_type}"
+        else:
+            desc_full = size_desc or rating_type
 
         table_rows.append({
             "MK": noz["tag"],
             "QT": 1,
             "DESCRIPTION": desc_full,
             "PROCESS": noz.get("service", "INLET"),
-            "AUXILLARIES": aux_combined
+            "AUXILIARIES": aux_combined
         })
 
     table_rows.append({
-        "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILLARIES": f"{global_aux_rating} CPLGS."
+        "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILIARIES": f"{global_aux_rating} CPLGS."
     })
 
-    df_nozzles = pd.DataFrame(table_rows)
-    # st.table asegura que el texto se adapte 100% al ancho y auto-ajuste sus columnas
-    st.table(df_nozzles)
+    # Generación de Tabla HTML estilizada para ajuste responsivo al texto
+    html_table = f"""
+    <style>
+        .nozzle-schedule-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            margin-top: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            overflow: hidden;
+        }}
+        .nozzle-schedule-table th {{
+            background-color: #f1f5f9;
+            color: #1e293b;
+            font-weight: 700;
+            text-align: left;
+            padding: 9px 12px;
+            border-bottom: 2px solid #cbd5e1;
+            border-right: 1px solid #cbd5e1;
+        }}
+        .nozzle-schedule-table td {{
+            padding: 8px 12px;
+            border-bottom: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            color: #0f172a;
+            white-space: nowrap;
+        }}
+        .nozzle-schedule-table tr:nth-child(even) {{
+            background-color: #f8fafc;
+        }}
+        .nozzle-schedule-table tr:hover {{
+            background-color: #f1f5f9;
+        }}
+    </style>
+    <table class="nozzle-schedule-table">
+        <thead>
+            <tr>
+                <th style="width: 10%;">MK</th>
+                <th style="width: 8%;">QT</th>
+                <th style="width: 42%;">DESCRIPTION</th>
+                <th style="width: 20%;">PROCESS</th>
+                <th style="width: 20%;">AUXILIARIES</th>
+            </tr>
+        </thead>
+        <tbody>
+    """
+    for r in table_rows:
+        html_table += f"""
+            <tr>
+                <td><b>{r['MK']}</b></td>
+                <td>{r['QT']}</td>
+                <td><b>{r['DESCRIPTION']}</b></td>
+                <td>{r['PROCESS']}</td>
+                <td>{r['AUXILIARIES']}</td>
+            </tr>
+        """
+    html_table += "</tbody></table>"
+
+    st.markdown(html_table, unsafe_allow_html=True)
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
@@ -400,8 +468,11 @@ with col_control:
                 
                 style_val = st.selectbox("Representación", ["FLANGED", "TAPÓN / COUPLING"], index=0 if selected_noz.get("style", "FLANGED") == "FLANGED" else 1)
                 comp_val = st.selectbox("Componente:", ["CHANNEL", "SHELL", "BONNET"], index=["CHANNEL", "SHELL", "BONNET"].index(selected_noz.get("component", "SHELL")))
+                
                 size_val = st.text_input("Tamaño", value=selected_noz.get("size", ""))
-                rating_val = st.text_input("Rating / Tipo", value=selected_noz.get("rating", ""))
+                rating_val = st.text_input("Rating", value=selected_noz.get("rating", ""))
+                type_val = st.text_input("Tipo (ej. RF WN)", value=selected_noz.get("type", ""))
+                
                 side_val = st.selectbox("Orientación", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1)
                 ratio_val = st.slider("Posición horizontal", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)))
 
@@ -412,6 +483,7 @@ with col_control:
                     selected_noz["component"] = comp_val
                     selected_noz["size"] = size_val
                     selected_noz["rating"] = rating_val
+                    selected_noz["type"] = type_val
                     selected_noz["side"] = side_val
                     selected_noz["position_ratio"] = ratio_val
                     st.rerun()
@@ -473,7 +545,7 @@ with col_control:
                         st.rerun()
                 with col_s2:
                     if st.button("🗑️", key=f"del_sad_{sad['id']}"):
-                        st.session_state.exchanger_data["saddles"].pop(idx)
+                        st.session_state.exchanger_data.get("saddles", []).pop(idx)
                         st.rerun()
 
         st.divider()
