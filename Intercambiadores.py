@@ -27,7 +27,6 @@ def ir_a_diseno():
             continue
     st.error("❌ No se encontró el archivo de diseño en la carpeta 'pages/'. Revisa que esté subido a GitHub como 'pages/diseno.py' o 'pages/Diseño.py'.")
 
-# Intentar importar el motor SVG probando distintas combinaciones de nombre de archivo
 generate_modular_exchanger_svg = None
 for mod_path in ["pages.diseno", "pages.Diseño", "pages.diseño", "pages.Diseno"]:
     try:
@@ -42,7 +41,6 @@ for mod_path in ["pages.diseno", "pages.Diseño", "pages.diseño", "pages.Diseno
 # Configuración de página de Streamlit
 st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
 
-# Estilizado global para tablas compactas y legibles
 st.markdown("""
     <style>
     [data-testid="stTable"] {
@@ -142,6 +140,212 @@ def extraer_coordenadas(coordenadas):
         return lat, lon
     return None, None
 
+# -----------------------------------------------------------------------------
+# MOTOR DE DIBUJO VECTORIAL EN FPDF (PARA EL PLANO ESQUEMÁTICO EN EL PDF)
+# -----------------------------------------------------------------------------
+def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
+    cy = y_offset + 25
+    seq = config.get("components", {}).get("sequence", ["CHANNEL", "SHELL", "BONNET"])
+    
+    comp_lens = {
+        "CHANNEL": float(config.get("components", {}).get("channel_length", 150)),
+        "SHELL": float(config.get("components", {}).get("shell_length", 420)),
+        "BONNET": float(config.get("components", {}).get("bonnet_length", 100))
+    }
+    
+    total_len = sum(comp_lens.get(c, 100) for c in seq)
+    scale = 130.0 / max(total_len, 1.0)
+    
+    r_shell = 15.0
+    r_bonnet = 15.0
+    
+    coords = {}
+    curr_x = x_offset + 25
+    
+    for comp in seq:
+        w_scaled = comp_lens.get(comp, 100) * scale
+        coords[comp] = {"start": curr_x, "end": curr_x + w_scaled, "width": w_scaled}
+        curr_x += w_scaled + 2
+        
+    # Eje central
+    pdf.set_draw_color(239, 68, 68)
+    pdf.line(x_offset + 10, cy, curr_x + 10, cy)
+    
+    # Soportes (Saddles)
+    shell_info = coords.get("SHELL", {"start": x_offset + 50, "width": 80})
+    for sad in config.get("saddles", []):
+        sad_ratio = float(sad.get("position_ratio", 0.5))
+        sad_x = shell_info["start"] + shell_info["width"] * sad_ratio
+        pdf.set_fill_color(100, 116, 139)
+        pdf.set_draw_color(15, 23, 42)
+        pdf.rect(sad_x - 4, cy + r_shell, 8, 7, 'FD')
+        
+    # Componentes
+    for idx, comp in enumerate(seq):
+        c_info = coords[comp]
+        cx = c_info["start"]
+        cw = c_info["width"]
+        
+        if idx > 0:
+            pdf.set_fill_color(71, 85, 105)
+            pdf.rect(cx - 2, cy - r_shell - 2, 2, r_shell * 2 + 4, 'FD')
+            
+        pdf.set_fill_color(226, 232, 240)
+        pdf.set_draw_color(51, 65, 85)
+        pdf.rect(cx, cy - r_shell, cw, r_shell * 2, 'FD')
+        
+        pdf.set_font("Arial", "B", 7)
+        pdf.set_text_color(51, 65, 85)
+        pdf.text(cx + cw / 2 - 4, cy + 1, comp)
+
+    # Boquillas
+    for noz in config.get("nozzles", []):
+        comp = noz.get("component", "SHELL")
+        c_info = coords.get(comp, coords.get("SHELL"))
+        ratio = float(noz.get("position_ratio", 0.5))
+        nx = c_info["start"] + c_info["width"] * ratio
+        
+        style_type = noz.get("style", "FLANGED")
+        side = noz.get("side", "TOP")
+        tag_str = sanitizar_para_pdf(noz.get("tag", ""))
+        
+        auxs = noz.get("auxiliaries", [])
+        aux_txt = sanitizar_para_pdf("/".join([a.get("position", "") for a in auxs if a.get("position")]))
+        
+        active_r = r_bonnet if comp == "BONNET" else r_shell
+        
+        if side == "TOP":
+            ny = cy - active_r
+            if style_type == "FLANGED":
+                pdf.set_fill_color(203, 213, 225)
+                pdf.set_draw_color(30, 41, 59)
+                pdf.rect(nx - 2, ny - 9, 4, 9, 'FD')
+                pdf.rect(nx - 4, ny - 11, 8, 2, 'FD')
+                pdf.set_font("Arial", "B", 7)
+                pdf.set_text_color(15, 23, 42)
+                pdf.text(nx - 3, ny - 13, tag_str)
+                if aux_txt:
+                    pdf.set_font("Arial", "", 5)
+                    pdf.text(nx - 3, ny - 4, aux_txt)
+            else:
+                pdf.set_fill_color(148, 163, 184)
+                pdf.rect(nx - 1.5, ny - 5, 3, 5, 'FD')
+                pdf.set_font("Arial", "B", 7)
+                pdf.text(nx - 3, ny - 7, tag_str)
+        else: # BOTTOM
+            ny = cy + active_r
+            if style_type == "FLANGED":
+                pdf.set_fill_color(203, 213, 225)
+                pdf.set_draw_color(30, 41, 59)
+                pdf.rect(nx - 2, ny, 4, 9, 'FD')
+                pdf.rect(nx - 4, ny + 9, 8, 2, 'FD')
+                pdf.set_font("Arial", "B", 7)
+                pdf.set_text_color(15, 23, 42)
+                pdf.text(nx - 3, ny + 15, tag_str)
+                if aux_txt:
+                    pdf.set_font("Arial", "", 5)
+                    pdf.text(nx - 3, ny + 5, aux_txt)
+            else:
+                pdf.set_fill_color(148, 163, 184)
+                pdf.rect(nx - 1.5, ny, 3, 5, 'FD')
+                pdf.set_font("Arial", "B", 7)
+                pdf.text(nx - 3, ny + 10, tag_str)
+                
+    pdf.set_y(y_offset + 60)
+
+# -----------------------------------------------------------------------------
+# DIBUJO DE LA TABLA NOZZLE SCHEDULE EN EL PDF
+# -----------------------------------------------------------------------------
+def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
+    if pdf.get_y() + 45 > 270:
+        pdf.add_page()
+        
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_text_color(*rgb_main)
+    tag_eq = sanitizar_para_pdf(config_equipo.get("equipment", {}).get("tag", ""))
+    pdf.cell(0, 6, f"NOZZLE SCHEDULE - {tag_eq}", ln=True)
+    pdf.ln(1)
+    
+    cols = [
+        ("MK", 22),
+        ("QT", 15),
+        ("DESCRIPTION", 68),
+        ("PROCESS", 30),
+        ("AUXILIARIES", 45)
+    ]
+    
+    # Encabezados
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_fill_color(30, 41, 59)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_draw_color(51, 65, 85)
+    
+    for title, width in cols:
+        pdf.cell(width, 5.5, f"  {title}", border=1, fill=True)
+    pdf.ln()
+    
+    # Filas de boquillas
+    pdf.set_font("Arial", "", 8)
+    pdf.set_text_color(0, 0, 0)
+    
+    nozzles = config_equipo.get("nozzles", [])
+    global_aux_rating = config_equipo.get("equipment", {}).get("aux_rating", "6000#")
+    
+    for i, noz in enumerate(nozzles):
+        if pdf.get_y() + 7 > 270:
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 8)
+            pdf.set_fill_color(30, 41, 59)
+            pdf.set_text_color(255, 255, 255)
+            for title, width in cols:
+                pdf.cell(width, 5.5, f"  {title}", border=1, fill=True)
+            pdf.ln()
+            pdf.set_font("Arial", "", 8)
+            pdf.set_text_color(0, 0, 0)
+            
+        mk = sanitizar_para_pdf(noz.get("tag", ""))
+        qt = "1"
+        
+        size_desc = str(noz.get("size", "")).strip()
+        rating_desc = str(noz.get("rating", "")).strip()
+        type_desc = str(noz.get("type", "")).strip()
+        rating_type = f"{rating_desc} {type_desc}".strip()
+        desc_full = f"{size_desc} - {rating_type}" if size_desc and rating_type else (size_desc or rating_type)
+        desc = sanitizar_para_pdf(desc_full)
+        
+        proc = sanitizar_para_pdf(noz.get("service", "INLET"))
+        
+        auxs = noz.get("auxiliaries", [])
+        aux_parts = [f"{aux.get('size', '')} {aux.get('position', '')}" for aux in auxs]
+        aux_txt = sanitizar_para_pdf("  ".join(aux_parts))
+        
+        fill_flag = (i % 2 == 1)
+        if fill_flag:
+            pdf.set_fill_color(248, 250, 252)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+            
+        pdf.cell(22, 5, f"  {mk}", border=1, fill=fill_flag)
+        pdf.cell(15, 5, f"  {qt}", border=1, fill=fill_flag)
+        pdf.cell(68, 5, f"  {desc}", border=1, fill=fill_flag)
+        pdf.cell(30, 5, f"  {proc}", border=1, fill=fill_flag)
+        pdf.cell(45, 5, f"  {aux_txt}", border=1, fill=fill_flag)
+        pdf.ln()
+        
+    # Fila final CPLGS
+    if pdf.get_y() + 7 > 270:
+        pdf.add_page()
+    pdf.cell(22, 5, "", border=1)
+    pdf.cell(15, 5, "", border=1)
+    pdf.cell(68, 5, "", border=1)
+    pdf.cell(30, 5, "", border=1)
+    pdf.cell(45, 5, f"  {sanitizar_para_pdf(global_aux_rating)} CPLGS.", border=1)
+    pdf.ln()
+
+# -----------------------------------------------------------------------------
+# FUNCIÓN PRINCIPAL DE GENERACIÓN DEL PDF
+# -----------------------------------------------------------------------------
 def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_hex, titulo_doc, config_equipo=None):
     pdf = PDFCustom()
     pdf.set_auto_page_break(auto=True, margin=22)
@@ -170,7 +374,6 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
     pdf.ln(1)
     
     items_filtrados = [(str(k), str(v)) for k, v in datos_mostrar.items() if str(v).strip() != ""]
-    
     ancho_columna = 93
     pdf.set_draw_color(*rgb)
     
@@ -225,28 +428,40 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             
         pdf.set_xy(x_inicio, max_y + 1)
 
-    if config_equipo and generate_modular_exchanger_svg:
-        try:
-            import cairosvg
-            svg_code = generate_modular_exchanger_svg(config_equipo)
-            png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
-            cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp)
+    # DIBUJAR PLANO ESQUEMÁTICO Y NOZZLE SCHEDULE EN EL PDF
+    if config_equipo:
+        if pdf.get_y() + 65 > 270:
+            pdf.add_page()
             
-            if pdf.get_y() + 85 > 270:
-                pdf.add_page()
-            pdf.ln(5)
-            pdf.set_font("Arial", "B", 10)
-            pdf.cell(0, 5, "Plano Esquematico del Equipo", ln=True)
-            pdf.ln(2)
-            pdf.image(png_temp, x=15, w=180)
-            if os.path.exists(png_temp):
-                os.remove(png_temp)
-        except Exception:
-            pass
+        pdf.ln(3)
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_text_color(*rgb)
+        pdf.cell(0, 6, "Plano Esquematico de Boquillas", ln=True)
+        pdf.ln(1)
         
+        y_esquema = pdf.get_y()
+        dibujado_ok = False
+        
+        if generate_modular_exchanger_svg:
+            try:
+                import cairosvg
+                svg_code = generate_modular_exchanger_svg(config_equipo)
+                png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
+                cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp)
+                pdf.image(png_temp, x=15, w=180)
+                if os.path.exists(png_temp):
+                    os.remove(png_temp)
+                dibujado_ok = True
+            except Exception:
+                dibujado_ok = False
+                
+        if not dibujado_ok:
+            dibujar_esquema_fpdf(pdf, config_equipo, x_offset=15, y_offset=y_esquema)
+            
+        agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb)
+
     pdf.set_draw_color(0, 0, 0)
     
-    # ✅ RETORNO CORREGIDO DE BYTES PARA EVITAR ARCHIVOS VACÍOS DE 0 BYTES
     try:
         out = pdf.output(dest='S')
         if isinstance(out, str):
@@ -416,7 +631,6 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         
         st.subheader(f"📋 Ficha Técnica - Equipo {val_equipo}")
         
-        # FICHA TÉCNICA FILTRADA (Únicamente Unidad de Proceso, Equipo y Comentario)
         datos_ficha_reducida = {}
         for k, v in registro.items():
             k_upper = str(k).upper()
@@ -430,7 +644,6 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         df_ficha = pd.DataFrame(list(datos_ficha_reducida.items()), columns=['Parámetro', 'Detalle'])
         st.table(df_ficha.style.hide(axis='index'))
 
-        # Cargar archivo JSON de configuración del equipo si existe
         archivo_json = f"config_{val_equipo_clean}.json"
         config_equipo = None
         if os.path.exists(archivo_json):
@@ -442,14 +655,12 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
 
         st.markdown("### 📐 Plano Esquemático de Boquillas")
         if config_equipo and generate_modular_exchanger_svg:
-            # Dibujo visual SVG
             svg_code = generate_modular_exchanger_svg(config_equipo)
             components.html(
                 f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
                 height=480
             )
             
-            # TABLA NOZZLE SCHEDULE DEBAJO DEL ESQUEMA
             st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
             
             table_rows = []
@@ -465,10 +676,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
                 type_desc = str(noz.get("type", "")).strip()
                 
                 rating_type = f"{rating_desc} {type_desc}".strip()
-                if size_desc and rating_type:
-                    desc_full = f"{size_desc} - {rating_type}"
-                else:
-                    desc_full = size_desc or rating_type
+                desc_full = f"{size_desc} - {rating_type}" if size_desc and rating_type else (size_desc or rating_type)
 
                 table_rows.append({
                     "MK": noz.get("tag", ""),
