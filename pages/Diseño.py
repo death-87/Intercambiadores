@@ -363,10 +363,7 @@ with col_view:
         rating_desc = str(noz.get("rating", "")).strip()
         type_desc = str(noz.get("type", "")).strip()
         
-        rating_type = f"{rating_desc}{type_desc}".strip()
-        if rating_desc and type_desc:
-            rating_type = f"{rating_desc} {type_desc}"
-            
+        rating_type = f"{rating_desc} {type_desc}".strip()
         if size_desc and rating_type:
             desc_full = f"{size_desc} - {rating_type}"
         else:
@@ -384,65 +381,14 @@ with col_view:
         "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILIARIES": f"{global_aux_rating} CPLGS."
     })
 
-    # Tabla HTML con autosize en las columnas y SIN efecto hover
-    html_table = """<style>
-.nozzle-schedule-table {
-    width: 100%;
-    table-layout: auto;
-    border-collapse: collapse;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    margin-top: 8px;
-    margin-bottom: 20px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    overflow: hidden;
-}
-.nozzle-schedule-table th {
-    background-color: #f1f5f9;
-    color: #1e293b;
-    font-weight: 700;
-    text-align: left;
-    padding: 9px 12px;
-    border-bottom: 2px solid #cbd5e1;
-    border-right: 1px solid #cbd5e1;
-    white-space: nowrap;
-}
-.nozzle-schedule-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
-    color: #0f172a;
-    white-space: nowrap;
-}
-.nozzle-schedule-table tr:nth-child(even) {
-    background-color: #f8fafc;
-}
-</style>
-<table class="nozzle-schedule-table">
-<thead>
-<tr>
-    <th>MK</th>
-    <th>QT</th>
-    <th>DESCRIPTION</th>
-    <th>PROCESS</th>
-    <th>AUXILIARIES</th>
-</tr>
-</thead>
-<tbody>"""
-
-    for r in table_rows:
-        html_table += f"""<tr>
-<td><b>{r['MK']}</b></td>
-<td>{r['QT']}</td>
-<td><b>{r['DESCRIPTION']}</b></td>
-<td>{r['PROCESS']}</td>
-<td>{r['AUXILIARIES']}</td>
-</tr>"""
-
-    html_table += "</tbody></table>"
-
-    st.html(html_table)
+    df_nozzles = pd.DataFrame(table_rows)
+    
+    # Renderizado directo e nativo mediante dataframe con autosize automático
+    st.dataframe(
+        df_nozzles, 
+        use_container_width=True, 
+        hide_index=True
+    )
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
