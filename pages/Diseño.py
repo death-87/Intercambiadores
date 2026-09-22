@@ -306,26 +306,52 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
 
 st.sidebar.divider()
 
+# ==========================================
+# CREAR NUEVA BOQUILLA (FORMULARIO DINÁMICO)
+# ==========================================
 with st.sidebar.expander("➕ Crear Nueva Boquilla"):
-    with st.form("form_create_new_sidebar"):
-        new_tag = st.text_input("MK (Tag)", value=f"S{len(st.session_state.exchanger_data['nozzles'])+1}")
-        new_srv = st.selectbox("Process", ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"])
-        new_style = st.selectbox("Estilo", ["FLANGED", "TAPÓN / COUPLING"])
-        new_comp = st.selectbox("Componente", ["SHELL", "CHANNEL", "BONNET"])
-        new_side = st.selectbox("Lado", ["TOP", "BOTTOM"])
-        new_size = st.text_input("Tamaño", value="8\"")
-        new_rating = st.text_input("Rating", value="300#")
-        new_type = st.text_input("Tipo / Tipo Brida", value="RF WN")
-        
-        if st.form_submit_button("Crear"):
-            default_ratio = 0.20 if new_srv in ["VENT", "DRAIN"] else 0.50
-            st.session_state.exchanger_data["nozzles"].append({
-                "id": f"noz_{len(st.session_state.exchanger_data['nozzles'])+1}",
-                "tag": new_tag, "service": new_srv, "style": new_style,
-                "component": new_comp, "side": new_side, "position_ratio": default_ratio,
-                "size": new_size, "rating": new_rating, "type": new_type, "auxiliaries": []
-            })
-            st.rerun()
+    new_srv = st.selectbox("Process", ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"], key="sidebar_new_srv")
+    
+    is_vent_drain = new_srv in ["VENT", "DRAIN"]
+    
+    prefix_map = {"VENT": "V", "DRAIN": "D", "INLET": "S", "OUTLET": "S", "INSTRUMENT": "PI"}
+    default_prefix = prefix_map.get(new_srv, "S")
+    count_srv = sum(1 for n in st.session_state.exchanger_data["nozzles"] if n.get("service") == new_srv) + 1
+    
+    new_tag = st.text_input("MK (Tag)", value=f"{default_prefix}{count_srv}", key="sidebar_new_tag")
+    
+    style_default = 1 if is_vent_drain else 0
+    new_style = st.selectbox("Estilo", ["FLANGED", "TAPÓN / COUPLING"], index=style_default, key="sidebar_new_style")
+    new_comp = st.selectbox("Componente", ["SHELL", "CHANNEL", "BONNET"], key="sidebar_new_comp")
+    
+    side_default = 0 if new_srv == "VENT" else (1 if new_srv == "DRAIN" else 0)
+    new_side = st.selectbox("Lado", ["TOP", "BOTTOM"], index=side_default, key="sidebar_new_side")
+    
+    if is_vent_drain or new_style == "TAPÓN / COUPLING":
+        new_size = st.selectbox("Tamaño", ["3/4\"", "1/2\"", "1\"", "1.1/2\"", "2\""], key="sidebar_new_size_sel")
+        new_rating = st.selectbox("Rating", ["6000#CPLG", "3000#CPLG"], key="sidebar_new_rating_sel")
+        new_type = st.text_input("Tipo / Tipo Brida", value="", key="sidebar_new_type_txt_cplg")
+    else:
+        new_size = st.text_input("Tamaño", value="8\"", key="sidebar_new_size_txt")
+        new_rating = st.text_input("Rating", value="300#", key="sidebar_new_rating_txt")
+        new_type = st.text_input("Tipo / Tipo Brida", value="RF WN", key="sidebar_new_type_txt_flg")
+    
+    if st.button("➕ Crear Boquilla", use_container_width=True, key="sidebar_btn_create"):
+        default_ratio = 0.20 if is_vent_drain else 0.50
+        st.session_state.exchanger_data["nozzles"].append({
+            "id": f"noz_{len(st.session_state.exchanger_data['nozzles'])+1}",
+            "tag": new_tag,
+            "service": new_srv,
+            "style": new_style,
+            "component": new_comp,
+            "side": new_side,
+            "position_ratio": default_ratio,
+            "size": new_size,
+            "rating": new_rating,
+            "type": new_type,
+            "auxiliaries": []
+        })
+        st.rerun()
 
 st.sidebar.divider()
 
@@ -383,7 +409,7 @@ with col_view:
 
     df_nozzles = pd.DataFrame(table_rows)
 
-    # Estilizado CSS compacto, autosize y con alto contraste para encabezados en modo oscuro/claro
+    # Estilizado CSS compacto, autosize y con alto contraste para encabezados
     st.markdown("""
         <style>
         [data-testid="stTable"] {
@@ -413,7 +439,6 @@ with col_view:
         </style>
     """, unsafe_allow_html=True)
 
-    # Renderizado nativo compacto
     st.table(df_nozzles.style.hide(axis='index'))
 
 with col_control:
