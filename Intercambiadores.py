@@ -9,16 +9,35 @@ import plotly.express as px
 import streamlit.components.v1 as components
 from fpdf import FPDF
 
-# Intentar importar el motor SVG desde la subpágina de diseño
-try:
-    from pages.diseno import generate_modular_exchanger_svg
-except ImportError:
+# -----------------------------------------------------------------------------
+# NAVEGACIÓN SEGURA Y CARGA DE MÓDULOS (SOPORTE PARA MAYÚSCULAS/TILDES)
+# -----------------------------------------------------------------------------
+def ir_a_diseno():
+    paginas_posibles = [
+        "pages/diseno.py",
+        "pages/Diseño.py",
+        "pages/diseño.py",
+        "pages/Diseno.py"
+    ]
+    for pag in paginas_posibles:
+        try:
+            st.switch_page(pag)
+            return
+        except Exception:
+            continue
+    st.error("❌ No se encontró el archivo de diseño en la carpeta 'pages/'. Revisa que esté subido a GitHub como 'pages/diseno.py' o 'pages/Diseño.py'.")
+
+# Intentar importar el motor SVG probando distintas combinaciones de nombre de archivo
+generate_modular_exchanger_svg = None
+for mod_path in ["pages.diseno", "pages.Diseño", "pages.diseño", "pages.Diseno"]:
     try:
         import importlib
-        diseno_module = importlib.import_module("pages.diseno")
-        generate_modular_exchanger_svg = diseno_module.generate_modular_exchanger_svg
+        mod = importlib.import_module(mod_path)
+        generate_modular_exchanger_svg = getattr(mod, "generate_modular_exchanger_svg", None)
+        if generate_modular_exchanger_svg:
+            break
     except Exception:
-        generate_modular_exchanger_svg = None
+        continue
 
 # Configuración de página de Streamlit
 st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
@@ -184,7 +203,7 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             
         pdf.set_xy(x_inicio, max_y + 1)
 
-    # Inclusión opcional de la imagen SVG convertida a PNG si CairoSVG está presente
+    # Inclusión opcional del plano SVG en el PDF si cairosvg está disponible
     if config_equipo and generate_modular_exchanger_svg:
         try:
             import cairosvg
@@ -397,12 +416,12 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             with col_plan2:
                 if st.button("✏️ Editar Plano Esquemático"):
                     st.session_state["tag_para_diseño"] = val_equipo_clean
-                    st.switch_page("pages/diseno.py")
+                    ir_a_diseno()
         else:
             st.info(f"ℹ️ El equipo **{val_equipo_clean}** aún no tiene un plano esquemático guardado.")
             if st.button(f"🛠️ Diseñar Plano Esquemático para {val_equipo_clean}", type="primary"):
                 st.session_state["tag_para_diseño"] = val_equipo_clean
-                st.switch_page("pages/diseno.py")
+                ir_a_diseno()
 
     with col_enlaces:
         color_principal = "#005ce6"
