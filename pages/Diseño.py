@@ -12,11 +12,12 @@ st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout
 # 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
-    # Se amplía el lienzo a 540px de alto para asegurar aire inferior
-    width, height = 1000, 540
+    # Lienzo optimizado con centro vertical en cy = 230
+    width, height = 1000, 490
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
+        "preserveAspectRatio": "xMidYMid meet",
         "width": "100%",
         "height": "100%",
         "id": "exchanger-svg"
@@ -61,7 +62,8 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
-    cy = 265
+    # Centro vertical ajustado a 230px para dar más espacio abajo
+    cy = 230
     r_shell = config["equipment"]["shell_diameter"] / 2
     r_bonnet = config["equipment"].get("bonnet_diameter", config["equipment"]["shell_diameter"]) / 2
     
@@ -158,7 +160,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         auxiliaries = noz.get("auxiliaries", [])
         
         neck_width = 24
-        neck_height = 60
+        neck_height = 55
         flange_width = 44
 
         active_r = r_bonnet if comp == "BONNET" else r_shell
@@ -176,14 +178,14 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(ny_flange - 12), "class": "nozzle-text"}).text = label_str
                 
                 if len(auxiliaries) == 2:
-                    y_first = ny_flange + 38
+                    y_first = ny_flange + 36
                     y_second = ny_flange + 18
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_first), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_first), "class": "text-aux"}).text = auxiliaries[0]["position"]
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_second), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_second), "class": "text-aux"}).text = auxiliaries[1]["position"]
                 elif len(auxiliaries) == 1:
-                    y_single = ny_flange + 30
+                    y_single = ny_flange + 28
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_single), "r": "8", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_single), "class": "text-aux"}).text = auxiliaries[0]["position"]
             else:
@@ -205,17 +207,17 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
                 ET.SubElement(noz_g, "rect", {"x": str(nx - neck_width/2), "y": str(ny_base), "width": str(neck_width), "height": str(neck_height), "class": "nozzle-neck"})
                 ET.SubElement(noz_g, "rect", {"x": str(nx - flange_width/2), "y": str(ny_flange - 9), "width": str(flange_width), "height": "9", "class": "nozzle-flange"})
-                ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(ny_flange + 22), "class": "nozzle-text"}).text = label_str
+                ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(ny_flange + 20), "class": "nozzle-text"}).text = label_str
                 
                 if len(auxiliaries) == 2:
                     y_first = ny_base + 18
-                    y_second = ny_base + 38
+                    y_second = ny_base + 36
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_first), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_first), "class": "text-aux"}).text = auxiliaries[0]["position"]
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_second), "r": "7", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_second), "class": "text-aux"}).text = auxiliaries[1]["position"]
                 elif len(auxiliaries) == 1:
-                    y_single = ny_base + 30
+                    y_single = ny_base + 28
                     ET.SubElement(noz_g, "circle", {"cx": str(nx), "cy": str(y_single), "r": "8", "class": "marker-aux"})
                     ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(y_single), "class": "text-aux"}).text = auxiliaries[0]["position"]
             else:
@@ -343,8 +345,12 @@ col_view, col_control = st.columns([2.3, 1])
 with col_view:
     st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
-    # Se aumenta la altura del contenedor iframe a 560px
-    components.html(f'<div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:8px; display:flex; justify-content:center;">{svg_code}</div>', height=560)
+    
+    # Contenedor flexible para ajuste automático
+    components.html(
+        f'<div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:12px; width:100%; box-sizing:border-box;">{svg_code}</div>', 
+        height=510
+    )
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
     
@@ -373,7 +379,8 @@ with col_view:
     })
 
     df_nozzles = pd.DataFrame(table_rows)
-    st.dataframe(df_nozzles, use_container_width=True, hide_index=True)
+    # st.table asegura que el texto se adapte 100% al ancho y auto-ajuste sus columnas
+    st.table(df_nozzles)
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
