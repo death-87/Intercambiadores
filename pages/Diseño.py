@@ -306,7 +306,6 @@ if "tag_para_diseño" in st.session_state:
 # ==========================================
 st.sidebar.markdown("### 🏷️ Equipo Seleccionado (Tabla Google Sheets)")
 
-# Obtener lista real de equipos desde la planilla
 lista_equipos_oficiales = obtener_lista_equipos_oficiales()
 tag_actual = st.session_state.exchanger_data["equipment"].get("tag", "C702")
 
@@ -319,7 +318,6 @@ if lista_equipos_oficiales:
         key="select_official_tag"
     )
     
-    # Auto-cargar el archivo JSON si el usuario cambia la selección del TAG en el selectbox
     if selected_tag_from_list != st.session_state.exchanger_data["equipment"].get("tag"):
         st.session_state.exchanger_data["equipment"]["tag"] = selected_tag_from_list
         archivo_sel = f"config_{selected_tag_from_list}.json"
@@ -353,8 +351,14 @@ with col_save2:
             st.sidebar.success(f"¡Cargado desde {archivo_json}!")
             st.rerun()
 
+# Retorno seguro a la página principal
 if st.sidebar.button("🏠 Volver a Página Principal", use_container_width=True):
-    st.switch_page("Intercambiadores.py")
+    for root_page in ["Intercambiadores.py", "intercambiadores.py"]:
+        try:
+            st.switch_page(root_page)
+            break
+        except Exception:
+            continue
 
 st.sidebar.divider()
 
