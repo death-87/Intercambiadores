@@ -1,3 +1,5 @@
+import os
+import json
 import streamlit as st
 import xml.etree.ElementTree as ET
 import streamlit.components.v1 as components
@@ -262,15 +264,43 @@ if "bonnet_diameter" not in st.session_state.exchanger_data["equipment"]:
 if "sequence" not in st.session_state.exchanger_data["components"]:
     st.session_state.exchanger_data["components"]["sequence"] = ["CHANNEL", "SHELL", "BONNET"]
 
+# Carga automática si venimos redirigidos desde la página principal
+if "tag_para_diseño" in st.session_state:
+    tag_recibido = st.session_state.pop("tag_para_diseño")
+    st.session_state.exchanger_data["equipment"]["tag"] = tag_recibido
+    archivo_auto = f"config_{tag_recibido}.json"
+    if os.path.exists(archivo_auto):
+        try:
+            with open(archivo_auto, "r", encoding="utf-8") as f:
+                st.session_state.exchanger_data = json.load(f)
+        except Exception:
+            pass
+
 # ==========================================
 # 3. INTERFAZ Y BARRA LATERAL
 # ==========================================
-st.sidebar.markdown("### 🏷️ Identificación del Equipo")
-current_eq_tag = st.session_state.exchanger_data["equipment"].get("tag", "E-101")
-new_eq_tag = st.sidebar.text_input("TAG del Intercambiador:", value=current_eq_tag)
-if new_eq_tag != current_eq_tag:
-    st.session_state.exchanger_data["equipment"]["tag"] = new_eq_tag
-    st.rerun()
+st.sidebar.markdown("### 💾 Guardar / Cargar Equipo (JSON)")
+tag_actual = st.sidebar.text_input("TAG del Intercambiador:", value=st.session_state.exchanger_data["equipment"].get("tag", "E-101"))
+archivo_json = f"config_{tag_actual}.json"
+
+col_save1, col_save2 = st.sidebar.columns(2)
+with col_save1:
+    if st.button("💾 Guardar", type="primary", use_container_width=True):
+        st.session_state.exchanger_data["equipment"]["tag"] = tag_actual
+        with open(archivo_json, "w", encoding="utf-8") as f:
+            json.dump(st.session_state.exchanger_data, f, indent=4, ensure_ascii=False)
+        st.sidebar.success(f"¡Guardado en {archivo_json}!")
+
+with col_save2:
+    if os.path.exists(archivo_json):
+        if st.button("📂 Cargar", use_container_width=True):
+            with open(archivo_json, "r", encoding="utf-8") as f:
+                st.session_state.exchanger_data = json.load(f)
+            st.sidebar.success(f"¡Cargado desde {archivo_json}!")
+            st.rerun()
+
+if st.sidebar.button("🏠 Volver a Página Principal", use_container_width=True):
+    st.switch_page("Intercambiadores.py")
 
 st.sidebar.divider()
 
@@ -306,9 +336,6 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
 
 st.sidebar.divider()
 
-# ==========================================
-# CREAR NUEVA BOQUILLA (FORMULARIO DINÁMICO)
-# ==========================================
 with st.sidebar.expander("➕ Crear Nueva Boquilla"):
     new_srv = st.selectbox("Process", ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"], key="sidebar_new_srv")
     
@@ -409,7 +436,6 @@ with col_view:
 
     df_nozzles = pd.DataFrame(table_rows)
 
-    # Estilizado CSS compacto, autosize y con alto contraste para encabezados
     st.markdown("""
         <style>
         [data-testid="stTable"] {
