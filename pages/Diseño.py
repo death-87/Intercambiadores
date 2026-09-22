@@ -383,30 +383,37 @@ with col_view:
 
     df_nozzles = pd.DataFrame(table_rows)
 
-    # Estilizado CSS compacto para reducir tamaño de fuente y espacio interno
+    # Estilizado CSS compacto, autosize y con alto contraste para encabezados en modo oscuro/claro
     st.markdown("""
         <style>
         [data-testid="stTable"] {
-            width: auto !important;
+            width: fit-content !important;
+            max-width: 100% !important;
             margin-top: 5px;
+        }
+        [data-testid="stTable"] table {
+            width: auto !important;
         }
         [data-testid="stTable"] th {
             font-size: 11px !important;
-            padding: 4px 10px !important;
+            padding: 6px 12px !important;
             font-weight: 700 !important;
             white-space: nowrap !important;
-            background-color: #f1f5f9 !important;
+            background-color: #1e293b !important;
+            color: #ffffff !important;
+            border: 1px solid #334155 !important;
         }
         [data-testid="stTable"] td {
             font-size: 11px !important;
-            padding: 4px 10px !important;
+            padding: 5px 12px !important;
             white-space: nowrap !important;
             line-height: 1.2 !important;
+            border: 1px solid #334155 !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # Renderizado nativo con auto-ajuste de columnas y sin índice
+    # Renderizado nativo compacto
     st.table(df_nozzles.style.hide(axis='index'))
 
 with col_control:
