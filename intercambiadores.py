@@ -27,7 +27,6 @@ NOMBRE_HOJA = "Hoja 1"
 
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1zGSlDQu5o9waFqm211P344MAqxCC8AAK"
 
-# Paleta de colores ajustada exclusivamente a "CHEQUEADO" y "NO CHEQUEADO"
 MAPA_COLORES_ESTATUS = {
     "CHEQUEADO": "#28a745",          # Verde
     "NO CHEQUEADO": "#dc3545",       # Rojo
@@ -53,30 +52,25 @@ class PDFCustom(FPDF):
                 pass
 
 def normalizar_texto(texto):
-    """Elimina tildes y pasa a minúsculas para comparaciones exactas."""
     if not isinstance(texto, str):
         texto = str(texto)
     nfkd_form = unicodedata.normalize('NFKD', texto)
     return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower().strip()
 
 def sanitizar_para_pdf(texto):
-    """Asegura compatibilidad con codificación Latin-1 de FPDF."""
     if not isinstance(texto, str):
         texto = str(texto)
     return texto.encode('latin-1', 'replace').decode('latin-1')
 
 def hex_to_rgb(hex_code):
-    """Convierte un color HEX a una tupla RGB para FPDF."""
     hex_code = hex_code.lstrip('#')
     return tuple(int(hex_code[i:i+2], 16) for i in (0, 2, 4))
 
 def generar_link_gdrive(termino_busqueda):
-    """Genera un enlace de búsqueda directa dentro de Google Drive."""
     busqueda_encoded = urllib.parse.quote(str(termino_busqueda))
     return f"https://drive.google.com/drive/u/0/search?q={busqueda_encoded}"
 
 def extraer_coordenadas(coordenadas):
-    """Extrae latitud y longitud desde un string de coordenadas si existe."""
     if pd.isna(coordenadas) or str(coordenadas).strip() in ['Sin información', 'nan', '']:
         return None, None
     numeros = re.findall(r'-?\d+[\.,]\d+', str(coordenadas))
@@ -87,26 +81,22 @@ def extraer_coordenadas(coordenadas):
     return None, None
 
 def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_hex, titulo_doc):
-    """Genera el reporte PDF para terreno."""
     pdf = PDFCustom()
     pdf.set_auto_page_break(auto=True, margin=22)
     pdf.add_page()
     rgb = hex_to_rgb(color_hex)
     
-    # 1. Título Principal
     pdf.set_font("Arial", "B", 16)
     pdf.set_text_color(*rgb)
     pdf.cell(0, 7, sanitizar_para_pdf(titulo_doc), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
     pdf.ln(2)
     
-    # 2. Equipo y Unidad
     pdf.set_font("Arial", "B", 10)
     txt_equipo_unidad = f"EQUIPO: {sanitizar_para_pdf(val_equipo)}    |    UNIDAD DE PROCESO: {sanitizar_para_pdf(val_unidad)}"
     pdf.cell(0, 5, txt_equipo_unidad, ln=True, align="C")
     pdf.ln(2)
     
-    # 3. Estatus Actual
     pdf.set_font("Arial", "B", 9)
     pdf.set_text_color(*rgb)
     pdf.cell(0, 5, f"Estatus Actual: {sanitizar_para_pdf(valor_status)}", ln=True)
@@ -117,7 +107,6 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
     pdf.cell(0, 5, "Detalle Tecnico y Conexiones del Intercambiador", ln=True)
     pdf.ln(1)
     
-    # Filtrado de campos no deseados
     items_filtrados = []
     palabras_excluidas = ["unnamed", "status", "estatus", "foto de referencia"]
     
@@ -154,13 +143,11 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             
         x_inicio = pdf.get_x()
         
-        # Header Celda 1
         pdf.set_font("Arial", "B", 7.5)
         pdf.set_fill_color(245, 245, 245)
         pdf.cell(ancho_columna, 4.5, f"  {k1_c}", border="TRL", fill=True)
         pdf.cell(4, 4.5, "", border=0)
         
-        # Header Celda 2
         if k2_c:
             pdf.cell(ancho_columna, 4.5, f"  {k2_c}", border="TRL", fill=True, ln=True)
         else:
@@ -168,13 +155,11 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             
         y_despues_titulos = pdf.get_y()
         
-        # Contenido Celda 1
         pdf.set_xy(x_inicio, y_despues_titulos)
         pdf.set_font("Arial", "", 8)
         pdf.multi_cell(ancho_columna, 4.5, f"  {v1_c}", border="BRL")
         y_fin_izq = pdf.get_y()
         
-        # Contenido Celda 2
         if k2_c:
             pdf.set_xy(x_inicio + ancho_columna + 4, y_despues_titulos)
             pdf.set_font("Arial", "", 8)
@@ -228,7 +213,7 @@ except Exception as e:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# RECONOCIMIENTO DE COLUMNAS CLAVE DE LA NUEVA HOJA
+# RECONOCIMIENTO DE COLUMNAS CLAVE
 # -----------------------------------------------------------------------------
 col_unidad = next((c for c in df.columns if 'UNIDAD' in c.upper()), None)
 col_equipo = next((c for c in df.columns if 'EQUIPO' in c.upper()), None)
