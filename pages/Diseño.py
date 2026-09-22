@@ -12,8 +12,7 @@ st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout
 # 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
-    # Lienzo optimizado (1000x460) con márgenes seguros
-    width, height = 1000, 460
+    width, height = 1000, 470
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
@@ -61,8 +60,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
-    # Centro vertical calibrado
-    cy = 220
+    cy = 225
     r_shell = config["equipment"]["shell_diameter"] / 2
     r_bonnet = config["equipment"].get("bonnet_diameter", config["equipment"]["shell_diameter"]) / 2
     
@@ -346,10 +344,10 @@ with col_view:
     st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
-    # Renderizado con marco responsive
+    # Altura incrementada a 520px para holgura total
     components.html(
         f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
-        height=480
+        height=520
     )
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
@@ -387,68 +385,67 @@ with col_view:
         "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILIARIES": f"{global_aux_rating} CPLGS."
     })
 
-    # Generación de Tabla HTML estilizada para ajuste responsivo al texto
-    html_table = f"""
-    <style>
-        .nozzle-schedule-table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            font-size: 13px;
-            margin-top: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            overflow: hidden;
-        }}
-        .nozzle-schedule-table th {{
-            background-color: #f1f5f9;
-            color: #1e293b;
-            font-weight: 700;
-            text-align: left;
-            padding: 9px 12px;
-            border-bottom: 2px solid #cbd5e1;
-            border-right: 1px solid #cbd5e1;
-        }}
-        .nozzle-schedule-table td {{
-            padding: 8px 12px;
-            border-bottom: 1px solid #e2e8f0;
-            border-right: 1px solid #e2e8f0;
-            color: #0f172a;
-            white-space: nowrap;
-        }}
-        .nozzle-schedule-table tr:nth-child(even) {{
-            background-color: #f8fafc;
-        }}
-        .nozzle-schedule-table tr:hover {{
-            background-color: #f1f5f9;
-        }}
-    </style>
-    <table class="nozzle-schedule-table">
-        <thead>
-            <tr>
-                <th style="width: 10%;">MK</th>
-                <th style="width: 8%;">QT</th>
-                <th style="width: 42%;">DESCRIPTION</th>
-                <th style="width: 20%;">PROCESS</th>
-                <th style="width: 20%;">AUXILIARIES</th>
-            </tr>
-        </thead>
-        <tbody>
-    """
+    # Construcción de string HTML de la tabla SIN sangría inicial por línea para evitar bloque de código
+    html_table = """<style>
+.nozzle-schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    margin-top: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.nozzle-schedule-table th {
+    background-color: #f1f5f9;
+    color: #1e293b;
+    font-weight: 700;
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 2px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
+}
+.nozzle-schedule-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    color: #0f172a;
+    white-space: nowrap;
+}
+.nozzle-schedule-table tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+.nozzle-schedule-table tr:hover {
+    background-color: #f1f5f9;
+}
+</style>
+<table class="nozzle-schedule-table">
+<thead>
+<tr>
+    <th style="width: 10%;">MK</th>
+    <th style="width: 8%;">QT</th>
+    <th style="width: 40%;">DESCRIPTION</th>
+    <th style="width: 20%;">PROCESS</th>
+    <th style="width: 22%;">AUXILIARIES</th>
+</tr>
+</thead>
+<tbody>"""
+
     for r in table_rows:
-        html_table += f"""
-            <tr>
-                <td><b>{r['MK']}</b></td>
-                <td>{r['QT']}</td>
-                <td><b>{r['DESCRIPTION']}</b></td>
-                <td>{r['PROCESS']}</td>
-                <td>{r['AUXILIARIES']}</td>
-            </tr>
-        """
+        html_table += f"""<tr>
+<td><b>{r['MK']}</b></td>
+<td>{r['QT']}</td>
+<td><b>{r['DESCRIPTION']}</b></td>
+<td>{r['PROCESS']}</td>
+<td>{r['AUXILIARIES']}</td>
+</tr>"""
+
     html_table += "</tbody></table>"
 
-    st.markdown(html_table, unsafe_allow_html=True)
+    # Uso de st.html nativo para renderizado directo
+    st.html(html_table)
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
