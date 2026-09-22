@@ -383,8 +383,12 @@ with col_control:
             st.info(f"📍 Editando: **{selected_noz['tag']}**")
             with st.form("form_edit_noz"):
                 tag_val = st.text_input("MK (Tag)", value=selected_noz["tag"])
-                service_val = st.selectbox("Process", ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"], 
-                                           index=["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"].index(selected_noz.get("service", "INLET") if selected_noz.get("service") in ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"] else 0))
+                
+                service_opts = ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"]
+                curr_srv = selected_noz.get("service", "INLET")
+                srv_idx = service_opts.index(curr_srv) if curr_srv in service_opts else 0
+                service_val = st.selectbox("Process", service_opts, index=srv_idx)
+                
                 style_val = st.selectbox("Representación", ["FLANGED", "TAPÓN / COUPLING"], index=0 if selected_noz.get("style", "FLANGED") == "FLANGED" else 1)
                 comp_val = st.selectbox("Componente:", ["CHANNEL", "SHELL", "BONNET"], index=["CHANNEL", "SHELL", "BONNET"].index(selected_noz.get("component", "SHELL")))
                 size_val = st.text_input("Tamaño", value=selected_noz.get("size", ""))
