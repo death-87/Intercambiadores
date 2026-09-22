@@ -246,10 +246,20 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
         
     pdf.set_draw_color(0, 0, 0)
     
-    pdf_out = pdf.output()
-    if isinstance(pdf_out, str):
-        return pdf_out.encode('latin-1')
-    return bytes(pdf_out)
+    # ✅ RETORNO CORREGIDO DE BYTES PARA EVITAR ARCHIVOS VACÍOS DE 0 BYTES
+    try:
+        out = pdf.output(dest='S')
+        if isinstance(out, str):
+            return out.encode('latin-1')
+        elif isinstance(out, (bytes, bytearray)):
+            return bytes(out)
+    except Exception:
+        pass
+        
+    out = pdf.output()
+    if isinstance(out, str):
+        return out.encode('latin-1')
+    return bytes(out)
 
 # -----------------------------------------------------------------------------
 # CARGA AUTOMÁTICA DE DATOS
@@ -406,7 +416,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         
         st.subheader(f"📋 Ficha Técnica - Equipo {val_equipo}")
         
-        # 1. FICHA TÉCNICA FILTRADA (Únicamente Unidad de Proceso, Equipo y Comentario)
+        # FICHA TÉCNICA FILTRADA (Únicamente Unidad de Proceso, Equipo y Comentario)
         datos_ficha_reducida = {}
         for k, v in registro.items():
             k_upper = str(k).upper()
@@ -439,7 +449,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
                 height=480
             )
             
-            # 2. TABLA NOZZLE SCHEDULE DEBAJO DEL ESQUEMA
+            # TABLA NOZZLE SCHEDULE DEBAJO DEL ESQUEMA
             st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
             
             table_rows = []
