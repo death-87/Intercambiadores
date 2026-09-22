@@ -28,9 +28,9 @@ NOMBRE_HOJA = "Hoja 1"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1zGSlDQu5o9waFqm211P344MAqxCC8AAK"
 
 MAPA_COLORES_ESTATUS = {
-    "CHEQUEADO": "#28a745",          # Verde
-    "NO CHEQUEADO": "#dc3545",       # Rojo
-    "SIN INFORMACIÓN": "#6c757d"     # Gris
+    "CHEQUEADO": "#28a745",        # Verde
+    "NO CHEQUEADO": "#dc3545",     # Rojo
+    "SIN INFORMACIÓN": "#6c757d"   # Gris
 }
 
 # -----------------------------------------------------------------------------
@@ -172,7 +172,12 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
         pdf.set_xy(x_inicio, max_y + 1)
         
     pdf.set_draw_color(0, 0, 0)
-    return bytes(pdf.output())
+    
+    # ✅ Retorno de bytes compatible con Python 3 y FPDF
+    pdf_out = pdf.output()
+    if isinstance(pdf_out, str):
+        return pdf_out.encode('latin-1')
+    return bytes(pdf_out)
 
 # -----------------------------------------------------------------------------
 # CARGA AUTOMÁTICA DE DATOS
