@@ -8,13 +8,16 @@ import streamlit.components.v1 as components
 from fpdf import FPDF
 
 # Intentar importar la función generadora SVG de la página de diseño
-try:
-    from pages.diseno import generate_modular_exchanger_svg
-except Exception:
+generate_modular_exchanger_svg = None
+for mod_path in ["pages.diseno", "pages.Diseño", "pages.diseño", "pages.Diseno"]:
     try:
-        from pages.Diseño import generate_modular_exchanger_svg
+        import importlib
+        mod = importlib.import_module(mod_path)
+        generate_modular_exchanger_svg = getattr(mod, "generate_modular_exchanger_svg", None)
+        if generate_modular_exchanger_svg:
+            break
     except Exception:
-        generate_modular_exchanger_svg = None
+        continue
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA
@@ -408,7 +411,17 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_ficha, rgb_ma
         
     agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main)
     
-    return bytes(pdf.output(dest='S'))
+    # SALIDA SEGURA EN BYTES (Inmune a TypeError en Python 3)
+    try:
+        out = pdf.output(dest='S')
+        if isinstance(out, str):
+            return out.encode('latin-1')
+        return bytes(out)
+    except Exception:
+        out = pdf.output()
+        if isinstance(out, str):
+            return out.encode('latin-1')
+        return bytes(out)
 
 # ==========================================
 # LECTURA DE GOOGLE SHEETS
@@ -479,14 +492,12 @@ col_detalles, col_enlaces = st.columns([2.3, 1])
 with col_detalles:
     st.subheader(f"📄 Ficha Técnica: {val_equipo} ({val_unidad})")
     
-    # Crear diccionario de datos filtrados para la ficha
     datos_ficha_reducida = {}
     for col in df_raw.columns:
         if col.upper() not in [col_eq_name.upper()]:
             val = fila_equipo.get(col, "-")
             datos_ficha_reducida[col] = str(val) if pd.notna(val) else "-"
             
-    # Mostrar tabla estructurada en pantalla
     df_ficha_disp = pd.DataFrame(list(datos_ficha_reducida.items()), columns=["Parámetro", "Valor"])
     st.dataframe(df_ficha_disp, use_container_width=True, hide_index=True)
 
@@ -566,7 +577,6 @@ with col_detalles:
 with col_enlaces:
     st.subheader("🚀 Acciones del Equipo")
     
-    # Botón para ir a la página de diseño parametrizado
     if st.button("✏️ Diseñar / Editar Esquema Paramétrico", use_container_width=True, type="primary"):
         st.session_state["tag_para_diseño"] = val_equipo
         for pag_diseño in ["pages/diseno.py", "pages/Diseño.py", "diseno.py"]:
@@ -579,7 +589,6 @@ with col_enlaces:
     st.markdown("---")
     st.write("**Exportación:**")
     
-    # Generar PDF completo con Plano Esquemático y Nozzle Schedule
     titulo_doc = f"Intercambiador {val_equipo} ({val_unidad})"
     pdf_bytes = generar_pdf_equipo(
         val_equipo, val_unidad, valor_status, datos_ficha_reducida, rgb_color, titulo_doc, config_equipo=config_equipo
