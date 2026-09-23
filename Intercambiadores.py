@@ -140,8 +140,48 @@ def extraer_coordenadas(coordenadas):
         return lat, lon
     return None, None
 
+def obtener_config_equipo(val_equipo):
+    val_clean = str(val_equipo).strip()
+    posibles_archivos = [
+        f"config_{val_clean}.json",
+        f"config_{val_clean.upper()}.json",
+        f"config_{val_clean.lower()}.json",
+        f"config_{val_clean.replace('-', '')}.json",
+        f"config_{val_clean.replace(' ', '')}.json"
+    ]
+    
+    for arch in posibles_archivos:
+        if os.path.exists(arch):
+            try:
+                with open(arch, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if data:
+                        return data
+            except Exception:
+                pass
+                
+    return {
+        "equipment": {"tag": val_clean, "shell_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
+        "components": {
+            "channel_length": 150,
+            "shell_length": 420,
+            "bonnet_length": 100,
+            "sequence": ["CHANNEL", "SHELL", "BONNET"]
+        },
+        "saddles": [
+            {"id": "sad_1", "tag": "Soporte 1", "position_ratio": 0.30},
+            {"id": "sad_2", "tag": "Soporte 2", "position_ratio": 0.70}
+        ],
+        "nozzles": [
+            {"id": "noz_1", "tag": "S1", "service": "INLET", "component": "SHELL", "side": "TOP", "position_ratio": 0.10, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_2", "tag": "S2", "service": "OUTLET", "component": "SHELL", "side": "BOTTOM", "position_ratio": 0.90, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_3", "tag": "T1", "service": "INLET", "component": "CHANNEL", "side": "TOP", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_4", "tag": "T2", "service": "OUTLET", "component": "CHANNEL", "side": "BOTTOM", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]}
+        ]
+    }
+
 # -----------------------------------------------------------------------------
-# MOTOR DE DIBUJO VECTORIAL EN FPDF (PARA EL PLANO ESQUEMÁTICO EN EL PDF)
+# MOTOR DE DIBUJO VECTORIAL DE RESERVA (FPDF)
 # -----------------------------------------------------------------------------
 def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
     cy = y_offset + 25
@@ -186,17 +226,38 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         cx = c_info["start"]
         cw = c_info["width"]
         
+        # Brida de unión entre componentes
         if idx > 0:
             pdf.set_fill_color(71, 85, 105)
+            pdf.set_draw_color(30, 41, 59)
             pdf.rect(cx - 2, cy - r_shell - 2, 2, r_shell * 2 + 4, 'FD')
             
         pdf.set_fill_color(226, 232, 240)
         pdf.set_draw_color(51, 65, 85)
-        pdf.rect(cx, cy - r_shell, cw, r_shell * 2, 'FD')
         
-        pdf.set_font("Arial", "B", 7)
-        pdf.set_text_color(51, 65, 85)
-        pdf.text(cx + cw / 2 - 4, cy + 1, comp)
+        if comp == "BONNET":
+            dome_w = min(r_bonnet * 0.6, cw * 0.45)
+            if idx == len(seq) - 1 or idx > 0:  # Bonete al lado derecho
+                pdf.ellipse(cx + cw - 2*dome_w, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
+                pdf.rect(cx, cy - r_bonnet, cw - dome_w + 0.1, 2*r_bonnet, style='F')
+                pdf.line(cx, cy - r_bonnet, cx + cw - dome_w, cy - r_bonnet)
+                pdf.line(cx, cy + r_bonnet, cx + cw - dome_w, cy + r_bonnet)
+                label_x = cx + (cw - dome_w) / 2 - 4
+            else:  # Bonete al lado izquierdo
+                pdf.ellipse(cx, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
+                pdf.rect(cx + dome_w - 0.1, cy - r_bonnet, cw - dome_w + 0.1, 2*r_bonnet, style='F')
+                pdf.line(cx + dome_w, cy - r_bonnet, cx + cw, cy - r_bonnet)
+                pdf.line(cx + dome_w, cy + r_bonnet, cx + cw, cy + r_bonnet)
+                label_x = cx + dome_w + (cw - dome_w) / 2 - 4
+
+            pdf.set_font("Arial", "B", 7)
+            pdf.set_text_color(51, 65, 85)
+            pdf.text(label_x, cy + 1, "BONNET")
+        else:
+            pdf.rect(cx, cy - r_shell, cw, r_shell * 2, 'FD')
+            pdf.set_font("Arial", "B", 7)
+            pdf.set_text_color(51, 65, 85)
+            pdf.text(cx + cw / 2 - 4, cy + 1, comp)
 
     # Boquillas
     for noz in config.get("nozzles", []):
@@ -275,7 +336,6 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         ("AUXILLARIES", 45)
     ]
     
-    # Encabezados
     pdf.set_font("Arial", "B", 8)
     pdf.set_fill_color(30, 41, 59)
     pdf.set_text_color(255, 255, 255)
@@ -285,7 +345,6 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         pdf.cell(width, 5.5, f"  {title}", border=1, fill=True)
     pdf.ln()
     
-    # Filas de boquillas
     pdf.set_font("Arial", "", 8)
     pdf.set_text_color(0, 0, 0)
     
@@ -333,7 +392,6 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         pdf.cell(45, 5, f"  {aux_txt}", border=1, fill=fill_flag)
         pdf.ln()
         
-    # Fila final CPLGS
     if pdf.get_y() + 7 > 270:
         pdf.add_page()
     pdf.cell(22, 5, "", border=1)
@@ -351,6 +409,9 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
     pdf.set_auto_page_break(auto=True, margin=22)
     pdf.add_page()
     rgb = hex_to_rgb(color_hex)
+    
+    if not config_equipo:
+        config_equipo = obtener_config_equipo(val_equipo)
     
     pdf.set_font("Arial", "B", 16)
     pdf.set_text_color(*rgb)
@@ -437,19 +498,20 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
         pdf.set_font("Arial", "B", 10)
         pdf.set_text_color(*rgb)
         pdf.cell(0, 6, "Plano Esquematico de Boquillas", ln=True)
-        pdf.ln(6)  # Espaciado extra para evitar que la imagen o boquillas tapen el título
+        pdf.ln(4)
         
         y_esquema = pdf.get_y()
         dibujado_ok = False
         
+        # CONVERSIÓN RENDERIZADA VECTORIAL MEDIANTE CAIROSVG
         if generate_modular_exchanger_svg:
             try:
                 import cairosvg
                 svg_code = generate_modular_exchanger_svg(config_equipo)
                 png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
-                cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp)
+                cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp, scale=2.5)
                 pdf.image(png_temp, x=15, y=y_esquema, w=180)
-                pdf.set_y(y_esquema + 88)  # Avanzar posición Y tras la imagen
+                pdf.set_y(y_esquema + 88)
                 if os.path.exists(png_temp):
                     os.remove(png_temp)
                 dibujado_ok = True
@@ -457,7 +519,7 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
                 dibujado_ok = False
                 
         if not dibujado_ok:
-            dibujar_esquema_fpdf(pdf, config_equipo, x_offset=15, y_offset=y_esquema + 10)
+            dibujar_esquema_fpdf(pdf, config_equipo, x_offset=15, y_offset=y_esquema + 5)
             
         agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb)
 
@@ -645,14 +707,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         df_ficha = pd.DataFrame(list(datos_ficha_reducida.items()), columns=['Parámetro', 'Detalle'])
         st.table(df_ficha.style.hide(axis='index'))
 
-        archivo_json = f"config_{val_equipo_clean}.json"
-        config_equipo = None
-        if os.path.exists(archivo_json):
-            try:
-                with open(archivo_json, "r", encoding="utf-8") as f:
-                    config_equipo = json.load(f)
-            except Exception:
-                config_equipo = None
+        config_equipo = obtener_config_equipo(val_equipo_clean)
 
         st.markdown("### 📐 Plano Esquemático de Boquillas")
         if config_equipo and generate_modular_exchanger_svg:
