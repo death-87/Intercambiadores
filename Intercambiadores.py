@@ -627,8 +627,15 @@ registro_seleccionado = None
 with pestana_tabla:
     st.caption("💡 Haz clic en cualquier fila para abrir inmediatamente la Ficha Técnica del Intercambiador.")
     
+    # -------------------------------------------------------------------------
+    # OCULTAR VISUALMENTE COLUMNAS H (7) HASTA AC (28) EN LA TABLA GENERAL
+    # -------------------------------------------------------------------------
+    indices_ocultar = set(range(7, 29))  # H es índice 7, AC es índice 28
+    cols_visibles = [col for idx, col in enumerate(df_filtrado.columns) if idx not in indices_ocultar]
+    df_tabla_mostrar = df_filtrado[cols_visibles]
+    
     evento_tabla = st.dataframe(
-        df_filtrado, 
+        df_tabla_mostrar, 
         use_container_width=True, 
         selection_mode="single-row", 
         on_select="rerun"
@@ -712,7 +719,6 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         if config_equipo and generate_modular_exchanger_svg:
             svg_code = generate_modular_exchanger_svg(config_equipo)
             
-            # CONTENEDOR EXPANDIDO A HEIGHT=470
             html_encapsulado = f"""
             <!DOCTYPE html>
             <html>
@@ -810,9 +816,46 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             color_principal = MAPA_COLORES_ESTATUS.get(valor_status, "#005ce6")
             
         st.markdown(f"""
-        <div style="background: transparent; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid {color_principal}; margin-bottom: 20px;">
+        <div style="background: transparent; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid {color_principal}; margin-bottom: 12px;">
             <p style="margin: 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Estatus del Equipo</p>
             <h3 style="margin: 4px 0 0 0; font-size: 22px; color: {color_principal}; line-height: 1.1;">{valor_status}</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ---------------------------------------------------------------------
+        # RECUADRO: CANTIDAD CONEXIONES ROSCADAS (PLUG ROSCADO)
+        # ---------------------------------------------------------------------
+        col_roscadas = next((c for c in df.columns if 'ROSCAD' in c.upper() or 'PLUG' in c.upper()), None)
+        cant_roscadas = 0
+        
+        if col_roscadas and str(registro[col_roscadas]).strip() not in ['Sin información', 'SIN INFORMACIÓN', 'nan', '']:
+            cant_roscadas = registro[col_roscadas]
+        elif config_equipo:
+            nozzles = config_equipo.get("nozzles", [])
+            for noz in nozzles:
+                cant_roscadas += len(noz.get("auxiliaries", []))
+                if str(noz.get("style", "")).upper() in ["THREADED", "ROSCADA", "NPT"] or "THREAD" in str(noz.get("type", "")).upper():
+                    cant_roscadas += 1
+
+        st.markdown(f"""
+        <div style="background: #ffffff; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="flex-shrink: 0; background: #eff6ff; padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <svg width="38" height="38" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Cabeza Hexagonal del Plug Roscado -->
+                    <polygon points="32,4 52,15 52,27 32,38 12,27 12,15" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+                    <polygon points="32,8 48,17 48,25 32,34 16,25 16,17" fill="#60a5fa"/>
+                    <!-- Cuerpo Roscado NPT / Rosca -->
+                    <rect x="18" y="36" width="28" height="22" rx="2" fill="#93c5fd" stroke="#1d4ed8" stroke-width="2"/>
+                    <line x1="18" y1="41" x2="46" y2="41" stroke="#1d4ed8" stroke-width="2"/>
+                    <line x1="18" y1="46" x2="46" y2="46" stroke="#1d4ed8" stroke-width="2"/>
+                    <line x1="18" y1="51" x2="46" y2="51" stroke="#1d4ed8" stroke-width="2"/>
+                    <line x1="18" y1="56" x2="46" y2="56" stroke="#1d4ed8" stroke-width="2"/>
+                </svg>
+            </div>
+            <div>
+                <p style="margin: 0; font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Conexiones Roscadas</p>
+                <h3 style="margin: 2px 0 0 0; font-size: 20px; color: #1e293b; font-weight: 700;">{cant_roscadas} <span style="font-size: 13px; font-weight: normal; color: #64748b;">(Plugs / Cplgs)</span></h3>
+            </div>
         </div>
         """, unsafe_allow_html=True)
             
