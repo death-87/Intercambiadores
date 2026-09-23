@@ -712,10 +712,51 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         st.markdown("### 📐 Plano Esquemático de Boquillas")
         if config_equipo and generate_modular_exchanger_svg:
             svg_code = generate_modular_exchanger_svg(config_equipo)
-            components.html(
-                f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
-                height=480
-            )
+            
+            # ENCADRE PERFECTO Y RESPONSIVO
+            html_encapsulado = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <style>
+                * {{ box-sizing: border-box; }}
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                    background: transparent;
+                }}
+                .svg-container {{
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    background: #ffffff;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 8px;
+                    padding: 8px;
+                }}
+                .svg-container svg {{
+                    width: 100% !important;
+                    height: 100% !important;
+                    max-width: 100% !important;
+                    max-height: 100% !important;
+                    object-fit: contain;
+                }}
+            </style>
+            </head>
+            <body>
+                <div class="svg-container">
+                    {svg_code}
+                </div>
+            </body>
+            </html>
+            """
+            
+            components.html(html_encapsulado, height=380)
             
             st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
             
