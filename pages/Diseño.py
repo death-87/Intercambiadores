@@ -1,5 +1,6 @@
 import os
 import json
+import requests
 import urllib.parse
 import pandas as pd
 import streamlit as st
@@ -10,6 +11,13 @@ import streamlit.components.v1 as components
 # CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout="wide")
+
+# ==========================================
+# CONFIGURACIÓN DE GOOGLE DRIVE Y APPS SCRIPT
+# ==========================================
+GDRIVE_FOLDER_ID = "10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
+# PEGA AQUÍ TU URL COPIADA AL IMPLEMENTAR EN GOOGLE APPS SCRIPT (la que termina en /exec)
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/TU_URL_DE_DESPLIEGUE_AQUI/exec"
 
 # ==========================================
 # OBTENER LISTA REAL DE EQUIPOS DESDE GOOGLE SHEETS
@@ -339,9 +347,34 @@ col_save1, col_save2 = st.sidebar.columns(2)
 with col_save1:
     if st.button("💾 Guardar", type="primary", use_container_width=True):
         st.session_state.exchanger_data["equipment"]["tag"] = tag_actual
+        
+        # 1. Guardado local en disco
+        json_str = json.dumps(st.session_state.exchanger_data, indent=4, ensure_ascii=False)
         with open(archivo_json, "w", encoding="utf-8") as f:
-            json.dump(st.session_state.exchanger_data, f, indent=4, ensure_ascii=False)
-        st.sidebar.success(f"¡Guardado para {tag_actual}!")
+            f.write(json_str)
+            
+        # 2. Envío a Google Drive vía Webhook si la URL está lista
+        envio_cloud_ok = False
+        if GOOGLE_SCRIPT_URL and "TU_URL_DE_DESPLIEGUE_AQUI" not in GOOGLE_SCRIPT_URL:
+            try:
+                svg_code_save = generate_modular_exchanger_svg(st.session_state.exchanger_data)
+                payload = {
+                    "tag": tag_actual,
+                    "folder_id": GDRIVE_FOLDER_ID,
+                    "filename_json": archivo_json,
+                    "json_content": json_str,
+                    "svg_content": svg_code_save
+                }
+                res = requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=8)
+                if res.status_code == 200:
+                    envio_cloud_ok = True
+            except Exception:
+                envio_cloud_ok = False
+
+        if envio_cloud_ok:
+            st.sidebar.success(f"¡Guardado local y en Google Drive para {tag_actual}!")
+        else:
+            st.sidebar.success(f"¡Guardado local para {tag_actual}!")
 
 with col_save2:
     if os.path.exists(archivo_json):
