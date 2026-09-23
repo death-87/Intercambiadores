@@ -494,6 +494,7 @@ with col_view:
 
     df_nozzles = pd.DataFrame(table_rows)
 
+    # ESTILOS CSS CON TAMAÑO UN 20% MÁS GRANDE (13.2px)
     st.markdown("""
         <style>
         [data-testid="stTable"] {
@@ -505,8 +506,8 @@ with col_view:
             width: auto !important;
         }
         [data-testid="stTable"] th {
-            font-size: 11px !important;
-            padding: 6px 12px !important;
+            font-size: 13.2px !important;
+            padding: 7px 14px !important;
             font-weight: 700 !important;
             white-space: nowrap !important;
             background-color: #1e293b !important;
@@ -514,16 +515,23 @@ with col_view:
             border: 1px solid #334155 !important;
         }
         [data-testid="stTable"] td {
-            font-size: 11px !important;
-            padding: 5px 12px !important;
+            font-size: 13.2px !important;
+            padding: 6px 14px !important;
             white-space: nowrap !important;
-            line-height: 1.2 !important;
+            line-height: 1.3 !important;
             border: 1px solid #334155 !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
     st.table(df_nozzles.style.hide(axis='index'))
+
+    # FOTO TIPO FRANJA EN LA PARTE INFERIOR DE LA TABLA
+    st.markdown("<br>", unsafe_allow_html=True)
+    for foto_franja in ["franja2.png", "franja.png", "franja.jpg", "franja.jpeg"]:
+        if os.path.exists(foto_franja):
+            st.image(foto_franja, use_container_width=True)
+            break
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
