@@ -140,6 +140,18 @@ def extraer_coordenadas(coordenadas):
         return lat, lon
     return None, None
 
+def tiene_diseno_creado(val_equipo):
+    """Verifica si el equipo tiene un archivo de configuración/diseño creado en el sistema."""
+    val_clean = str(val_equipo).strip()
+    posibles_archivos = [
+        f"config_{val_clean}.json",
+        f"config_{val_clean.upper()}.json",
+        f"config_{val_clean.lower()}.json",
+        f"config_{val_clean.replace('-', '')}.json",
+        f"config_{val_clean.replace(' ', '')}.json"
+    ]
+    return any(os.path.exists(arch) for arch in posibles_archivos)
+
 def obtener_config_equipo(val_equipo):
     val_clean = str(val_equipo).strip()
     posibles_archivos = [
@@ -637,10 +649,8 @@ st.sidebar.markdown(f"""
 <div style="background: #1e293b; padding: 12px 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
     <div style="flex-shrink: 0; background: #0f172a; padding: 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
         <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Cabeza Hexagonal del Plug Roscado -->
             <polygon points="32,4 52,15 52,27 32,38 12,27 12,15" fill="#38bdf8" stroke="#0284c7" stroke-width="2"/>
             <polygon points="32,8 48,17 48,25 32,34 16,25 16,17" fill="#7dd3fc"/>
-            <!-- Cuerpo Roscado NPT / Rosca -->
             <rect x="18" y="36" width="28" height="22" rx="2" fill="#bae6fd" stroke="#0284c7" stroke-width="2"/>
             <line x1="18" y1="41" x2="46" y2="41" stroke="#0284c7" stroke-width="2"/>
             <line x1="18" y1="46" x2="46" y2="46" stroke="#0284c7" stroke-width="2"/>
@@ -679,7 +689,15 @@ with pestana_tabla:
         col for idx, col in enumerate(df_filtrado.columns) 
         if idx not in indices_ocultar and 'CANTIDAD' not in col.upper()
     ]
-    df_tabla_mostrar = df_filtrado[cols_visibles]
+    df_tabla_mostrar = df_filtrado[cols_visibles].copy()
+    
+    # AGREGAR COLUMNA VISUAL INDICANDO SI TIENE PLANO / IMAGEN CREADA
+    if col_equipo and col_equipo in df_filtrado.columns:
+        df_tabla_mostrar.insert(
+            0, 
+            "🖼️ Plano / Imagen", 
+            df_filtrado[col_equipo].apply(lambda x: "✅ Creado" if tiene_diseno_creado(x) else "❌ Pendiente")
+        )
     
     evento_tabla = st.dataframe(
         df_tabla_mostrar, 
@@ -869,7 +887,6 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         </div>
         """, unsafe_allow_html=True)
 
-        # RECUADRO INDIVIDUAL DE CONEXIONES ROSCADAS PARA EL EQUIPO SELECCIONADO
         col_roscadas = next((c for c in df.columns if 'ROSCAD' in c.upper() or 'PLUG' in c.upper()), None)
         cant_roscadas = 0
         
