@@ -628,10 +628,13 @@ with pestana_tabla:
     st.caption("💡 Haz clic en cualquier fila para abrir inmediatamente la Ficha Técnica del Intercambiador.")
     
     # -------------------------------------------------------------------------
-    # OCULTAR VISUALMENTE COLUMNAS H (7) HASTA AC (28) EN LA TABLA GENERAL
+    # OCULTAR COLUMNAS DE H (7) A AC (28) Y CUALQUIER COLUMNA "CANTIDAD"
     # -------------------------------------------------------------------------
-    indices_ocultar = set(range(7, 29))  # H es índice 7, AC es índice 28
-    cols_visibles = [col for idx, col in enumerate(df_filtrado.columns) if idx not in indices_ocultar]
+    indices_ocultar = set(range(7, 29))  # Columnas H (7) a AC (28)
+    cols_visibles = [
+        col for idx, col in enumerate(df_filtrado.columns) 
+        if idx not in indices_ocultar and 'CANTIDAD' not in col.upper()
+    ]
     df_tabla_mostrar = df_filtrado[cols_visibles]
     
     evento_tabla = st.dataframe(
