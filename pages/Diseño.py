@@ -17,7 +17,7 @@ st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout
 # ==========================================
 GDRIVE_FOLDER_ID = "10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 # PEGA AQUÍ TU URL COPIADA AL IMPLEMENTAR EN GOOGLE APPS SCRIPT (la que termina en /exec)
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/TU_URL_DE_DESPLIEGUE_AQUI/exec"
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxKabZkU0Ri_SD4oIA3reQW4HAQI52hHvVAaeEPn5nosdicBwmxN_3tBfdqbNMFUT9Kow/exec"
 
 # ==========================================
 # OBTENER LISTA REAL DE EQUIPOS DESDE GOOGLE SHEETS
