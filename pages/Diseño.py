@@ -1,15 +1,36 @@
 import os
 import re
 import json
-import base64
 import requests
 import urllib.parse
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Configuración de página de Streamlit
+# Configuración de la página
 st.set_page_config(page_title="Diseño de Intercambiador de Calor", layout="wide")
+
+# Estilos CSS para limpiar la interfaz y mantener bordes ordenados
+st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        white-space: pre-wrap;
+        background-color: #f8fafc;
+        border-radius: 6px 6px 0px 0px;
+        padding: 8px 16px;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
 # CONFIGURACIÓN DE GOOGLE DRIVE Y GOOGLE SHEETS
@@ -20,8 +41,8 @@ NOMBRE_HOJA = "Hoja 1"
 GDRIVE_FOLDER_ID = "10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 
-# OPCIÓN B: Reemplaza las comillas con la URL que te genera al Desplegar como Aplicación Web (/exec)
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxKabZkU0Ri_SD4oIA3reQW4HAQI52hHvVAaeEPn5nosdicBwmxN_3tBfdqbNMFUT9Kow/exec"
+# Reemplaza la URL entre comillas cuando tengas la URL de tu aplicación web (/exec)
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/TU_URL_DE_DESPLIEGUE_AQUI/exec"
 
 # -----------------------------------------------------------------------------
 # CARGA DE EQUIPOS DESDE GOOGLE SHEETS
@@ -47,7 +68,7 @@ lista_equipos = cargar_lista_equipos()
 # -----------------------------------------------------------------------------
 def generate_modular_exchanger_svg(config, selected_id=None):
     width, height = 1000, 470
-    cy = 180  # Eje central elevado
+    cy = 180  # Eje central elevado para dar holgura a las boquillas inferiores
     
     seq = config.get("components", {}).get("sequence", ["CHANNEL", "SHELL", "BONNET"])
     comp_lens = {
@@ -160,7 +181,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     return "\n".join(svg_lines)
 
 # -----------------------------------------------------------------------------
-# BARRA LATERAL (SIDEBAR) - ETIQUETA "EQUIPO"
+# BARRA LATERAL (SIDEBAR) SIMPLIFICADA
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ Editor de Diseño")
 
@@ -169,7 +190,7 @@ idx_def = lista_equipos.index(tag_inicial) if tag_inicial in lista_equipos else 
 
 equipo_sel = st.sidebar.selectbox("EQUIPO", lista_equipos, index=idx_def)
 
-if st.sidebar.button("⬅️ Volver a Vista Principal"):
+if st.sidebar.button("⬅️ Volver a Vista Principal", use_container_width=True):
     st.switch_page("Intercambiadores.py")
 
 st.sidebar.markdown("---")
@@ -200,119 +221,117 @@ def cargar_config_inicial(tag):
 config = cargar_config_inicial(equipo_sel)
 
 # -----------------------------------------------------------------------------
-# PANEL CENTRAL Y FORMULARIO DE EDICIÓN
+# ESTRUCTURA ORGANIZADA POR PESTAÑAS Y VISTA PREVIA LIMPIA
 # -----------------------------------------------------------------------------
-st.title(f"✏️ Configuración y Diseño Esquemático - {equipo_sel}")
+st.title(f"✏️ Configuración de Plano - {equipo_sel}")
 
-col_izq, col_der = st.columns([1, 1.2])
+tab_dimensiones, tab_boquillas, tab_guardar = st.tabs([
+    "⚙️ Dimensions & Saddles", 
+    "📌 Nozzles & Connections", 
+    "💾 Guardado & Google Drive"
+])
 
-with col_izq:
-    st.subheader("⚙️ Parámetros del Equipo")
-    aux_rating = st.text_input("Rating de Conexiones Auxiliares (CPLGS):", value=config.get("equipment", {}).get("aux_rating", "6000#"))
-    
-    st.markdown("##### 📏 Longitudes de Componentes")
-    c_len = st.number_input("Channel Length (mm):", value=float(config["components"]["channel_length"]), step=10.0)
-    s_len = st.number_input("Shell Length (mm):", value=float(config["components"]["shell_length"]), step=10.0)
-    b_len = st.number_input("Bonnet Length (mm):", value=float(config["components"]["bonnet_length"]), step=10.0)
-    
-    config["equipment"]["aux_rating"] = aux_rating
-    config["components"]["channel_length"] = c_len
-    config["components"]["shell_length"] = s_len
-    config["components"]["bonnet_length"] = b_len
+with tab_dimensiones:
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        st.markdown("##### 📏 Longitudes de Componentes (mm)")
+        c_len = st.number_input("Channel Length:", value=float(config["components"]["channel_length"]), step=10.0, key="inp_clen")
+        s_len = st.number_input("Shell Length:", value=float(config["components"]["shell_length"]), step=10.0, key="inp_slen")
+        b_len = st.number_input("Bonnet Length:", value=float(config["components"]["bonnet_length"]), step=10.0, key="inp_blen")
+        aux_rating = st.text_input("Rating Conexiones Auxiliares:", value=config.get("equipment", {}).get("aux_rating", "6000#"), key="inp_aux")
+        
+        config["equipment"]["aux_rating"] = aux_rating
+        config["components"]["channel_length"] = c_len
+        config["components"]["shell_length"] = s_len
+        config["components"]["bonnet_length"] = b_len
 
-    st.markdown("##### ⚓ Posición de Soportes (Saddles)")
-    for i, sad in enumerate(config.get("saddles", [])):
-        sad["position_ratio"] = st.slider(f"Posición {sad.get('tag', f'Soporte {i+1}')}:", 0.0, 1.0, float(sad.get("position_ratio", 0.5)), key=f"sad_pos_{i}")
+    with col_d2:
+        st.markdown("##### ⚓ Ubicación de Soportes (Saddles)")
+        for i, sad in enumerate(config.get("saddles", [])):
+            sad["position_ratio"] = st.slider(
+                f"Posición {sad.get('tag', f'Soporte {i+1}')}:", 
+                0.0, 1.0, float(sad.get("position_ratio", 0.5)), 
+                key=f"sad_pos_{i}"
+            )
 
-with col_der:
-    st.subheader("📌 Edición de Boquillas (Nozzles)")
+with tab_boquillas:
     nozzles = config.get("nozzles", [])
+    col_n1, col_n2 = st.columns(2)
     
     for idx, noz in enumerate(nozzles):
-        with st.expander(f"Boquilla {noz.get('tag', 'N')} ({noz.get('component', 'SHELL')})", expanded=(idx==0)):
-            noz["tag"] = st.text_input("TAG Boquilla:", value=noz.get("tag", ""), key=f"noz_tag_{idx}")
-            noz["service"] = st.selectbox("Servicio:", ["INLET", "OUTLET", "DRAIN", "VENT", "PROCESS"], index=0 if noz.get("service")=="INLET" else 1, key=f"noz_serv_{idx}")
-            noz["component"] = st.selectbox("Componente:", ["SHELL", "CHANNEL", "BONNET"], index=["SHELL", "CHANNEL", "BONNET"].index(noz.get("component", "SHELL")), key=f"noz_comp_{idx}")
-            noz["side"] = st.radio("Orientación:", ["TOP", "BOTTOM"], index=0 if noz.get("side")=="TOP" else 1, horizontal=True, key=f"noz_side_{idx}")
-            noz["position_ratio"] = st.slider("Posición relativa (0.0 - 1.0):", 0.0, 1.0, float(noz.get("position_ratio", 0.5)), key=f"noz_pos_{idx}")
-            noz["size"] = st.text_input("Tamaño (ej: 8\"): ", value=noz.get("size", "8\""), key=f"noz_sz_{idx}")
-            noz["rating"] = st.text_input("Rating (ej: 300#):", value=noz.get("rating", "300#"), key=f"noz_rt_{idx}")
+        target_col = col_n1 if idx % 2 == 0 else col_n2
+        with target_col:
+            with st.expander(f"📍 Boquilla {noz.get('tag', 'N')} ({noz.get('component', 'SHELL')})", expanded=False):
+                noz["tag"] = st.text_input("TAG:", value=noz.get("tag", ""), key=f"noz_tag_{idx}")
+                noz["component"] = st.selectbox("Componente:", ["SHELL", "CHANNEL", "BONNET"], index=["SHELL", "CHANNEL", "BONNET"].index(noz.get("component", "SHELL")), key=f"noz_comp_{idx}")
+                noz["side"] = st.radio("Orientación:", ["TOP", "BOTTOM"], index=0 if noz.get("side")=="TOP" else 1, horizontal=True, key=f"noz_side_{idx}")
+                noz["position_ratio"] = st.slider("Posición (0.0 - 1.0):", 0.0, 1.0, float(noz.get("position_ratio", 0.5)), key=f"noz_pos_{idx}")
+                noz["size"] = st.text_input("Tamaño:", value=noz.get("size", "8\""), key=f"noz_sz_{idx}")
+                noz["rating"] = st.text_input("Rating:", value=noz.get("rating", "300#"), key=f"noz_rt_{idx}")
 
-# Renderizado en vivo del plano esquemático
+with tab_guardar:
+    col_g1, col_g2 = st.columns([2, 1])
+    with col_g1:
+        st.info("Presiona el botón a continuación para sincronizar el archivo `.json` y el plano vector con tu servidor y Google Drive.")
+        if st.button("💾 GUARDAR CAMBIOS Y SINCRONIZAR", type="primary", use_container_width=True):
+            filename_json = f"config_{equipo_sel}.json"
+            json_str = json.dumps(config, indent=2, ensure_ascii=False)
+            
+            with open(filename_json, "w", encoding="utf-8") as f:
+                f.write(json_str)
+                
+            st.session_state[f"config_{equipo_sel}"] = config
+            st.session_state["tag_para_diseño"] = equipo_sel
+            
+            envio_cloud_ok = False
+            if GOOGLE_SCRIPT_URL and "TU_URL_DE_DESPLIEGUE_AQUI" not in GOOGLE_SCRIPT_URL:
+                try:
+                    payload = {
+                        "tag": equipo_sel,
+                        "folder_id": GDRIVE_FOLDER_ID,
+                        "filename_json": filename_json,
+                        "json_content": json_str,
+                        "svg_content": generate_modular_exchanger_svg(config)
+                    }
+                    res = requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=8)
+                    if res.status_code == 200:
+                        envio_cloud_ok = True
+                except Exception:
+                    envio_cloud_ok = False
+
+            if envio_cloud_ok:
+                st.success(f"✅ ¡Excelente! Plano de **{equipo_sel}** guardado y sincronizado con Google Drive.")
+            else:
+                st.success(f"✅ Cambios guardados localmente para **{equipo_sel}**.")
+
+    with col_g2:
+        st.link_button("📂 Abrir Carpeta Google Drive", url=GDRIVE_FOLDER_URL, use_container_width=True)
+
+# -----------------------------------------------------------------------------
+# VISTA PREVIA DEL PLANO ESQUEMÁTICO (SIEMPRE VISIBLE)
+# -----------------------------------------------------------------------------
 st.markdown("---")
-st.subheader("📐 Vista Previa del Plano Esquemático")
+st.markdown("### 📐 Plano Esquemático Resultante")
+
 svg_code = generate_modular_exchanger_svg(config)
 
 html_render = f"""
-<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; text-align: center;">
-    {svg_code}
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    * {{ box-sizing: border-box; }}
+    html, body {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }}
+    .container {{ width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; }}
+    .container svg {{ width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain; }}
+</style>
+</head>
+<body>
+    <div class="container">
+        {svg_code}
+    </div>
+</body>
+</html>
 """
-components.html(html_render, height=480)
 
-# -----------------------------------------------------------------------------
-# BOTÓN DE GUARDADO AUTOMÁTICO A GOOGLE DRIVE / LOCAL
-# -----------------------------------------------------------------------------
-st.markdown("---")
-
-col_g1, col_g2 = st.columns([2, 1])
-
-with col_g1:
-    if st.button("💾 GUARDAR CONFIGURACIÓN Y PLANO", type="primary", use_container_width=True):
-        filename_json = f"config_{equipo_sel}.json"
-        json_str = json.dumps(config, indent=2, ensure_ascii=False)
-        
-        # 1. Guardar en disco local
-        with open(filename_json, "w", encoding="utf-8") as f:
-            f.write(json_str)
-            
-        # 2. Guardar en memoria de sesión
-        st.session_state[f"config_{equipo_sel}"] = config
-        st.session_state["tag_para_diseño"] = equipo_sel
-        
-        # 3. Envío automático a Google Drive si la URL está configurada
-        envio_cloud_ok = False
-        if GOOGLE_SCRIPT_URL and "TU_URL_DE_DESPLIEGUE_AQUI" not in GOOGLE_SCRIPT_URL:
-            try:
-                payload = {
-                    "tag": equipo_sel,
-                    "folder_id": GDRIVE_FOLDER_ID,
-                    "filename_json": filename_json,
-                    "json_content": json_str,
-                    "svg_content": svg_code
-                }
-                res = requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=8)
-                if res.status_code == 200:
-                    envio_cloud_ok = True
-            except Exception:
-                envio_cloud_ok = False
-
-        if envio_cloud_ok:
-            st.success(f"✅ ¡Diseño guardado! La configuración y el plano de **{equipo_sel}** se subieron a tu carpeta de Google Drive.")
-        else:
-            st.success(f"✅ Configuración de **{equipo_sel}** guardada correctamente.")
-            
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            st.download_button(
-                label="📥 Descargar Archivo JSON de Respaldo",
-                data=json_str,
-                file_name=filename_json,
-                mime="application/json",
-                use_container_width=True
-            )
-        with col_d2:
-            st.download_button(
-                label="🖼️ Descargar Plano Vectorial SVG",
-                data=svg_code,
-                file_name=f"plano_{equipo_sel}.svg",
-                mime="image/svg+xml",
-                use_container_width=True
-            )
-
-with col_g2:
-    st.link_button(
-        label="📂 Abrir Carpeta Google Drive", 
-        url=GDRIVE_FOLDER_URL, 
-        use_container_width=True
-    )
+components.html(html_render, height=470)
