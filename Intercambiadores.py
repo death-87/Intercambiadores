@@ -712,7 +712,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         if config_equipo and generate_modular_exchanger_svg:
             svg_code = generate_modular_exchanger_svg(config_equipo)
             
-            # ENCADRE ELEVADO Y ESPACIO VERTICAL EXPANDIDO
+            # CONTENEDOR EXPANDIDO A HEIGHT=470
             html_encapsulado = f"""
             <!DOCTYPE html>
             <html>
@@ -755,7 +755,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             </html>
             """
             
-            components.html(html_encapsulado, height=450)
+            components.html(html_encapsulado, height=470)
             
             st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
             
