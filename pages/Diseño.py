@@ -526,12 +526,35 @@ with col_view:
 
     st.table(df_nozzles.style.hide(axis='index'))
 
-    # FOTO TIPO FRANJA EN LA PARTE INFERIOR DE LA TABLA
+    # FOTO FRANJA2.PNG ROBUSTA (DEBAJO DE LA TABLA NOZZLE SCHEDULE)
     st.markdown("<br>", unsafe_allow_html=True)
-    for foto_franja in ["franja2.png", "franja.png", "franja.jpg", "franja.jpeg"]:
-        if os.path.exists(foto_franja):
-            st.image(foto_franja, use_container_width=True)
+    
+    rutas_franja = [
+        "franja2.png",
+        "franja2.PNG",
+        "FRANJA2.PNG",
+        "franja2.jpg",
+        "franja2.jpeg",
+        os.path.join(os.path.dirname(__file__), "franja2.png"),
+        os.path.join(os.path.dirname(__file__), "..", "franja2.png"),
+        os.path.join(os.path.dirname(__file__), "franja2.PNG"),
+        os.path.join(os.path.dirname(__file__), "..", "franja2.PNG"),
+        "franja.png",
+        "franja.jpg"
+    ]
+    
+    franja_dibujada = False
+    for ruta in rutas_franja:
+        if os.path.exists(ruta):
+            st.image(ruta, use_container_width=True)
+            franja_dibujada = True
             break
+            
+    if not franja_dibujada:
+        try:
+            st.image("franja2.png", use_container_width=True)
+        except Exception:
+            pass
 
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
