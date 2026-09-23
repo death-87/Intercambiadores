@@ -80,12 +80,12 @@ st.title("🔥 Consulta e Inspección de Intercambiadores de Calor")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# CONFIGURACIÓN DE GOOGLE SHEETS
+# CONFIGURACIÓN DE GOOGLE SHEETS Y DRIVE
 # -----------------------------------------------------------------------------
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
 
-GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1zGSlDQu5o9waFqm211P344MAqxCC8AAK"
+GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 
 MAPA_COLORES_ESTATUS = {
     "CHEQUEADO": "#28a745",        # Verde
@@ -180,6 +180,30 @@ def obtener_config_equipo(val_equipo):
         ]
     }
 
+def calcular_total_conexiones_roscadas(df_sub, df_columns):
+    col_roscadas = next((c for c in df_columns if 'ROSCAD' in str(c).upper() or 'PLUG' in str(c).upper()), None)
+    col_eq = next((c for c in df_columns if 'EQUIPO' in str(c).upper()), None)
+    total = 0
+    
+    for _, row in df_sub.iterrows():
+        val_col = str(row[col_roscadas]).strip() if col_roscadas else ""
+        if col_roscadas and val_col not in ['Sin información', 'SIN INFORMACIÓN', 'nan', '', 'None']:
+            try:
+                total += int(float(val_col))
+                continue
+            except ValueError:
+                pass
+        
+        if col_eq:
+            tag = str(row[col_eq]).strip()
+            cfg = obtener_config_equipo(tag)
+            if cfg:
+                for noz in cfg.get("nozzles", []):
+                    total += len(noz.get("auxiliaries", []))
+                    if str(noz.get("style", "")).upper() in ["THREADED", "ROSCADA", "NPT", "TAPÓN / COUPLING"] or "THREAD" in str(noz.get("type", "")).upper():
+                        total += 1
+    return total
+
 # -----------------------------------------------------------------------------
 # MOTOR DE DIBUJO VECTORIAL DE RESERVA (FPDF)
 # -----------------------------------------------------------------------------
@@ -207,11 +231,9 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         coords[comp] = {"start": curr_x, "end": curr_x + w_scaled, "width": w_scaled}
         curr_x += w_scaled + 2
         
-    # Eje central
     pdf.set_draw_color(239, 68, 68)
     pdf.line(x_offset + 10, cy, curr_x + 10, cy)
     
-    # Soportes (Saddles)
     shell_info = coords.get("SHELL", {"start": x_offset + 50, "width": 80})
     for sad in config.get("saddles", []):
         sad_ratio = float(sad.get("position_ratio", 0.5))
@@ -220,13 +242,11 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         pdf.set_draw_color(15, 23, 42)
         pdf.rect(sad_x - 4, cy + r_shell, 8, 7, 'FD')
         
-    # Componentes
     for idx, comp in enumerate(seq):
         c_info = coords[comp]
         cx = c_info["start"]
         cw = c_info["width"]
         
-        # Brida de unión entre componentes
         if idx > 0:
             pdf.set_fill_color(71, 85, 105)
             pdf.set_draw_color(30, 41, 59)
@@ -237,13 +257,13 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
         
         if comp == "BONNET":
             dome_w = min(r_bonnet * 0.6, cw * 0.45)
-            if idx == len(seq) - 1 or idx > 0:  # Bonete al lado derecho
+            if idx == len(seq) - 1 or idx > 0:
                 pdf.ellipse(cx + cw - 2*dome_w, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
                 pdf.rect(cx, cy - r_bonnet, cw - dome_w + 0.1, 2*r_bonnet, style='F')
                 pdf.line(cx, cy - r_bonnet, cx + cw - dome_w, cy - r_bonnet)
                 pdf.line(cx, cy + r_bonnet, cx + cw - dome_w, cy + r_bonnet)
                 label_x = cx + (cw - dome_w) / 2 - 4
-            else:  # Bonete al lado izquierdo
+            else:
                 pdf.ellipse(cx, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
                 pdf.rect(cx + dome_w - 0.1, cy - r_bonnet, cw - dome_w + 0.1, 2*r_bonnet, style='F')
                 pdf.line(cx + dome_w, cy - r_bonnet, cx + cw, cy - r_bonnet)
@@ -259,7 +279,6 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
             pdf.set_text_color(51, 65, 85)
             pdf.text(cx + cw / 2 - 4, cy + 1, comp)
 
-    # Boquillas
     for noz in config.get("nozzles", []):
         comp = noz.get("component", "SHELL")
         c_info = coords.get(comp, coords.get("SHELL"))
@@ -293,7 +312,7 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=15, y_offset=120):
                 pdf.rect(nx - 1.5, ny - 5, 3, 5, 'FD')
                 pdf.set_font("Arial", "B", 7)
                 pdf.text(nx - 3, ny - 7, tag_str)
-        else: # BOTTOM
+        else:
             ny = cy + active_r
             if style_type == "FLANGED":
                 pdf.set_fill_color(203, 213, 225)
@@ -489,7 +508,6 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
             
         pdf.set_xy(x_inicio, max_y + 1)
 
-    # DIBUJAR PLANO ESQUEMÁTICO Y NOZZLE SCHEDULE EN EL PDF
     if config_equipo:
         if pdf.get_y() + 80 > 270:
             pdf.add_page()
@@ -579,7 +597,7 @@ except Exception as e:
 # -----------------------------------------------------------------------------
 # RECONOCIMIENTO DE COLUMNAS CLAVE
 # -----------------------------------------------------------------------------
-col_unidad = next((c for c in df.columns if 'UNIDAD' in c.upper()), None)
+col_unidad = next((c for c in df.columns if 'UNIDAD' in c.upper() or 'AREA' in c.upper() or 'ÁREA' in c.upper()), None)
 col_equipo = next((c for c in df.columns if 'EQUIPO' in c.upper()), None)
 col_status = next((c for c in df.columns if 'STATUS' in c.upper() or 'ESTATUS' in c.upper()), None)
 col_comentario = next((c for c in df.columns if 'COMENTARIO' in c.upper()), None)
@@ -599,7 +617,7 @@ if col_status:
 
 if col_unidad:
     unidades = ["Todas"] + sorted([x for x in df_filtrado[col_unidad].unique() if x not in ["Sin información", "SIN INFORMACIÓN"]])
-    unidad_sel = st.sidebar.selectbox("🏢 Unidad de Proceso:", unidades)
+    unidad_sel = st.sidebar.selectbox("🏢 Unidad / Área de Proceso:", unidades)
     if unidad_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_unidad] == unidad_sel]
 
@@ -608,6 +626,34 @@ if col_equipo:
     equipo_sel = st.sidebar.selectbox("🔥 Seleccionar Equipo / Tag:", equipos)
     if equipo_sel != "Todos":
         df_filtrado = df_filtrado[df_filtrado[col_equipo] == equipo_sel]
+
+# -----------------------------------------------------------------------------
+# RECUADRO DINÁMICO EN SIDEBAR: TOTAL CONEXIONES ROSCADAS (FILTRADO)
+# -----------------------------------------------------------------------------
+st.sidebar.markdown("---")
+total_roscadas_filtrado = calcular_total_conexiones_roscadas(df_filtrado, df.columns)
+
+st.sidebar.markdown(f"""
+<div style="background: #1e293b; padding: 12px 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+    <div style="flex-shrink: 0; background: #0f172a; padding: 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+        <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Cabeza Hexagonal del Plug Roscado -->
+            <polygon points="32,4 52,15 52,27 32,38 12,27 12,15" fill="#38bdf8" stroke="#0284c7" stroke-width="2"/>
+            <polygon points="32,8 48,17 48,25 32,34 16,25 16,17" fill="#7dd3fc"/>
+            <!-- Cuerpo Roscado NPT / Rosca -->
+            <rect x="18" y="36" width="28" height="22" rx="2" fill="#bae6fd" stroke="#0284c7" stroke-width="2"/>
+            <line x1="18" y1="41" x2="46" y2="41" stroke="#0284c7" stroke-width="2"/>
+            <line x1="18" y1="46" x2="46" y2="46" stroke="#0284c7" stroke-width="2"/>
+            <line x1="18" y1="51" x2="46" y2="51" stroke="#0284c7" stroke-width="2"/>
+            <line x1="18" y1="56" x2="46" y2="56" stroke="#0284c7" stroke-width="2"/>
+        </svg>
+    </div>
+    <div>
+        <p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Total Conexiones Roscadas</p>
+        <h3 style="margin: 2px 0 0 0; font-size: 22px; color: #38bdf8; font-weight: 700;">{total_roscadas_filtrado} <span style="font-size: 12px; font-weight: normal; color: #94a3b8;">Plugs/Cplgs</span></h3>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
 for logo in ["logojn.png", "logojn.npg", "logo.png"]:
@@ -627,10 +673,8 @@ registro_seleccionado = None
 with pestana_tabla:
     st.caption("💡 Haz clic en cualquier fila para abrir inmediatamente la Ficha Técnica del Intercambiador.")
     
-    # -------------------------------------------------------------------------
-    # OCULTAR COLUMNAS DE H (7) A AC (28) Y CUALQUIER COLUMNA "CANTIDAD"
-    # -------------------------------------------------------------------------
-    indices_ocultar = set(range(7, 29))  # Columnas H (7) a AC (28)
+    # Ocultar columnas H (7) a AC (28) y cualquier columna "CANTIDAD"
+    indices_ocultar = set(range(7, 29))
     cols_visibles = [
         col for idx, col in enumerate(df_filtrado.columns) 
         if idx not in indices_ocultar and 'CANTIDAD' not in col.upper()
@@ -825,9 +869,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         </div>
         """, unsafe_allow_html=True)
 
-        # ---------------------------------------------------------------------
-        # RECUADRO: CANTIDAD CONEXIONES ROSCADAS (PLUG ROSCADO)
-        # ---------------------------------------------------------------------
+        # RECUADRO INDIVIDUAL DE CONEXIONES ROSCADAS PARA EL EQUIPO SELECCIONADO
         col_roscadas = next((c for c in df.columns if 'ROSCAD' in c.upper() or 'PLUG' in c.upper()), None)
         cant_roscadas = 0
         
@@ -837,17 +879,15 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             nozzles = config_equipo.get("nozzles", [])
             for noz in nozzles:
                 cant_roscadas += len(noz.get("auxiliaries", []))
-                if str(noz.get("style", "")).upper() in ["THREADED", "ROSCADA", "NPT"] or "THREAD" in str(noz.get("type", "")).upper():
+                if str(noz.get("style", "")).upper() in ["THREADED", "ROSCADA", "NPT", "TAPÓN / COUPLING"] or "THREAD" in str(noz.get("type", "")).upper():
                     cant_roscadas += 1
 
         st.markdown(f"""
         <div style="background: #ffffff; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div style="flex-shrink: 0; background: #eff6ff; padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
                 <svg width="38" height="38" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Cabeza Hexagonal del Plug Roscado -->
                     <polygon points="32,4 52,15 52,27 32,38 12,27 12,15" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
                     <polygon points="32,8 48,17 48,25 32,34 16,25 16,17" fill="#60a5fa"/>
-                    <!-- Cuerpo Roscado NPT / Rosca -->
                     <rect x="18" y="36" width="28" height="22" rx="2" fill="#93c5fd" stroke="#1d4ed8" stroke-width="2"/>
                     <line x1="18" y1="41" x2="46" y2="41" stroke="#1d4ed8" stroke-width="2"/>
                     <line x1="18" y1="46" x2="46" y2="46" stroke="#1d4ed8" stroke-width="2"/>
@@ -856,7 +896,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
                 </svg>
             </div>
             <div>
-                <p style="margin: 0; font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Conexiones Roscadas</p>
+                <p style="margin: 0; font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Conexiones Roscadas (Este Equipo)</p>
                 <h3 style="margin: 2px 0 0 0; font-size: 20px; color: #1e293b; font-weight: 700;">{cant_roscadas} <span style="font-size: 13px; font-weight: normal; color: #64748b;">(Plugs / Cplgs)</span></h3>
             </div>
         </div>
