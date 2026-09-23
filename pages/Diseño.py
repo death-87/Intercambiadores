@@ -11,16 +11,17 @@ import streamlit.components.v1 as components
 # Configuración de página de Streamlit
 st.set_page_config(page_title="Diseño de Intercambiador de Calor", layout="wide")
 
-# Google Sheets ID y Google Drive Folder ID
+# -----------------------------------------------------------------------------
+# CONFIGURACIÓN DE GOOGLE DRIVE Y GOOGLE SHEETS
+# -----------------------------------------------------------------------------
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
 
-# NUEVA CARPETA DE GOOGLE DRIVE VINCULADA
 GDRIVE_FOLDER_ID = "10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 
-# Webhook URL de Google Apps Script para guardado automático
-GOOGLE_SCRIPT_URL = st.secrets.get("GOOGLE_SCRIPT_URL", "")
+# OPCIÓN B: Reemplaza las comillas con la URL que te genera al Desplegar como Aplicación Web (/exec)
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxKabZkU0Ri_SD4oIA3reQW4HAQI52hHvVAaeEPn5nosdicBwmxN_3tBfdqbNMFUT9Kow/exec"
 
 # -----------------------------------------------------------------------------
 # CARGA DE EQUIPOS DESDE GOOGLE SHEETS
@@ -97,7 +98,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         cx = c_info["start"]
         cw = c_info["width"]
         
-        # Brida de conexión entre partes
         if idx > 0:
             svg_lines.append(f'<rect x="{cx - 10}" y="{cy - r_shell - 12}" width="10" height="{r_shell * 2 + 24}" class="flange" />')
             
@@ -160,7 +160,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     return "\n".join(svg_lines)
 
 # -----------------------------------------------------------------------------
-# BARRA LATERAL (SIDEBAR) - ETIQUETA SIMPLIFICADA A "EQUIPO"
+# BARRA LATERAL (SIDEBAR) - ETIQUETA "EQUIPO"
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ Editor de Diseño")
 
@@ -251,7 +251,7 @@ html_render = f"""
 components.html(html_render, height=480)
 
 # -----------------------------------------------------------------------------
-# BOTÓN DE GUARDADO AUTOMÁTICO
+# BOTÓN DE GUARDADO AUTOMÁTICO A GOOGLE DRIVE / LOCAL
 # -----------------------------------------------------------------------------
 st.markdown("---")
 
@@ -262,17 +262,17 @@ with col_g1:
         filename_json = f"config_{equipo_sel}.json"
         json_str = json.dumps(config, indent=2, ensure_ascii=False)
         
-        # 1. Guardar archivo en disco local
+        # 1. Guardar en disco local
         with open(filename_json, "w", encoding="utf-8") as f:
             f.write(json_str)
             
-        # 2. Guardar en session_state
+        # 2. Guardar en memoria de sesión
         st.session_state[f"config_{equipo_sel}"] = config
         st.session_state["tag_para_diseño"] = equipo_sel
         
-        # 3. Guardado en Google Drive vía Webhook si existe
+        # 3. Envío automático a Google Drive si la URL está configurada
         envio_cloud_ok = False
-        if GOOGLE_SCRIPT_URL:
+        if GOOGLE_SCRIPT_URL and "TU_URL_DE_DESPLIEGUE_AQUI" not in GOOGLE_SCRIPT_URL:
             try:
                 payload = {
                     "tag": equipo_sel,
@@ -288,9 +288,9 @@ with col_g1:
                 envio_cloud_ok = False
 
         if envio_cloud_ok:
-            st.success(f"✅ La configuración y el plano de **{equipo_sel}** se enviaron a tu carpeta de Google Drive.")
+            st.success(f"✅ ¡Diseño guardado! La configuración y el plano de **{equipo_sel}** se subieron a tu carpeta de Google Drive.")
         else:
-            st.success(f"✅ Configuración de **{equipo_sel}** guardada con éxito.")
+            st.success(f"✅ Configuración de **{equipo_sel}** guardada correctamente.")
             
         col_d1, col_d2 = st.columns(2)
         with col_d1:
