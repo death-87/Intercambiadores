@@ -1,122 +1,29 @@
 import os
 import re
 import json
-import unicodedata
 import urllib.parse
 import pandas as pd
 import streamlit as st
-import plotly.express as px
 import streamlit.components.v1 as components
 from fpdf import FPDF
 
-# -----------------------------------------------------------------------------
-# NAVEGACIÓN SEGURA Y CARGA DE MÓDULOS (SOPORTE PARA MAYÚSCULAS/TILDES)
-# -----------------------------------------------------------------------------
-def ir_a_diseno():
-    paginas_posibles = [
-        "pages/diseno.py",
-        "pages/Diseño.py",
-        "pages/diseño.py",
-        "pages/Diseno.py"
-    ]
-    for pag in paginas_posibles:
-        try:
-            st.switch_page(pag)
-            return
-        except Exception:
-            continue
-    st.error("❌ No se encontró el archivo de diseño en la carpeta 'pages/'. Revisa que esté subido a GitHub como 'pages/diseno.py' o 'pages/Diseño.py'.")
-
-generate_modular_exchanger_svg = None
-for mod_path in ["pages.diseno", "pages.Diseño", "pages.diseño", "pages.Diseno"]:
+# Intentar importar la función generadora SVG de la página de diseño
+try:
+    from pages.diseno import generate_modular_exchanger_svg
+except Exception:
     try:
-        import importlib
-        mod = importlib.import_module(mod_path)
-        generate_modular_exchanger_svg = getattr(mod, "generate_modular_exchanger_svg", None)
-        if generate_modular_exchanger_svg:
-            break
+        from pages.Diseño import generate_modular_exchanger_svg
     except Exception:
-        continue
+        generate_modular_exchanger_svg = None
 
-# Configuración de página de Streamlit
-st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
+# ==========================================
+# CONFIGURACIÓN DE PÁGINA
+# ==========================================
+st.set_page_config(page_title="Gestión de Intercambiadores de Calor", layout="wide")
 
-st.markdown("""
-    <style>
-    [data-testid="stTable"] {
-        width: fit-content !important;
-        max-width: 100% !important;
-        margin-top: 5px;
-    }
-    [data-testid="stTable"] table {
-        width: auto !important;
-    }
-    [data-testid="stTable"] th {
-        font-size: 11px !important;
-        padding: 6px 12px !important;
-        font-weight: 700 !important;
-        white-space: nowrap !important;
-        background-color: #1e293b !important;
-        color: #ffffff !important;
-        border: 1px solid #334155 !important;
-    }
-    [data-testid="stTable"] td {
-        font-size: 11px !important;
-        padding: 5px 12px !important;
-        white-space: nowrap !important;
-        line-height: 1.2 !important;
-        border: 1px solid #334155 !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# -----------------------------------------------------------------------------
-# CABECERA VISUAL
-# -----------------------------------------------------------------------------
-if os.path.exists("franja.jpg"):
-    st.image("franja.jpg", use_container_width=True)
-
-st.title("🔥 Consulta e Inspección de Intercambiadores de Calor")
-st.markdown("---")
-
-# -----------------------------------------------------------------------------
-# CONFIGURACIÓN DE GOOGLE SHEETS
-# -----------------------------------------------------------------------------
-SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
-NOMBRE_HOJA = "Hoja 1"
-
-GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1zGSlDQu5o9waFqm211P344MAqxCC8AAK"
-
-MAPA_COLORES_ESTATUS = {
-    "CHEQUEADO": "#28a745",        # Verde
-    "NO CHEQUEADO": "#dc3545",     # Rojo
-    "SIN INFORMACIÓN": "#6c757d"   # Gris
-}
-
-# -----------------------------------------------------------------------------
-# CLASE Y FUNCIONES AUXILIARES PARA PDF Y TEXTO
-# -----------------------------------------------------------------------------
-class PDFCustom(FPDF):
-    def footer(self):
-        self.set_y(-18)
-        logo_path = None
-        for posible in ["logojn.png", "logojn.npg", "logo.png"]:
-            if os.path.exists(posible):
-                logo_path = posible
-                break
-        
-        if logo_path:
-            try:
-                self.image(logo_path, x=170, y=self.get_y(), w=25)
-            except Exception:
-                pass
-
-def normalizar_texto(texto):
-    if not isinstance(texto, str):
-        texto = str(texto)
-    nfkd_form = unicodedata.normalize('NFKD', texto)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower().strip()
-
+# ==========================================
+# FUNCIONES AUXILIARES PARA PDF
+# ==========================================
 def sanitizar_para_pdf(texto):
     if not isinstance(texto, str):
         texto = str(texto)
@@ -126,23 +33,51 @@ def hex_to_rgb(hex_code):
     hex_code = hex_code.lstrip('#')
     return tuple(int(hex_code[i:i+2], 16) for i in (0, 2, 4))
 
-def generar_link_gdrive(termino_busqueda):
-    busqueda_encoded = urllib.parse.quote(str(termino_busqueda))
-    return f"https://drive.google.com/drive/u/0/search?q={busqueda_encoded}"
+def obtener_config_equipo(val_equipo):
+    val_clean = str(val_equipo).strip()
+    posibles_archivos = [
+        f"config_{val_clean}.json",
+        f"config_{val_clean.upper()}.json",
+        f"config_{val_clean.lower()}.json",
+        f"config_{val_clean.replace('-', '')}.json",
+        f"config_{val_clean.replace(' ', '')}.json"
+    ]
+    
+    for arch in posibles_archivos:
+        if os.path.exists(arch):
+            try:
+                with open(arch, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if data:
+                        return data
+            except Exception:
+                pass
+                
+    # Plantilla garantizada por defecto si no existe archivo previo
+    return {
+        "equipment": {"tag": val_clean, "shell_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
+        "components": {
+            "channel_length": 150,
+            "shell_length": 420,
+            "bonnet_length": 100,
+            "sequence": ["CHANNEL", "SHELL", "BONNET"]
+        },
+        "saddles": [
+            {"id": "sad_1", "tag": "Soporte 1", "position_ratio": 0.30},
+            {"id": "sad_2", "tag": "Soporte 2", "position_ratio": 0.70}
+        ],
+        "nozzles": [
+            {"id": "noz_1", "tag": "S1", "service": "INLET", "component": "SHELL", "side": "TOP", "position_ratio": 0.10, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_2", "tag": "S2", "service": "OUTLET", "component": "SHELL", "side": "BOTTOM", "position_ratio": 0.90, "style": "FLANGED", "size": "8\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "3/4\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_3", "tag": "T1", "service": "INLET", "component": "CHANNEL", "side": "TOP", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]},
+            {"id": "noz_4", "tag": "T2", "service": "OUTLET", "component": "CHANNEL", "side": "BOTTOM", "position_ratio": 0.50, "style": "FLANGED", "size": "10\"", "rating": "300#", "type": "RF WN", "auxiliaries": [{"position": "NS", "size": "1\""}, {"position": "FS", "size": "1\""}]}
+        ]
+    }
 
-def extraer_coordenadas(coordenadas):
-    if pd.isna(coordenadas) or str(coordenadas).strip() in ['Sin información', 'nan', '']:
-        return None, None
-    numeros = re.findall(r'-?\d+[\.,]\d+', str(coordenadas))
-    if len(numeros) >= 2:
-        lat = numeros[0].replace(',', '.')
-        lon = numeros[1].replace(',', '.')
-        return lat, lon
-    return None, None
+class PDFCustom(FPDF):
+    def footer(self):
+        pass
 
-# -----------------------------------------------------------------------------
-# MOTOR DE DIBUJO VECTORIAL EN FPDF (OPTIMIZADO Y MÁS GRANDE)
-# -----------------------------------------------------------------------------
 def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
     cy = y_offset + 42
     seq = config.get("components", {}).get("sequence", ["CHANNEL", "SHELL", "BONNET"])
@@ -156,7 +91,7 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
     total_len = sum(comp_lens.get(c, 100) for c in seq)
     scale = 165.0 / max(total_len, 1.0)
     
-    r_shell = 20.0  # Diámetro mayor para el cuerpo (40mm de altura total)
+    r_shell = 20.0
     r_bonnet = 20.0
     
     coords = {}
@@ -167,11 +102,9 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
         coords[comp] = {"start": curr_x, "end": curr_x + w_scaled, "width": w_scaled}
         curr_x += w_scaled + 2
         
-    # Eje central (Línea roja)
     pdf.set_draw_color(239, 68, 68)
     pdf.line(x_offset + 5, cy, curr_x + 8, cy)
     
-    # Soportes (Saddles)
     shell_info = coords.get("SHELL", {"start": x_offset + 50, "width": 80})
     for sad in config.get("saddles", []):
         sad_ratio = float(sad.get("position_ratio", 0.5))
@@ -180,13 +113,11 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
         pdf.set_draw_color(15, 23, 42)
         pdf.rect(sad_x - 5, cy + r_shell, 10, 9, 'FD')
         
-    # Componentes (CHANNEL, SHELL, BONNET con tapa bombeada)
     for idx, comp in enumerate(seq):
         c_info = coords[comp]
         cx = c_info["start"]
         cw = c_info["width"]
         
-        # Junta de brida (Flange joint) entre componentes
         if idx > 0:
             pdf.set_fill_color(71, 85, 105)
             pdf.rect(cx - 2.5, cy - r_shell - 2.5, 2.5, r_shell * 2 + 5, 'FD')
@@ -196,14 +127,14 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
         
         if comp == "BONNET":
             dome_w = min(15.0, cw * 0.4)
-            if idx == len(seq) - 1: # Bonnet a la derecha
+            if idx == len(seq) - 1:
                 pdf.ellipse(cx + cw - 2*dome_w, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
                 pdf.rect(cx, cy - r_bonnet, cw - dome_w + 0.5, 2*r_bonnet, style='F')
                 pdf.line(cx, cy - r_bonnet, cx + cw - dome_w, cy - r_bonnet)
                 pdf.line(cx, cy + r_bonnet, cx + cw - dome_w, cy + r_bonnet)
                 pdf.line(cx, cy - r_bonnet, cx, cy + r_bonnet)
                 label_x = cx + (cw - dome_w)/2 - 6
-            else: # Bonnet a la izquierda
+            else:
                 pdf.ellipse(cx, cy - r_bonnet, 2*dome_w, 2*r_bonnet, style='FD')
                 pdf.rect(cx + dome_w - 0.5, cy - r_bonnet, cw - dome_w + 0.5, 2*r_bonnet, style='F')
                 pdf.line(cx + dome_w, cy - r_bonnet, cx + cw, cy - r_bonnet)
@@ -218,7 +149,6 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
         pdf.set_text_color(51, 65, 85)
         pdf.text(label_x, cy + 1.5, comp)
 
-    # Boquillas
     for noz in config.get("nozzles", []):
         comp = noz.get("component", "SHELL")
         c_info = coords.get(comp, coords.get("SHELL"))
@@ -232,28 +162,23 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
         auxs = noz.get("auxiliaries", [])
         active_r = r_bonnet if comp == "BONNET" else r_shell
         
-        # Dimensiones de boquilla ampliadas para alta visibilidad
         neck_h = 18.0
         neck_w = 9.0
         flange_w = 15.0
         flange_h = 3.5
-        circ_r = 3.0  # Círculos de 6.0mm de diámetro
+        circ_r = 3.0
         
         if side == "TOP":
             ny = cy - active_r
             if style_type == "FLANGED":
-                # Cuello de boquilla
                 pdf.set_fill_color(203, 213, 225)
                 pdf.set_draw_color(30, 41, 59)
                 pdf.rect(nx - neck_w/2, ny - neck_h, neck_w, neck_h, 'FD')
-                # Brida
                 pdf.rect(nx - flange_w/2, ny - neck_h - flange_h, flange_w, flange_h, 'FD')
-                # Tag arriba de brida
                 pdf.set_font("Arial", "B", 8.5)
                 pdf.set_text_color(15, 23, 42)
                 pdf.text(nx - 3.5, ny - neck_h - flange_h - 2.5, tag_str)
                 
-                # Círculos para Auxiliares (NS, FS) dentro del cuello
                 if len(auxs) == 2:
                     pdf.set_fill_color(255, 255, 255)
                     pdf.set_draw_color(15, 23, 42)
@@ -273,28 +198,24 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
                     pdf.set_font("Arial", "B", 6)
                     pdf.set_text_color(15, 23, 42)
                     pdf.text(nx - 2.2, ny - 9.5 + 1.1, sanitizar_para_pdf(auxs[0].get("position", "NS")))
-            else: # Tapón / Coupling
+            else:
                 pdf.set_fill_color(148, 163, 184)
                 pdf.set_draw_color(30, 41, 59)
                 pdf.rect(nx - 2.5, ny - 9, 5, 9, 'FD')
                 pdf.set_font("Arial", "B", 8)
                 pdf.set_text_color(15, 23, 42)
                 pdf.text(nx - 3.5, ny - 11, tag_str)
-        else: # BOTTOM
+        else:
             ny = cy + active_r
             if style_type == "FLANGED":
-                # Cuello de boquilla
                 pdf.set_fill_color(203, 213, 225)
                 pdf.set_draw_color(30, 41, 59)
                 pdf.rect(nx - neck_w/2, ny, neck_w, neck_h, 'FD')
-                # Brida
                 pdf.rect(nx - flange_w/2, ny + neck_h, flange_w, flange_h, 'FD')
-                # Tag debajo de brida
                 pdf.set_font("Arial", "B", 8.5)
                 pdf.set_text_color(15, 23, 42)
                 pdf.text(nx - 3.5, ny + neck_h + flange_h + 5.5, tag_str)
                 
-                # Círculos para Auxiliares (NS, FS) dentro del cuello
                 if len(auxs) == 2:
                     pdf.set_fill_color(255, 255, 255)
                     pdf.set_draw_color(15, 23, 42)
@@ -314,7 +235,7 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
                     pdf.set_font("Arial", "B", 6)
                     pdf.set_text_color(15, 23, 42)
                     pdf.text(nx - 2.2, ny + 9.5 + 1.1, sanitizar_para_pdf(auxs[0].get("position", "NS")))
-            else: # Tapón / Coupling
+            else:
                 pdf.set_fill_color(148, 163, 184)
                 pdf.set_draw_color(30, 41, 59)
                 pdf.rect(nx - 2.5, ny, 5, 9, 'FD')
@@ -324,9 +245,6 @@ def dibujar_esquema_fpdf(pdf, config, x_offset=10, y_offset=120):
                 
     pdf.set_y(cy + r_shell + neck_h + flange_h + 12)
 
-# -----------------------------------------------------------------------------
-# DIBUJO DE LA TABLA NOZZLE SCHEDULE EN EL PDF
-# -----------------------------------------------------------------------------
 def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
     if pdf.get_y() + 45 > 270:
         pdf.add_page()
@@ -346,7 +264,6 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         ("AUXILLARIES", 45)
     ]
     
-    # Encabezados
     pdf.set_font("Arial", "B", 8)
     pdf.set_fill_color(30, 41, 59)
     pdf.set_text_color(255, 255, 255)
@@ -356,7 +273,6 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         pdf.cell(width, 5.5, f"  {title}", border=1, fill=True)
     pdf.ln()
     
-    # Filas de boquillas
     pdf.set_font("Arial", "", 8)
     pdf.set_text_color(0, 0, 0)
     
@@ -404,7 +320,6 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
         pdf.cell(45, 5, f"  {aux_txt}", border=1, fill=fill_flag)
         pdf.ln()
         
-    # Fila final CPLGS
     if pdf.get_y() + 7 > 270:
         pdf.add_page()
     pdf.cell(22, 5, "", border=1)
@@ -414,435 +329,266 @@ def agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main):
     pdf.cell(45, 5, f"  {sanitizar_para_pdf(global_aux_rating)} CPLGS.", border=1)
     pdf.ln()
 
-# -----------------------------------------------------------------------------
-# FUNCIÓN PRINCIPAL DE GENERACIÓN DEL PDF
-# -----------------------------------------------------------------------------
-def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, color_hex, titulo_doc, config_equipo=None):
+def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_ficha, rgb_main, titulo_doc, config_equipo=None):
     pdf = PDFCustom()
     pdf.set_auto_page_break(auto=True, margin=22)
     pdf.add_page()
-    rgb = hex_to_rgb(color_hex)
     
-    pdf.set_font("Arial", "B", 16)
-    pdf.set_text_color(*rgb)
-    pdf.cell(0, 7, sanitizar_para_pdf(titulo_doc), ln=True, align="C")
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(2)
+    if not config_equipo:
+        config_equipo = obtener_config_equipo(val_equipo)
     
+    # Encabezado
+    pdf.set_fill_color(*rgb_main)
+    pdf.rect(0, 0, 210, 20, 'F')
+    pdf.set_font("Arial", "B", 14)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(10, 6)
+    pdf.cell(0, 8, sanitizar_para_pdf(titulo_doc), ln=True)
+    
+    pdf.set_font("Arial", "", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_xy(10, 23)
+    pdf.cell(0, 5, sanitizar_para_pdf(f"Unidad: {val_unidad} | Estado: {valor_status}"), ln=True)
+    pdf.ln(4)
+    
+    # Tabla de Datos de Ficha Técnica
     pdf.set_font("Arial", "B", 10)
-    txt_equipo_unidad = f"EQUIPO: {sanitizar_para_pdf(val_equipo)}    |    UNIDAD DE PROCESO: {sanitizar_para_pdf(val_unidad)}"
-    pdf.cell(0, 5, txt_equipo_unidad, ln=True, align="C")
-    pdf.ln(2)
-    
-    pdf.set_font("Arial", "B", 9)
-    pdf.set_text_color(*rgb)
-    pdf.cell(0, 5, f"Estatus Actual: {sanitizar_para_pdf(valor_status)}", ln=True)
-    pdf.set_text_color(0, 0, 0)
-    
-    pdf.ln(3)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 5, "Ficha Tecnica del Intercambiador", ln=True)
+    pdf.set_text_color(*rgb_main)
+    pdf.cell(0, 6, "Datos Tecnicos del Equipo", ln=True)
     pdf.ln(1)
     
-    items_filtrados = [(str(k), str(v)) for k, v in datos_mostrar.items() if str(v).strip() != ""]
-    ancho_columna = 93
-    pdf.set_draw_color(*rgb)
+    pdf.set_font("Arial", "", 8)
+    col_w = 92
     
-    for i in range(0, len(items_filtrados), 2):
-        k1, v1 = items_filtrados[i]
-        k1_c = sanitizar_para_pdf(k1)
-        v1_c = sanitizar_para_pdf(v1)
+    for idx, (param, valor) in enumerate(datos_ficha.items()):
+        val_str = str(valor) if pd.notna(valor) and str(valor).strip() not in ["nan", "NAN", ""] else "-"
+        p_clean = sanitizar_para_pdf(param)
+        v_clean = sanitizar_para_pdf(val_str)
         
-        if i + 1 < len(items_filtrados):
-            k2, v2 = items_filtrados[i+1]
-            k2_c = sanitizar_para_pdf(k2)
-            v2_c = sanitizar_para_pdf(v2)
-        else:
-            k2_c, v2_c = "", ""
-            
-        lineas_v1 = max(1, int(len(v1_c) / 50) + 1)
-        lineas_v2 = max(1, int(len(v2_c) / 50) + 1) if k2_c else 1
-        max_lineas = max(lineas_v1, lineas_v2)
+        pdf.set_fill_color(241, 245, 249) if idx % 4 in [0, 1] else pdf.set_fill_color(255, 255, 255)
+        pdf.set_draw_color(203, 213, 225)
         
-        altura_valor = max_lineas * 4.5 + 2
-        
-        if pdf.get_y() + altura_valor + 20 > 270:
-            pdf.add_page()
-            
-        x_inicio = pdf.get_x()
-        
-        pdf.set_font("Arial", "B", 7.5)
-        pdf.set_fill_color(245, 245, 245)
-        pdf.cell(ancho_columna, 4.5, f"  {k1_c}", border="TRL", fill=True)
-        pdf.cell(4, 4.5, "", border=0)
-        
-        if k2_c:
-            pdf.cell(ancho_columna, 4.5, f"  {k2_c}", border="TRL", fill=True, ln=True)
-        else:
-            pdf.cell(ancho_columna, 4.5, "", border=0, ln=True)
-            
-        y_despues_titulos = pdf.get_y()
-        
-        pdf.set_xy(x_inicio, y_despues_titulos)
+        pdf.set_font("Arial", "B", 8)
+        pdf.cell(42, 5, f" {p_clean}", border=1, fill=True)
         pdf.set_font("Arial", "", 8)
-        pdf.multi_cell(ancho_columna, 4.5, f"  {v1_c}", border="BRL")
-        y_fin_izq = pdf.get_y()
+        pdf.cell(col_w - 42, 5, f" {v_clean}", border=1, fill=True)
         
-        if k2_c:
-            pdf.set_xy(x_inicio + ancho_columna + 4, y_despues_titulos)
-            pdf.set_font("Arial", "", 8)
-            pdf.multi_cell(ancho_columna, 4.5, f"  {v2_c}", border="BRL")
-            y_fin_der = pdf.get_y()
-            max_y = max(y_fin_izq, y_fin_der)
-        else:
-            max_y = y_fin_izq
+        if idx % 2 == 1 or idx == len(datos_ficha) - 1:
+            pdf.ln()
             
-        pdf.set_xy(x_inicio, max_y + 1)
-
     # DIBUJAR PLANO ESQUEMÁTICO Y NOZZLE SCHEDULE EN EL PDF
-    if config_equipo:
-        if pdf.get_y() + 90 > 270:
-            pdf.add_page()
-            
-        pdf.ln(3)
-        pdf.set_font("Arial", "B", 10)
-        pdf.set_text_color(*rgb)
-        pdf.cell(0, 6, "Plano Esquematico de Boquillas", ln=True)
-        pdf.ln(4)
+    if pdf.get_y() + 90 > 270:
+        pdf.add_page()
         
-        y_esquema = pdf.get_y()
-        dibujado_ok = False
-        
-        if generate_modular_exchanger_svg:
-            try:
-                import cairosvg
-                svg_code = generate_modular_exchanger_svg(config_equipo)
-                png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
-                cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp, scale=2.0)
-                pdf.image(png_temp, x=12, y=y_esquema, w=185)
-                pdf.set_y(y_esquema + 92)
-                if os.path.exists(png_temp):
-                    os.remove(png_temp)
-                dibujado_ok = True
-            except Exception:
-                dibujado_ok = False
-                
-        if not dibujado_ok:
-            dibujar_esquema_fpdf(pdf, config_equipo, x_offset=10, y_offset=y_esquema)
-            
-        agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb)
-
-    pdf.set_draw_color(0, 0, 0)
+    pdf.ln(4)
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_text_color(*rgb_main)
+    pdf.cell(0, 6, "Plano Esquematico de Boquillas", ln=True)
+    pdf.ln(2)
     
-    try:
-        out = pdf.output(dest='S')
-        if isinstance(out, str):
-            return out.encode('latin-1')
-        elif isinstance(out, (bytes, bytearray)):
-            return bytes(out)
-    except Exception:
-        pass
+    y_esquema = pdf.get_y()
+    dibujado_ok = False
+    
+    if generate_modular_exchanger_svg:
+        try:
+            import cairosvg
+            svg_code = generate_modular_exchanger_svg(config_equipo)
+            png_temp = f"temp_pdf_{sanitizar_para_pdf(val_equipo)}.png"
+            cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), write_to=png_temp, scale=2.0)
+            pdf.image(png_temp, x=12, y=y_esquema, w=185)
+            pdf.set_y(y_esquema + 92)
+            if os.path.exists(png_temp):
+                os.remove(png_temp)
+            dibujado_ok = True
+        except Exception:
+            dibujado_ok = False
+            
+    if not dibujado_ok:
+        dibujar_esquema_fpdf(pdf, config_equipo, x_offset=10, y_offset=y_esquema)
         
-    out = pdf.output()
-    if isinstance(out, str):
-        return out.encode('latin-1')
-    return bytes(out)
+    agregar_tabla_nozzle_schedule_pdf(pdf, config_equipo, rgb_main)
+    
+    return bytes(pdf.output(dest='S'))
 
-# -----------------------------------------------------------------------------
-# CARGA AUTOMÁTICA DE DATOS
-# -----------------------------------------------------------------------------
+# ==========================================
+# LECTURA DE GOOGLE SHEETS
+# ==========================================
 @st.cache_data(ttl=600)
-def cargar_datos(sheet_id, nombre_hoja):
+def cargar_datos_sheets():
+    sheet_id = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
+    nombre_hoja = "Hoja 1"
     nombre_hoja_encoded = urllib.parse.quote(nombre_hoja)
     sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={nombre_hoja_encoded}"
     
-    data = pd.read_csv(sheet_url)
-    
-    columnas = []
-    conteo_columnas = {}
-    for col in data.columns:
-        col_clean = " ".join(str(col).split())
-        if col_clean in conteo_columnas:
-            conteo_columnas[col_clean] += 1
-            columnas.append(f"{col_clean} ({conteo_columnas[col_clean]})")
-        else:
-            conteo_columnas[col_clean] = 1
-            columnas.append(col_clean)
-            
-    data.columns = columnas
-    data = data.fillna("Sin información")
-    data = data.astype(str)
-    
-    for col in data.columns:
-        if 'STATUS' in col.upper() or 'ESTATUS' in col.upper():
-            data[col] = data[col].str.strip().str.upper()
-            data[col] = data[col].replace({'NAN': 'SIN INFORMACIÓN', '': 'SIN INFORMACIÓN'})
-            
-    return data
+    try:
+        df = pd.read_csv(sheet_url)
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception as e:
+        st.error(f"Error al conectar con Google Sheets: {e}")
+        return pd.DataFrame()
 
-try:
-    df = cargar_datos(SHEET_ID, NOMBRE_HOJA)
-except Exception as e:
-    st.error(f"❌ Error al conectar con Google Sheets: {e}")
+df_raw = cargar_datos_sheets()
+
+if df_raw.empty:
+    st.warning("No se pudieron cargar los datos de la hoja de cálculo.")
     st.stop()
 
-# -----------------------------------------------------------------------------
-# RECONOCIMIENTO DE COLUMNAS CLAVE
-# -----------------------------------------------------------------------------
-col_unidad = next((c for c in df.columns if 'UNIDAD' in c.upper()), None)
-col_equipo = next((c for c in df.columns if 'EQUIPO' in c.upper()), None)
-col_status = next((c for c in df.columns if 'STATUS' in c.upper() or 'ESTATUS' in c.upper()), None)
-col_comentario = next((c for c in df.columns if 'COMENTARIO' in c.upper()), None)
-col_geo = next((c for c in df.columns if 'GEORREFERENCIA' in c.upper() or 'LAT' in c.upper() or 'COORD' in c.upper()), None)
+# ==========================================
+# BÚSQUEDA Y SELECCIÓN DE EQUIPO
+# ==========================================
+col_eq_name = next((c for c in df_raw.columns if 'EQUIPO' in c.upper()), df_raw.columns[0])
+lista_equipos = sorted([
+    str(x).strip() for x in df_raw[col_eq_name].dropna().unique() 
+    if str(x).strip() not in ["Sin información", "nan", "NAN", ""]
+])
 
-# -----------------------------------------------------------------------------
-# BARRA LATERAL: FILTROS
-# -----------------------------------------------------------------------------
-st.sidebar.header("🎯 Búsqueda e Inspección")
-df_filtrado = df.copy()
+st.title("🔥 Gestión y Ficha Técnica de Intercambiadores")
 
-if col_status:
-    estados = ["Todos"] + sorted([x for x in df[col_status].unique() if x not in ["SIN INFORMACIÓN", "Sin información"]])
-    status_sel = st.sidebar.selectbox("⚡ Filtrar por Estatus:", estados)
-    if status_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado[col_status] == status_sel]
+equipo_seleccionado = st.selectbox("Seleccione el Equipo / Intercambiador:", options=lista_equipos)
 
-if col_unidad:
-    unidades = ["Todas"] + sorted([x for x in df_filtrado[col_unidad].unique() if x not in ["Sin información", "SIN INFORMACIÓN"]])
-    unidad_sel = st.sidebar.selectbox("🏢 Unidad de Proceso:", unidades)
-    if unidad_sel != "Todas":
-        df_filtrado = df_filtrado[df_filtrado[col_unidad] == unidad_sel]
+df_equipo = df_raw[df_raw[col_eq_name].astype(str).str.strip() == equipo_seleccionado]
 
-if col_equipo:
-    equipos = ["Todos"] + sorted([x for x in df_filtrado[col_equipo].unique() if x not in ["Sin información", "SIN INFORMACIÓN"]])
-    equipo_sel = st.sidebar.selectbox("🔥 Seleccionar Equipo / Tag:", equipos)
-    if equipo_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado[col_equipo] == equipo_sel]
+if df_equipo.empty:
+    st.info("Seleccione un equipo válido para ver sus detalles.")
+    st.stop()
 
-st.sidebar.markdown("---")
-for logo in ["logojn.png", "logojn.npg", "logo.png"]:
-    if os.path.exists(logo):
-        st.sidebar.image(logo, use_container_width=True)
-        break
+fila_equipo = df_equipo.iloc[0]
 
-# -----------------------------------------------------------------------------
-# VISTA PRINCIPAL
-# -----------------------------------------------------------------------------
-st.markdown(f"**Registros encontrados:** `{len(df_filtrado)}` de `{len(df)}` totales.")
+# ==========================================
+# OBTENER CONFIGURACIÓN DEL EQUIPO
+# ==========================================
+val_equipo_clean = str(equipo_seleccionado).strip()
+config_equipo = obtener_config_equipo(val_equipo_clean)
 
-pestana_tabla, pestana_stats = st.tabs(["📊 Vista General de Equipos", "📈 Panel General y Estadísticas"])
+# ==========================================
+# MOSTRAR FICHA EN PANTALLA
+# ==========================================
+val_equipo = str(fila_equipo.get(col_eq_name, equipo_seleccionado))
+col_unid_name = next((c for c in df_raw.columns if 'UNIDAD' in c.upper()), None)
+val_unidad = str(fila_equipo.get(col_unid_name, "N/A")) if col_unid_name else "N/A"
 
-registro_seleccionado = None
+col_stat_name = next((c for c in df_raw.columns if 'ESTADO' in c.upper() or 'STATUS' in c.upper()), None)
+valor_status = str(fila_equipo.get(col_stat_name, "OPERATIVO")) if col_stat_name else "OPERATIVO"
 
-with pestana_tabla:
-    st.caption("💡 Haz clic en cualquier fila para abrir inmediatamente la Ficha Técnica del Intercambiador.")
+color_principal = "#005CE6"
+rgb_color = hex_to_rgb(color_principal)
+
+col_detalles, col_enlaces = st.columns([2.3, 1])
+
+with col_detalles:
+    st.subheader(f"📄 Ficha Técnica: {val_equipo} ({val_unidad})")
     
-    evento_tabla = st.dataframe(
-        df_filtrado, 
-        use_container_width=True, 
-        selection_mode="single-row", 
-        on_select="rerun"
-    )
+    # Crear diccionario de datos filtrados para la ficha
+    datos_ficha_reducida = {}
+    for col in df_raw.columns:
+        if col.upper() not in [col_eq_name.upper()]:
+            val = fila_equipo.get(col, "-")
+            datos_ficha_reducida[col] = str(val) if pd.notna(val) else "-"
+            
+    # Mostrar tabla estructurada en pantalla
+    df_ficha_disp = pd.DataFrame(list(datos_ficha_reducida.items()), columns=["Parámetro", "Valor"])
+    st.dataframe(df_ficha_disp, use_container_width=True, hide_index=True)
 
-    if evento_tabla and "selection" in evento_tabla and "rows" in evento_tabla["selection"]:
-        filas_seleccionadas = evento_tabla["selection"]["rows"]
-        if len(filas_seleccionadas) > 0:
-            indice_fila = filas_seleccionadas[0]
-            registro_seleccionado = df_filtrado.iloc[indice_fila]
-
-with pestana_stats:
-    st.subheader("📊 Análisis Gráfico de Intercambiadores")
-    
-    if len(df_filtrado) == 0:
-        st.warning("No hay datos disponibles para graficar con los filtros aplicados.")
-    else:
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.markdown("##### 📉 Estado de Inspección (STATUS)")
-            if col_status:
-                df_status_counts = df_filtrado[col_status].value_counts().reset_index()
-                df_status_counts.columns = ['Estatus', 'Cantidad']
-                fig_status = px.bar(
-                    df_status_counts, 
-                    x='Estatus', 
-                    y='Cantidad', 
-                    color='Estatus', 
-                    color_discrete_map=MAPA_COLORES_ESTATUS, 
-                    text='Cantidad'
-                )
-                fig_status.update_layout(showlegend=False, xaxis_title="", yaxis_title="Total Equipos")
-                st.plotly_chart(fig_status, use_container_width=True)
-            else:
-                st.info("No se encontró la columna de Status para graficar.")
-                
-        with col_g2:
-            st.markdown("##### 🏢 Equipos por Unidad de Proceso")
-            if col_unidad:
-                df_unidad_counts = df_filtrado[col_unidad].value_counts().reset_index()
-                df_unidad_counts.columns = ['Unidad', 'Cantidad']
-                fig_unidad = px.bar(df_unidad_counts, x='Unidad', y='Cantidad', text='Cantidad')
-                fig_unidad.update_layout(showlegend=False, xaxis_title="", yaxis_title="Total Equipos")
-                st.plotly_chart(fig_unidad, use_container_width=True)
-            else:
-                st.info("No se encontró la columna de Unidad de Proceso para graficar.")
-
-# -----------------------------------------------------------------------------
-# DETALLE / FICHA TÉCNICA DEL INTERCAMBIADOR
-# -----------------------------------------------------------------------------
-if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
-    registro = registro_seleccionado if registro_seleccionado is not None else df_filtrado.iloc[0]
-    
+    # DIBUJAR PLANO ESQUEMÁTICO EN PANTALLA
     st.markdown("---")
+    st.subheader(f"📐 Plano Esquemático de Boquillas - {val_equipo}")
     
-    col_detalles, col_enlaces = st.columns([2, 1])
-
-    with col_detalles:
-        val_equipo = registro[col_equipo] if col_equipo else "Detalle"
-        val_unidad = registro[col_unidad] if col_unidad else "Sin unidad"
-        val_equipo_clean = str(val_equipo).strip()
-        
-        st.subheader(f"📋 Ficha Técnica - Equipo {val_equipo}")
-        
-        datos_ficha_reducida = {}
-        for k, v in registro.items():
-            k_upper = str(k).upper()
-            if 'UNIDAD' in k_upper and 'Unidad de Proceso' not in datos_ficha_reducida:
-                datos_ficha_reducida['Unidad de Proceso'] = v
-            elif 'EQUIPO' in k_upper and 'Equipo' not in datos_ficha_reducida:
-                datos_ficha_reducida['Equipo'] = v
-            elif 'COMENTARIO' in k_upper and 'Comentario' not in datos_ficha_reducida:
-                datos_ficha_reducida['Comentario'] = v
-        
-        df_ficha = pd.DataFrame(list(datos_ficha_reducida.items()), columns=['Parámetro', 'Detalle'])
-        st.table(df_ficha.style.hide(axis='index'))
-
-        archivo_json = f"config_{val_equipo_clean}.json"
-        config_equipo = None
-        if os.path.exists(archivo_json):
-            try:
-                with open(archivo_json, "r", encoding="utf-8") as f:
-                    config_equipo = json.load(f)
-            except Exception:
-                config_equipo = None
-
-        st.markdown("### 📐 Plano Esquemático de Boquillas")
-        if config_equipo and generate_modular_exchanger_svg:
-            svg_code = generate_modular_exchanger_svg(config_equipo)
-            components.html(
-                f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
-                height=480
-            )
-            
-            st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
-            
-            table_rows = []
-            global_aux_rating = config_equipo.get("equipment", {}).get("aux_rating", "6000#")
-
-            for noz in config_equipo.get("nozzles", []):
-                auxs = noz.get("auxiliaries", [])
-                aux_parts = [f"{aux.get('size', '')} {aux.get('position', '')}" for aux in auxs]
-                aux_combined = "  ".join(aux_parts) if aux_parts else ""
-
-                size_desc = str(noz.get("size", "")).strip()
-                rating_desc = str(noz.get("rating", "")).strip()
-                type_desc = str(noz.get("type", "")).strip()
-                
-                rating_type = f"{rating_desc} {type_desc}".strip()
-                desc_full = f"{size_desc} - {rating_type}" if size_desc and rating_type else (size_desc or rating_type)
-
-                table_rows.append({
-                    "MK": noz.get("tag", ""),
-                    "QT": 1,
-                    "DESCRIPTION": desc_full,
-                    "PROCESS": noz.get("service", "INLET"),
-                    "AUXILLARIES": aux_combined
-                })
-
-            table_rows.append({
-                "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILLARIES": f"{global_aux_rating} CPLGS."
-            })
-
-            df_nozzles = pd.DataFrame(table_rows)
-            st.table(df_nozzles.style.hide(axis='index'))
-
-            col_plan1, col_plan2 = st.columns([3, 1])
-            with col_plan1:
-                st.success(f"✅ Plano esquemático y tabla de boquillas cargados para **{val_equipo_clean}**.")
-            with col_plan2:
-                if st.button("✏️ Editar Plano Esquemático"):
-                    st.session_state["tag_para_diseño"] = val_equipo_clean
-                    ir_a_diseno()
-        else:
-            st.info(f"ℹ️ El equipo **{val_equipo_clean}** aún no tiene un plano esquemático guardado.")
-            if st.button(f"🛠️ Diseñar Plano Esquemático para {val_equipo_clean}", type="primary"):
-                st.session_state["tag_para_diseño"] = val_equipo_clean
-                ir_a_diseno()
-
-    with col_enlaces:
-        color_principal = "#005ce6"
-        valor_status = "SIN INFORMACIÓN"
-        if col_status and registro[col_status] not in ['Sin información', 'SIN INFORMACIÓN']:
-            valor_status = registro[col_status].strip().upper()
-            color_principal = MAPA_COLORES_ESTATUS.get(valor_status, "#005ce6")
-            
-        st.markdown(f"""
-        <div style="background: transparent; padding: 12px; border-radius: 8px; text-align: center; border: 2px solid {color_principal}; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Estatus del Equipo</p>
-            <h3 style="margin: 4px 0 0 0; font-size: 22px; color: {color_principal}; line-height: 1.1;">{valor_status}</h3>
-        </div>
-        """, unsafe_allow_html=True)
-            
-        st.subheader("📁 Accesos Rápidos y Evidencia")
-        
-        termino_busqueda = val_equipo if val_equipo not in ["Sin información", "SIN INFORMACIÓN"] else val_unidad
-            
-        if termino_busqueda and termino_busqueda not in ["Sin información", "SIN INFORMACIÓN"]:
-            url_gdrive = generar_link_gdrive(termino_busqueda)
-            st.link_button(
-                label=f"📂 Buscar Planos/Docs de '{termino_busqueda}' en Drive", 
-                url=url_gdrive, 
-                use_container_width=True
-            )
-            st.write("") 
-
-        titulo_doc = f"Intercambiador {val_equipo} ({val_unidad})"
-        pdf_bytes = generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_ficha_reducida, color_principal, titulo_doc, config_equipo=config_equipo)
-        
-        st.download_button(
-            label="📄 Descargar Ficha PDF para Terreno",
-            data=pdf_bytes,
-            file_name=f"Ficha_Intercambiador_{val_equipo}.pdf",
-            mime="application/pdf",
-            use_container_width=True
+    if generate_modular_exchanger_svg:
+        svg_code = generate_modular_exchanger_svg(config_equipo)
+        components.html(
+            f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>',
+            height=500
         )
-        st.write("")
-
-        st.markdown("🖼️ **Evidencia / Fotografía de Inspección**")
-        foto_subida = st.file_uploader("Sube o arrastra la imagen del equipo:", type=["png", "jpg", "jpeg"], key="visor_foto")
         
-        if foto_subida is not None:
-            st.image(foto_subida, caption=f"Evidencia - Equipo {val_equipo}", use_container_width=True)
+    # MOSTRAR TABLA NOZZLE SCHEDULE EN PANTALLA
+    st.markdown(f"### 📋 NOZZLE SCHEDULE - {val_equipo}")
+    table_rows = []
+    global_aux_rating = config_equipo.get("equipment", {}).get("aux_rating", "6000#")
 
-        if col_geo and registro[col_geo] not in ['Sin información', 'SIN INFORMACIÓN']:
-            lat, lon = extraer_coordenadas(registro[col_geo])
-            if lat and lon:
-                st.markdown("---")
-                url_maps = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
-                st.link_button(
-                    label="🗺️ Abrir Ubicación en Google Maps", 
-                    url=url_maps, 
-                    use_container_width=True
-                )
-                mapa_html = f"""
-                <iframe 
-                    width="100%" 
-                    height="300" 
-                    frameborder="0" 
-                    scrolling="no" 
-                    marginheight="0" 
-                    marginwidth="0" 
-                    src="https://maps.google.com/maps?q={lat},{lon}&hl=es&z=16&output=embed"
-                    style="border-radius: 8px; border: 1px solid #ddd; margin-top: 10px;">
-                </iframe>
-                """
-                st.markdown(mapa_html, unsafe_allow_html=True)
+    for noz in config_equipo.get("nozzles", []):
+        auxs = noz.get("auxiliaries", [])
+        aux_parts = [f"{aux.get('size', '')} {aux.get('position', '')}" for aux in auxs]
+        aux_combined = "  ".join(aux_parts) if aux_parts else ""
+
+        size_desc = str(noz.get("size", "")).strip()
+        rating_desc = str(noz.get("rating", "")).strip()
+        type_desc = str(noz.get("type", "")).strip()
+        
+        rating_type = f"{rating_desc} {type_desc}".strip()
+        desc_full = f"{size_desc} - {rating_type}" if size_desc and rating_type else (size_desc or rating_type)
+
+        table_rows.append({
+            "MK": noz["tag"],
+            "QT": 1,
+            "DESCRIPTION": desc_full,
+            "PROCESS": noz.get("service", "INLET"),
+            "AUXILLARIES": aux_combined
+        })
+
+    table_rows.append({
+        "MK": "", "QT": "", "DESCRIPTION": "", "PROCESS": "", "AUXILLARIES": f"{global_aux_rating} CPLGS."
+    })
+
+    df_nozzles = pd.DataFrame(table_rows)
+
+    st.markdown("""
+        <style>
+        [data-testid="stTable"] {
+            width: fit-content !important;
+            max-width: 100% !important;
+            margin-top: 5px;
+        }
+        [data-testid="stTable"] table {
+            width: auto !important;
+        }
+        [data-testid="stTable"] th {
+            font-size: 13.2px !important;
+            padding: 7px 14px !important;
+            font-weight: 700 !important;
+            white-space: nowrap !important;
+            background-color: #1e293b !important;
+            color: #ffffff !important;
+            border: 1px solid #334155 !important;
+        }
+        [data-testid="stTable"] td {
+            font-size: 13.2px !important;
+            padding: 6px 14px !important;
+            white-space: nowrap !important;
+            line-height: 1.3 !important;
+            border: 1px solid #334155 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.table(df_nozzles.style.hide(axis='index'))
+
+with col_enlaces:
+    st.subheader("🚀 Acciones del Equipo")
+    
+    # Botón para ir a la página de diseño parametrizado
+    if st.button("✏️ Diseñar / Editar Esquema Paramétrico", use_container_width=True, type="primary"):
+        st.session_state["tag_para_diseño"] = val_equipo
+        for pag_diseño in ["pages/diseno.py", "pages/Diseño.py", "diseno.py"]:
+            try:
+                st.switch_page(pag_diseño)
+                break
+            except Exception:
+                continue
+
+    st.markdown("---")
+    st.write("**Exportación:**")
+    
+    # Generar PDF completo con Plano Esquemático y Nozzle Schedule
+    titulo_doc = f"Intercambiador {val_equipo} ({val_unidad})"
+    pdf_bytes = generar_pdf_equipo(
+        val_equipo, val_unidad, valor_status, datos_ficha_reducida, rgb_color, titulo_doc, config_equipo=config_equipo
+    )
+    
+    st.download_button(
+        label="📥 Descargar Ficha PDF para Terreno",
+        data=pdf_bytes,
+        file_name=f"Ficha_Tecnica_{val_equipo}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
