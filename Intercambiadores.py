@@ -503,7 +503,6 @@ def generar_pdf_equipo(val_equipo, val_unidad, valor_status, datos_mostrar, colo
         y_esquema = pdf.get_y()
         dibujado_ok = False
         
-        # CONVERSIÓN RENDERIZADA VECTORIAL MEDIANTE CAIROSVG
         if generate_modular_exchanger_svg:
             try:
                 import cairosvg
@@ -713,7 +712,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         if config_equipo and generate_modular_exchanger_svg:
             svg_code = generate_modular_exchanger_svg(config_equipo)
             
-            # ENCADRE PERFECTO Y RESPONSIVO
+            # ENCADRE ELEVADO Y ESPACIO VERTICAL EXPANDIDO
             html_encapsulado = f"""
             <!DOCTYPE html>
             <html>
@@ -737,7 +736,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
                     background: #ffffff;
                     border: 1px solid #cbd5e1;
                     border-radius: 8px;
-                    padding: 8px;
+                    padding: 4px;
                 }}
                 .svg-container svg {{
                     width: 100% !important;
@@ -756,7 +755,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
             </html>
             """
             
-            components.html(html_encapsulado, height=380)
+            components.html(html_encapsulado, height=450)
             
             st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
             
