@@ -63,10 +63,11 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     style.text = """
         .component-body { fill: url(#metal-gradient); stroke: #334155; stroke-width: 2.2; }
         .flange-joint { fill: url(#metal-dark-gradient); stroke: #1e293b; stroke-width: 1.8; }
-        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; }
+        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; cursor: pointer; }
         .centerline { stroke: #ef4444; stroke-width: 1.2; stroke-dasharray: 8,4,2,4; }
         .connector-line { stroke: #0ea5e9; stroke-width: 2; stroke-dasharray: 5,4; }
         
+        .nozzle-group { cursor: pointer; }
         .nozzle-neck { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
         .nozzle-flange { fill: url(#metal-dark-gradient); stroke: #0f172a; stroke-width: 2; }
         .plug-body { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
@@ -161,7 +162,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         is_sad_selected = (sad["id"] == selected_id)
         sad_class = "saddle-body selected" if is_sad_selected else "saddle-body"
         
-        sad_g = ET.SubElement(saddles_layer, "g", {"id": sad["id"], "class": sad_class})
+        sad_g = ET.SubElement(saddles_layer, "g", {"id": sad["id"], "class": sad_class, "data-id": sad["id"]})
         ET.SubElement(sad_g, "path", {
             "d": f"M {sad_x - saddle_w/2} {saddle_y} L {sad_x - saddle_w/2 - 10} {saddle_y + saddle_h} L {sad_x + saddle_w/2 + 10} {saddle_y + saddle_h} L {sad_x + saddle_w/2} {saddle_y} Z",
             "class": "saddle-body"
@@ -193,7 +194,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
             fill_style = "url(#metal-gradient)" if gap_val == 0 else "url(#metal-dark-gradient)"
 
-            # Placa / Brida entre cuerpos
             ET.SubElement(main_g, "rect", {
                 "x": str(flange_x),
                 "y": str(flange_cy - max_r_joint - 8),
@@ -203,7 +203,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 "style": f"fill: {fill_style};"
             })
 
-            # Dibujo dinámico de líneas conectoras superiores e inferiores
             if gap_val > 0 or abs(p_cy - c_cy) > 0 or flg_ox != 0 or flg_oy != 0:
                 ET.SubElement(main_g, "line", {
                     "x1": str(p_end), "y1": str(p_cy - p_r),
@@ -251,7 +250,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     for noz in config["nozzles"]:
         is_selected = (noz["id"] == selected_id)
         group_class = "nozzle-group selected" if is_selected else "nozzle-group"
-        noz_g = ET.SubElement(nozzles_layer, "g", {"id": noz["id"], "class": group_class})
+        noz_g = ET.SubElement(nozzles_layer, "g", {"id": noz["id"], "class": group_class, "data-id": noz["id"]})
 
         comp = noz.get("component", "SHELL")
         ratio = float(noz.get("position_ratio", 0.5))
@@ -378,20 +377,8 @@ if "flange_offsets" not in st.session_state.exchanger_data["components"]:
         "SHELL_BONNET_X": 0, "SHELL_BONNET_Y": 0
     }
 
-# Carga automática
-if "tag_para_diseño" in st.session_state:
-    tag_recibido = st.session_state.pop("tag_para_diseño")
-    st.session_state.exchanger_data["equipment"]["tag"] = tag_recibido
-    archivo_auto = f"config_{tag_recibido}.json"
-    if os.path.exists(archivo_auto):
-        try:
-            with open(archivo_auto, "r", encoding="utf-8") as f:
-                st.session_state.exchanger_data = json.load(f)
-        except Exception:
-            pass
-
 # ==========================================
-# 3. BARRA LATERAL COMPACTA (CONFIGURACIÓN GENERAL)
+# 3. BARRA LATERAL COMPACTA
 # ==========================================
 st.sidebar.markdown("### 🏷️ Equipo Seleccionado")
 
@@ -460,14 +447,6 @@ with col_save2:
                 st.session_state.exchanger_data = json.load(f)
             st.sidebar.success(f"¡Cargado {archivo_json}!")
             st.rerun()
-
-if st.sidebar.button("🏠 Inicio", use_container_width=True):
-    for root_page in ["Intercambiadores.py", "intercambiadores.py"]:
-        try:
-            st.switch_page(root_page)
-            break
-        except Exception:
-            continue
 
 st.sidebar.divider()
 
@@ -569,7 +548,7 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
         st.rerun()
 
 # ==========================================
-# 4. ÁREA PRINCIPAL Y PANEL DERECHO
+# 4. PANEL DE CONTROL Y VISTA PRINCIPAL
 # ==========================================
 st.title(f"🛠️ Constructor Paramétrico: {st.session_state.exchanger_data['equipment']['tag']}")
 
@@ -580,7 +559,7 @@ nozzle_options = {f"📌 Boquilla: {noz['tag']} ({noz['component']})": noz['id']
 saddle_options = {f"🛋️ Soporte: {sad['tag']}": sad['id'] for sad in st.session_state.exchanger_data["saddles"]}
 all_options = {**nozzle_options, **saddle_options}
 
-# Selector ubicado en la columna derecha superior
+# Selector ubicado exactamente en la columna derecha superior
 with col_control:
     st.subheader("📝 Edición de Elemento")
     if all_options:
@@ -592,17 +571,21 @@ with col_control:
         selected_id = all_options.get(selected_label)
     else:
         selected_id = None
-        st.caption("No hay elementos para editar.")
+        st.caption("No hay elementos registrados para editar.")
 
 with col_view:
     st.subheader(f"Plano Esquemático ({sel_orient}) - {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
     container_height = 880 if sel_orient == "VERTICAL" else 540
-    components.html(
-        f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
-        height=container_height
-    )
+    
+    # Render con interacción JS integrada directamente en el recuadro
+    html_content = f"""
+    <div id="svg-wrap" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center; user-select:none;">
+        {svg_code}
+    </div>
+    """
+    components.html(html_content, height=container_height)
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
     
@@ -672,34 +655,18 @@ with col_view:
     st.markdown("<br>", unsafe_allow_html=True)
     
     rutas_franja = [
-        "franja2.png",
-        "franja2.PNG",
-        "FRANJA2.PNG",
-        "franja2.jpg",
-        "franja2.jpeg",
+        "franja2.png", "franja2.PNG", "FRANJA2.PNG", "franja2.jpg", "franja2.jpeg",
         os.path.join(os.path.dirname(__file__), "franja2.png"),
-        os.path.join(os.path.dirname(__file__), "..", "franja2.png"),
-        os.path.join(os.path.dirname(__file__), "franja2.PNG"),
-        os.path.join(os.path.dirname(__file__), "..", "franja2.PNG"),
-        "franja.png",
-        "franja.jpg"
+        os.path.join(os.path.dirname(__file__), "..", "franja2.png")
     ]
     
-    franja_dibujada = False
     for ruta in rutas_franja:
         if os.path.exists(ruta):
             st.image(ruta, use_container_width=True)
-            franja_dibujada = True
             break
-            
-    if not franja_dibujada:
-        try:
-            st.image("franja2.png", use_container_width=True)
-        except Exception:
-            pass
 
 # ==========================================
-# EDICIÓN RECTIFICADA EN EL PANEL DERECHO
+# 5. EDICIÓN EN TIEMPO REAL (COLUMNA DERECHA)
 # ==========================================
 with col_control:
     tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Detalle Elemento", "🔌 NS/FS Auxiliares", "🛋️ Soportes"])
@@ -708,7 +675,8 @@ with col_control:
 
     with tab_noz:
         if selected_noz:
-            st.info(f"📍 Editando: **{selected_noz['tag']}**")
+            st.info(f"📍 Editando en vivo: **{selected_noz['tag']}**")
+            
             selected_noz["tag"] = st.text_input("MK (Tag)", value=selected_noz["tag"], key=f"noz_tag_{selected_noz['id']}")
             
             service_opts = ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"]
@@ -727,7 +695,9 @@ with col_control:
             
             d3, d4 = st.columns(2)
             selected_noz["side"] = d3.selectbox("Lado", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1, key=f"noz_sd_{selected_noz['id']}")
-            selected_noz["position_ratio"] = d4.slider("Posición %", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
+            
+            # Ajuste de posición instantáneo
+            selected_noz["position_ratio"] = st.slider("Posición Pos. %", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
 
             if st.button(f"🗑️ Eliminar {selected_noz['tag']}", use_container_width=True):
                 st.session_state.exchanger_data["nozzles"] = [n for n in st.session_state.exchanger_data["nozzles"] if n["id"] != selected_id]
@@ -775,7 +745,7 @@ with col_control:
         for idx, sad in enumerate(st.session_state.exchanger_data.get("saddles", [])):
             with st.expander(f"🛋️ {sad['tag']}", expanded=(sad["id"] == selected_id)):
                 sad["tag"] = st.text_input("Nombre", value=sad["tag"], key=f"sad_tag_{sad['id']}")
-                sad["position_ratio"] = st.slider("Posición en Shell", 0.05, 0.95, float(sad["position_ratio"]), step=0.01, key=f"sad_pos_{sad['id']}")
+                sad["position_ratio"] = st.slider("Posición en Shell %", 0.05, 0.95, float(sad["position_ratio"]), step=0.01, key=f"sad_pos_{sad['id']}")
                 
                 if st.button("🗑️ Eliminar Soporte", key=f"del_sad_{sad['id']}"):
                     st.session_state.exchanger_data.get("saddles", []).pop(idx)
