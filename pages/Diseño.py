@@ -201,10 +201,8 @@ def generate_modular_exchanger_svg(config, selected_id=None):
             flange_x = (p_end + c_start) / 2 - 6 + flg_ox
             flange_cy = (p_cy + c_cy) / 2 + flg_oy
 
-            # Si están acoplados sin gap, el color se integra
             fill_style = "url(#metal-gradient)" if gap_val == 0 else "url(#metal-dark-gradient)"
 
-            # Placa / Brida entre cuerpos
             ET.SubElement(main_layer, "rect", {
                 "x": str(flange_x),
                 "y": str(flange_cy - max_r_joint - 8),
@@ -214,9 +212,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 "style": f"fill: {fill_style};"
             })
 
-            # Líneas de conexión si existe separación
             if gap_val > 0 or abs(p_cy - c_cy) > 0:
-                # Conector Cuerpo Prev -> Placa
                 ET.SubElement(main_layer, "line", {
                     "x1": str(p_end), "y1": str(p_cy - p_r),
                     "x2": str(flange_x), "y2": str(flange_cy - max_r_joint),
@@ -227,7 +223,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                     "x2": str(flange_x), "y2": str(flange_cy + max_r_joint),
                     "class": "connector-line"
                 })
-                # Conector Placa -> Cuerpo Sig
                 ET.SubElement(main_layer, "line", {
                     "x1": str(flange_x + 12), "y1": str(flange_cy - max_r_joint),
                     "x2": str(c_start), "y2": str(c_cy - c_r),
@@ -483,79 +478,63 @@ if st.sidebar.button("🏠 Volver a Página Principal", use_container_width=True
 
 st.sidebar.divider()
 
-with st.sidebar.expander("📐 Secuencia, Dimensiones y Placas de Unión"):
-    with st.form("form_edit_components"):
-        st.write("**Secuencia de Izquierda a Derecha:**")
-        current_seq = st.session_state.exchanger_data["components"]["sequence"]
-        
-        seq_labels = [
-            "Channel (Izq) -> Shell -> Bonnet (Der)",
-            "Bonnet (Izq) -> Shell -> Channel (Der)"
-        ]
-        
-        default_idx = 0 if current_seq == ["CHANNEL", "SHELL", "BONNET"] else 1
-        chosen_seq_label = st.selectbox("Seleccione Secuencia:", seq_labels, index=default_idx)
+# ==========================================
+# CONTROLES DIRECTOS (SIN BOTÓN GUARDAR)
+# ==========================================
+with st.sidebar.expander("📐 Secuencia, Dimensiones y Placas de Unión", expanded=True):
+    st.write("**Secuencia de Izquierda a Derecha:**")
+    current_seq = st.session_state.exchanger_data["components"]["sequence"]
+    seq_labels = [
+        "Channel (Izq) -> Shell -> Bonnet (Der)",
+        "Bonnet (Izq) -> Shell -> Channel (Der)"
+    ]
+    default_idx = 0 if current_seq == ["CHANNEL", "SHELL", "BONNET"] else 1
+    
+    chosen_seq_label = st.selectbox("Seleccione Secuencia:", seq_labels, index=default_idx, key="seq_sel")
+    st.session_state.exchanger_data["components"]["sequence"] = ["CHANNEL", "SHELL", "BONNET"] if chosen_seq_label.startswith("Channel") else ["BONNET", "SHELL", "CHANNEL"]
 
-        st.divider()
-        st.write("**Dimensiones Independientes:**")
-        new_ch_len = st.slider("Largo Channel", 100, 250, int(st.session_state.exchanger_data["components"]["channel_length"]))
-        new_ch_diam = st.slider("Diámetro Channel", 120, 260, int(st.session_state.exchanger_data["equipment"].get("channel_diameter", 170)))
-        
-        new_sh_len = st.slider("Largo Shell", 250, 650, int(st.session_state.exchanger_data["components"]["shell_length"]))
-        new_diam = st.slider("Diámetro Shell", 120, 260, int(st.session_state.exchanger_data["equipment"]["shell_diameter"]))
-        
-        new_bo_len = st.slider("Largo Bonnet", 60, 180, int(st.session_state.exchanger_data["components"]["bonnet_length"]))
-        new_bonnet_diam = st.slider("Diámetro Bonnet", 120, 260, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)))
+    st.divider()
+    st.write("**Dimensiones Independientes:**")
+    st.session_state.exchanger_data["components"]["channel_length"] = st.slider("Largo Channel", 100, 250, int(st.session_state.exchanger_data["components"]["channel_length"]), key="s_ch_len")
+    st.session_state.exchanger_data["equipment"]["channel_diameter"] = st.slider("Diámetro Channel", 120, 260, int(st.session_state.exchanger_data["equipment"].get("channel_diameter", 170)), key="s_ch_diam")
+    
+    st.session_state.exchanger_data["components"]["shell_length"] = st.slider("Largo Shell", 250, 650, int(st.session_state.exchanger_data["components"]["shell_length"]), key="s_sh_len")
+    st.session_state.exchanger_data["equipment"]["shell_diameter"] = st.slider("Diámetro Shell", 120, 260, int(st.session_state.exchanger_data["equipment"]["shell_diameter"]), key="s_sh_diam")
+    
+    st.session_state.exchanger_data["components"]["bonnet_length"] = st.slider("Largo Bonnet", 60, 180, int(st.session_state.exchanger_data["components"]["bonnet_length"]), key="s_bo_len")
+    st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = st.slider("Diámetro Bonnet", 120, 260, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)), key="s_bo_diam")
 
-        st.divider()
-        st.write("**Separación Horizontal (Gap X):**")
-        gap_cs = st.slider("Separación Channel ↔ Shell", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("CHANNEL_SHELL", 0)))
-        gap_sb = st.slider("Separación Shell ↔ Bonnet", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("SHELL_BONNET", 0)))
+    st.divider()
+    st.write("**Separación Horizontal (Gap X):**")
+    gap_cs = st.slider("Separación Channel ↔ Shell", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("CHANNEL_SHELL", 0)), key="s_gap_cs")
+    gap_sb = st.slider("Separación Shell ↔ Bonnet", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("SHELL_BONNET", 0)), key="s_gap_sb")
+    st.session_state.exchanger_data["components"]["gaps"] = {"CHANNEL_SHELL": gap_cs, "SHELL_BONNET": gap_sb}
 
-        st.divider()
-        st.write("**Desplazamiento Placa/Brida de Unión (Channel ↔ Shell):**")
-        flg_cs_x = st.slider("Desplazar Placa C-S (X)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_X", 0)))
-        flg_cs_y = st.slider("Desplazar Placa C-S (Y)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_Y", 0)))
+    st.divider()
+    st.write("**Desplazamiento Placa/Brida de Unión (Channel ↔ Shell):**")
+    flg_cs_x = st.slider("Desplazar Placa C-S (X)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_X", 0)), key="s_flg_cs_x")
+    flg_cs_y = st.slider("Desplazar Placa C-S (Y)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_Y", 0)), key="s_flg_cs_y")
 
-        st.divider()
-        st.write("**Desplazamiento Placa/Brida de Unión (Shell ↔ Bonnet):**")
-        flg_sb_x = st.slider("Desplazar Placa S-B (X)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_X", 0)))
-        flg_sb_y = st.slider("Desplazar Placa S-B (Y)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_Y", 0)))
+    st.divider()
+    st.write("**Desplazamiento Placa/Brida de Unión (Shell ↔ Bonnet):**")
+    flg_sb_x = st.slider("Desplazar Placa S-B (X)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_X", 0)), key="s_flg_sb_x")
+    flg_sb_y = st.slider("Desplazar Placa S-B (Y)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_Y", 0)), key="s_flg_sb_y")
 
-        st.divider()
-        st.write("**Desplazamiento Vertical Cuerpos (Offset Y):**")
-        off_ch = st.slider("Desplazamiento Y (Channel)", -80, 80, int(st.session_state.exchanger_data["components"].get("channel_offset_y", 0)))
-        off_sh = st.slider("Desplazamiento Y (Shell)", -80, 80, int(st.session_state.exchanger_data["components"].get("shell_offset_y", 0)))
-        off_bo = st.slider("Desplazamiento Y (Bonnet)", -80, 80, int(st.session_state.exchanger_data["components"].get("bonnet_offset_y", 0)))
+    st.session_state.exchanger_data["components"]["flange_offsets"] = {
+        "CHANNEL_SHELL_X": flg_cs_x, "CHANNEL_SHELL_Y": flg_cs_y,
+        "SHELL_BONNET_X": flg_sb_x, "SHELL_BONNET_Y": flg_sb_y
+    }
 
-        if st.form_submit_button("Aplicar Cambios"):
-            new_sequence = ["CHANNEL", "SHELL", "BONNET"] if chosen_seq_label.startswith("Channel") else ["BONNET", "SHELL", "CHANNEL"]
-            st.session_state.exchanger_data["components"]["sequence"] = new_sequence
-            st.session_state.exchanger_data["components"]["channel_length"] = new_ch_len
-            st.session_state.exchanger_data["components"]["shell_length"] = new_sh_len
-            st.session_state.exchanger_data["components"]["bonnet_length"] = new_bo_len
-            st.session_state.exchanger_data["equipment"]["channel_diameter"] = new_ch_diam
-            st.session_state.exchanger_data["equipment"]["shell_diameter"] = new_diam
-            st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = new_bonnet_diam
-            
-            st.session_state.exchanger_data["components"]["gaps"] = {
-                "CHANNEL_SHELL": gap_cs,
-                "SHELL_BONNET": gap_sb
-            }
-            st.session_state.exchanger_data["components"]["flange_offsets"] = {
-                "CHANNEL_SHELL_X": flg_cs_x, "CHANNEL_SHELL_Y": flg_cs_y,
-                "SHELL_BONNET_X": flg_sb_x, "SHELL_BONNET_Y": flg_sb_y
-            }
-            st.session_state.exchanger_data["components"]["channel_offset_y"] = off_ch
-            st.session_state.exchanger_data["components"]["shell_offset_y"] = off_sh
-            st.session_state.exchanger_data["components"]["bonnet_offset_y"] = off_bo
-            st.rerun()
+    st.divider()
+    st.write("**Desplazamiento Vertical Cuerpos (Offset Y):**")
+    st.session_state.exchanger_data["components"]["channel_offset_y"] = st.slider("Desplazamiento Y (Channel)", -80, 80, int(st.session_state.exchanger_data["components"].get("channel_offset_y", 0)), key="s_off_ch")
+    st.session_state.exchanger_data["components"]["shell_offset_y"] = st.slider("Desplazamiento Y (Shell)", -80, 80, int(st.session_state.exchanger_data["components"].get("shell_offset_y", 0)), key="s_off_sh")
+    st.session_state.exchanger_data["components"]["bonnet_offset_y"] = st.slider("Desplazamiento Y (Bonnet)", -80, 80, int(st.session_state.exchanger_data["components"].get("bonnet_offset_y", 0)), key="s_off_bo")
 
 st.sidebar.divider()
 
 with st.sidebar.expander("➕ Crear Nueva Boquilla"):
     new_srv = st.selectbox("Process", ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"], key="sidebar_new_srv")
-    
     is_vent_drain = new_srv in ["VENT", "DRAIN"]
     
     prefix_map = {"VENT": "V", "DRAIN": "D", "INLET": "S", "OUTLET": "S", "INSTRUMENT": "PI"}
@@ -563,7 +542,6 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
     count_srv = sum(1 for n in st.session_state.exchanger_data["nozzles"] if n.get("service") == new_srv) + 1
     
     new_tag = st.text_input("MK (Tag)", value=f"{default_prefix}{count_srv}", key="sidebar_new_tag")
-    
     style_default = 1 if is_vent_drain else 0
     new_style = st.selectbox("Estilo", ["FLANGED", "TAPÓN / COUPLING"], index=style_default, key="sidebar_new_style")
     new_comp = st.selectbox("Componente", ["SHELL", "CHANNEL", "BONNET"], key="sidebar_new_comp")
@@ -769,35 +747,22 @@ with col_control:
     with tab_noz:
         if selected_noz:
             st.info(f"📍 Editando: **{selected_noz['tag']}**")
-            with st.form("form_edit_noz"):
-                tag_val = st.text_input("MK (Tag)", value=selected_noz["tag"])
-                
-                service_opts = ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"]
-                curr_srv = selected_noz.get("service", "INLET")
-                srv_idx = service_opts.index(curr_srv) if curr_srv in service_opts else 0
-                service_val = st.selectbox("Process", service_opts, index=srv_idx)
-                
-                style_val = st.selectbox("Representación", ["FLANGED", "TAPÓN / COUPLING"], index=0 if selected_noz.get("style", "FLANGED") == "FLANGED" else 1)
-                comp_val = st.selectbox("Componente:", ["CHANNEL", "SHELL", "BONNET"], index=["CHANNEL", "SHELL", "BONNET"].index(selected_noz.get("component", "SHELL")))
-                
-                size_val = st.text_input("Tamaño", value=selected_noz.get("size", ""))
-                rating_val = st.text_input("Rating", value=selected_noz.get("rating", ""))
-                type_val = st.text_input("Tipo (ej. RF WN)", value=selected_noz.get("type", ""))
-                
-                side_val = st.selectbox("Orientación", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1)
-                ratio_val = st.slider("Posición horizontal", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)))
-
-                if st.form_submit_button("💾 Guardar Cambios"):
-                    selected_noz["tag"] = tag_val
-                    selected_noz["service"] = service_val
-                    selected_noz["style"] = style_val
-                    selected_noz["component"] = comp_val
-                    selected_noz["size"] = size_val
-                    selected_noz["rating"] = rating_val
-                    selected_noz["type"] = type_val
-                    selected_noz["side"] = side_val
-                    selected_noz["position_ratio"] = ratio_val
-                    st.rerun()
+            selected_noz["tag"] = st.text_input("MK (Tag)", value=selected_noz["tag"], key=f"noz_tag_{selected_noz['id']}")
+            
+            service_opts = ["INLET", "OUTLET", "VENT", "DRAIN", "INSTRUMENT"]
+            curr_srv = selected_noz.get("service", "INLET")
+            srv_idx = service_opts.index(curr_srv) if curr_srv in service_opts else 0
+            selected_noz["service"] = st.selectbox("Process", service_opts, index=srv_idx, key=f"noz_srv_{selected_noz['id']}")
+            
+            selected_noz["style"] = st.selectbox("Representación", ["FLANGED", "TAPÓN / COUPLING"], index=0 if selected_noz.get("style", "FLANGED") == "FLANGED" else 1, key=f"noz_stl_{selected_noz['id']}")
+            selected_noz["component"] = st.selectbox("Componente:", ["CHANNEL", "SHELL", "BONNET"], index=["CHANNEL", "SHELL", "BONNET"].index(selected_noz.get("component", "SHELL")), key=f"noz_cmp_{selected_noz['id']}")
+            
+            selected_noz["size"] = st.text_input("Tamaño", value=selected_noz.get("size", ""), key=f"noz_sz_{selected_noz['id']}")
+            selected_noz["rating"] = st.text_input("Rating", value=selected_noz.get("rating", ""), key=f"noz_rt_{selected_noz['id']}")
+            selected_noz["type"] = st.text_input("Tipo (ej. RF WN)", value=selected_noz.get("type", ""), key=f"noz_tp_{selected_noz['id']}")
+            
+            selected_noz["side"] = st.selectbox("Orientación", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1, key=f"noz_sd_{selected_noz['id']}")
+            selected_noz["position_ratio"] = st.slider("Posición horizontal", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
 
             if st.button(f"🗑️ Eliminar {selected_noz['tag']}"):
                 st.session_state.exchanger_data["nozzles"] = [n for n in st.session_state.exchanger_data["nozzles"] if n["id"] != selected_id]
@@ -845,19 +810,12 @@ with col_control:
         st.write("**Soportes de Apoyo:**")
         for idx, sad in enumerate(st.session_state.exchanger_data.get("saddles", [])):
             with st.expander(f"🛋️ {sad['tag']}", expanded=(sad["id"] == selected_id)):
-                sad_tag = st.text_input("Nombre", value=sad["tag"], key=f"sad_tag_{sad['id']}")
-                sad_ratio = st.slider("Posición en Shell", 0.05, 0.95, float(sad["position_ratio"]), step=0.01, key=f"sad_pos_{sad['id']}")
+                sad["tag"] = st.text_input("Nombre", value=sad["tag"], key=f"sad_tag_{sad['id']}")
+                sad["position_ratio"] = st.slider("Posición en Shell", 0.05, 0.95, float(sad["position_ratio"]), step=0.01, key=f"sad_pos_{sad['id']}")
                 
-                col_s1, col_s2 = st.columns(2)
-                with col_s1:
-                    if st.button("💾", key=f"save_sad_{sad['id']}"):
-                        sad["tag"] = sad_tag
-                        sad["position_ratio"] = sad_ratio
-                        st.rerun()
-                with col_s2:
-                    if st.button("🗑️", key=f"del_sad_{sad['id']}"):
-                        st.session_state.exchanger_data.get("saddles", []).pop(idx)
-                        st.rerun()
+                if st.button("🗑️ Eliminar Soporte", key=f"del_sad_{sad['id']}"):
+                    st.session_state.exchanger_data.get("saddles", []).pop(idx)
+                    st.rerun()
 
         st.divider()
         st.write("**Añadir Soporte:**")
