@@ -43,10 +43,10 @@ def obtener_lista_equipos_oficiales():
 
 
 # ==========================================
-# 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
+# 1. MOTOR SVG PARAMÉTRICO CON DESPLAZAMIENTO X/Y Y CONECTORES
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
-    width, height = 1000, 470
+    width, height = 1100, 520
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
@@ -59,15 +59,17 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     
     style = ET.SubElement(defs, "style")
     style.text = """
-        .component-body { fill: url(#metal-gradient); stroke: #334155; stroke-width: 2.2; }
+        .component-body { fill: url(#metal-gradient); stroke: #334155; stroke-width: 2.2; cursor: grab; }
+        .component-body:active { cursor: grabbing; }
         .flange-joint { fill: url(#metal-dark-gradient); stroke: #1e293b; stroke-width: 1.5; }
-        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; transition: all 0.2s; }
+        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; transition: all 0.2s; cursor: pointer; }
         .centerline { stroke: #ef4444; stroke-width: 1.2; stroke-dasharray: 8,4,2,4; }
+        .connector-line { stroke: #0ea5e9; stroke-width: 1.8; stroke-dasharray: 4,4; }
         
-        .nozzle-neck { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
-        .nozzle-flange { fill: url(#metal-dark-gradient); stroke: #0f172a; stroke-width: 2; }
+        .nozzle-neck { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; cursor: pointer; }
+        .nozzle-flange { fill: url(#metal-dark-gradient); stroke: #0f172a; stroke-width: 2; cursor: pointer; }
         
-        .plug-body { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
+        .plug-body { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; cursor: pointer; }
         .plug-line { stroke: #1e293b; stroke-width: 1.5; }
 
         .selected .nozzle-flange { fill: #0ea5e9 !important; stroke: #0369a1 !important; }
@@ -94,7 +96,9 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
-    cy = 225
+    cy_base = 250
+    
+    # Diámetros
     r_shell = config["equipment"]["shell_diameter"] / 2
     r_channel = config["equipment"].get("channel_diameter", config["equipment"]["shell_diameter"]) / 2
     r_bonnet = config["equipment"].get("bonnet_diameter", config["equipment"]["shell_diameter"]) / 2
@@ -105,13 +109,23 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         "BONNET": r_bonnet
     }
 
+    # Desplazamientos Y por componente
+    offset_y = {
+        "CHANNEL": config["components"].get("channel_offset_y", 0),
+        "SHELL": config["components"].get("shell_offset_y", 0),
+        "BONNET": config["components"].get("bonnet_offset_y", 0)
+    }
+
+    # Desplazamientos X (Gap) entre piezas
+    gaps = config["components"].get("gaps", {"CHANNEL_SHELL": 0, "SHELL_BONNET": 0})
+
     w_channel = config["components"]["channel_length"]
     w_shell = config["components"]["shell_length"]
     w_bonnet = config["components"]["bonnet_length"]
     
     seq = config["components"].get("sequence", ["CHANNEL", "SHELL", "BONNET"])
 
-    x_current = 140
+    x_current = 120
     coords = {}
     
     widths = {
@@ -120,24 +134,33 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         "BONNET": w_bonnet
     }
 
-    for comp in seq:
+    for idx, comp in enumerate(seq):
+        if idx > 0:
+            prev_comp = seq[idx - 1]
+            gap_key = f"{prev_comp}_{comp}"
+            gap_val = gaps.get(gap_key, gaps.get(f"{comp}_{prev_comp}", 0))
+            x_current += gap_val + 12
+
         coords[comp] = {
             "start": x_current,
-            "end": x_current + widths[comp]
+            "end": x_current + widths[comp],
+            "cy": cy_base + offset_y[comp]
         }
-        x_current = coords[comp]["end"] + 12
+        x_current = coords[comp]["end"]
 
     main_layer = ET.SubElement(svg, "g", {"id": "assembly-layer"})
 
+    # Línea de centro general
     ET.SubElement(main_layer, "line", {
-        "x1": "40", "y1": str(cy), "x2": str(x_current + 30), "y2": str(cy), "class": "centerline"
+        "x1": "30", "y1": str(cy_base), "x2": str(x_current + 40), "y2": str(cy_base), "class": "centerline"
     })
 
+    # Soportes (Saddles)
     saddles_layer = ET.SubElement(main_layer, "g", {"id": "saddles-layer"})
-    saddle_y = cy + r_shell
+    shell_info = coords.get("SHELL", {"start": 140, "end": 140 + w_shell, "cy": cy_base})
+    saddle_y = shell_info["cy"] + r_shell
     saddle_w, saddle_h = 28, 45
 
-    shell_info = coords.get("SHELL", {"start": 140, "end": 140 + w_shell})
     for sad in config.get("saddles", []):
         sad_ratio = float(sad.get("position_ratio", 0.5))
         sad_x = shell_info["start"] + w_shell * sad_ratio
@@ -150,53 +173,74 @@ def generate_modular_exchanger_svg(config, selected_id=None):
             "class": "saddle-body"
         })
 
+    # Dibujo de Componentes y Líneas Conectoras entre separaciones
     for idx, comp in enumerate(seq):
         c_start = coords[comp]["start"]
         c_end = coords[comp]["end"]
         c_width = widths[comp]
         c_r = radii[comp]
+        c_cy = coords[comp]["cy"]
 
+        # Si hay separación o desnivel con la pieza anterior, dibujamos líneas de unión
         if idx > 0:
             prev_comp = seq[idx - 1]
-            max_r_joint = max(radii[prev_comp], c_r)
-            ET.SubElement(main_layer, "rect", {
-                "x": str(c_start - 10), 
-                "y": str(cy - max_r_joint - 8), 
-                "width": "10", 
-                "height": str(max_r_joint * 2 + 16), 
-                "class": "flange-joint"
-            })
+            p_end = coords[prev_comp]["end"]
+            p_cy = coords[prev_comp]["cy"]
+            p_r = radii[prev_comp]
+
+            gap_val = c_start - p_end
+
+            # Unión por brida si están pegados
+            if gap_val <= 15:
+                max_r_joint = max(p_r, c_r)
+                joint_cy = (p_cy + c_cy) / 2
+                ET.SubElement(main_layer, "rect", {
+                    "x": str(c_start - 10), 
+                    "y": str(joint_cy - max_r_joint - 8), 
+                    "width": "10", 
+                    "height": str(max_r_joint * 2 + 16), 
+                    "class": "flange-joint"
+                })
+            else:
+                # Línea superior de unión (Top Connector Line)
+                ET.SubElement(main_layer, "line", {
+                    "x1": str(p_end), "y1": str(p_cy - p_r),
+                    "x2": str(c_start), "y2": str(c_cy - c_r),
+                    "class": "connector-line"
+                })
+                # Línea inferior de unión (Bottom Connector Line)
+                ET.SubElement(main_layer, "line", {
+                    "x1": str(p_end), "y1": str(p_cy + p_r),
+                    "x2": str(c_start), "y2": str(c_cy + c_r),
+                    "class": "connector-line"
+                })
+                # Línea de centro entre desniveles
+                ET.SubElement(main_layer, "line", {
+                    "x1": str(p_end), "y1": str(p_cy),
+                    "x2": str(c_start), "y2": str(c_cy),
+                    "class": "centerline"
+                })
 
         if comp == "SHELL":
-            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body"})
-            ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(cy + 4), "class": "comp-label"}).text = "SHELL"
+            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(c_cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body", "id": "comp-SHELL"})
+            ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(c_cy + 4), "class": "comp-label"}).text = "SHELL"
 
         elif comp == "CHANNEL":
-            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body"})
-            ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(cy + 4), "class": "comp-label"}).text = "CHANNEL"
+            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(c_cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body", "id": "comp-CHANNEL"})
+            ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(c_cy + 4), "class": "comp-label"}).text = "CHANNEL"
 
         elif comp == "BONNET":
             if idx == 0:
-                bonnet_path = f"M {c_end} {cy - c_r} L {c_end - 20} {cy - c_r} A {c_r} {c_r} 0 0 0 {c_end - 20} {cy + c_r} L {c_end} {cy + c_r} Z"
+                bonnet_path = f"M {c_end} {c_cy - c_r} L {c_end - 20} {c_cy - c_r} A {c_r} {c_r} 0 0 0 {c_end - 20} {c_cy + c_r} L {c_end} {c_cy + c_r} Z"
                 label_x = c_end - 30
             else:
-                bonnet_path = f"M {c_start} {cy - c_r} L {c_start + 20} {cy - c_r} A {c_r} {c_r} 0 0 1 {c_start + 20} {cy + c_r} L {c_start} {cy + c_r} Z"
+                bonnet_path = f"M {c_start} {c_cy - c_r} L {c_start + 20} {c_cy - c_r} A {c_r} {c_r} 0 0 1 {c_start + 20} {c_cy + c_r} L {c_start} {c_cy + c_r} Z"
                 label_x = c_start + 30
 
-            ET.SubElement(main_layer, "path", {"d": bonnet_path, "class": "component-body"})
-            ET.SubElement(main_layer, "text", {"x": str(label_x), "y": str(cy + 4), "class": "comp-label"}).text = "BONNET"
+            ET.SubElement(main_layer, "path", {"d": bonnet_path, "class": "component-body", "id": "comp-BONNET"})
+            ET.SubElement(main_layer, "text", {"x": str(label_x), "y": str(c_cy + 4), "class": "comp-label"}).text = "BONNET"
 
-        if idx < len(seq) - 1:
-            next_comp = seq[idx + 1]
-            max_r_joint = max(c_r, radii[next_comp])
-            ET.SubElement(main_layer, "rect", {
-                "x": str(c_end), 
-                "y": str(cy - max_r_joint - 8), 
-                "width": "12", 
-                "height": str(max_r_joint * 2 + 16), 
-                "class": "flange-joint"
-            })
-
+    # Boquillas (Nozzles)
     nozzles_layer = ET.SubElement(svg, "g", {"id": "nozzles-layer"})
 
     for noz in config["nozzles"]:
@@ -210,6 +254,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
         comp_data = coords.get(comp, coords["SHELL"])
         nx = comp_data["start"] + widths[comp] * ratio
+        c_cy = comp_data["cy"]
 
         label_str = noz["tag"]
         auxiliaries = noz.get("auxiliaries", [])
@@ -221,7 +266,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         active_r = radii.get(comp, r_shell)
 
         if noz.get("side", "TOP") == "TOP":
-            ny_base = cy - active_r
+            ny_base = c_cy - active_r
 
             if style_type == "FLANGED":
                 ny_flange = ny_base - neck_height
@@ -253,7 +298,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 ET.SubElement(noz_g, "text", {"x": str(nx), "y": str(ny_plug - 10), "class": "nozzle-text"}).text = label_str
 
         elif noz.get("side") == "BOTTOM":
-            ny_base = cy + active_r
+            ny_base = c_cy + active_r
 
             if style_type == "FLANGED":
                 ny_flange = ny_base + neck_height
@@ -297,6 +342,10 @@ if "exchanger_data" not in st.session_state:
             "channel_length": 150,
             "shell_length": 420,
             "bonnet_length": 100,
+            "channel_offset_y": 0,
+            "shell_offset_y": 0,
+            "bonnet_offset_y": 0,
+            "gaps": {"CHANNEL_SHELL": 0, "SHELL_BONNET": 0},
             "sequence": ["CHANNEL", "SHELL", "BONNET"]
         },
         "saddles": [
@@ -311,17 +360,13 @@ if "exchanger_data" not in st.session_state:
         ]
     }
 
-if "aux_rating" not in st.session_state.exchanger_data["equipment"]:
-    st.session_state.exchanger_data["equipment"]["aux_rating"] = "6000#"
+if "gaps" not in st.session_state.exchanger_data["components"]:
+    st.session_state.exchanger_data["components"]["gaps"] = {"CHANNEL_SHELL": 0, "SHELL_BONNET": 0}
 
-if "channel_diameter" not in st.session_state.exchanger_data["equipment"]:
-    st.session_state.exchanger_data["equipment"]["channel_diameter"] = st.session_state.exchanger_data["equipment"]["shell_diameter"]
-
-if "bonnet_diameter" not in st.session_state.exchanger_data["equipment"]:
-    st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = st.session_state.exchanger_data["equipment"]["shell_diameter"]
-
-if "sequence" not in st.session_state.exchanger_data["components"]:
-    st.session_state.exchanger_data["components"]["sequence"] = ["CHANNEL", "SHELL", "BONNET"]
+if "channel_offset_y" not in st.session_state.exchanger_data["components"]:
+    st.session_state.exchanger_data["components"]["channel_offset_y"] = 0
+    st.session_state.exchanger_data["components"]["shell_offset_y"] = 0
+    st.session_state.exchanger_data["components"]["bonnet_offset_y"] = 0
 
 # Carga automática si venimos redirigidos desde la página principal
 if "tag_para_diseño" in st.session_state:
@@ -421,7 +466,7 @@ if st.sidebar.button("🏠 Volver a Página Principal", use_container_width=True
 
 st.sidebar.divider()
 
-with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
+with st.sidebar.expander("📐 Secuencia, Dimensiones y Separación X/Y"):
     with st.form("form_edit_components"):
         st.write("**Secuencia de Izquierda a Derecha:**")
         current_seq = st.session_state.exchanger_data["components"]["sequence"]
@@ -435,7 +480,7 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
         chosen_seq_label = st.selectbox("Seleccione Secuencia:", seq_labels, index=default_idx)
 
         st.divider()
-        st.write("**Dimensiones Independientes de Componentes:**")
+        st.write("**Dimensiones Independientes:**")
         new_ch_len = st.slider("Largo Channel", 100, 250, int(st.session_state.exchanger_data["components"]["channel_length"]))
         new_ch_diam = st.slider("Diámetro Channel", 120, 260, int(st.session_state.exchanger_data["equipment"].get("channel_diameter", 170)))
         
@@ -444,6 +489,17 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
         
         new_bo_len = st.slider("Largo Bonnet", 60, 180, int(st.session_state.exchanger_data["components"]["bonnet_length"]))
         new_bonnet_diam = st.slider("Diámetro Bonnet", 120, 260, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)))
+
+        st.divider()
+        st.write("**Separación Horizontal (Gap X):**")
+        gap_cs = st.slider("Separación Channel ↔ Shell", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("CHANNEL_SHELL", 0)))
+        gap_sb = st.slider("Separación Shell ↔ Bonnet", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("SHELL_BONNET", 0)))
+
+        st.divider()
+        st.write("**Desplazamiento Vertical (Offset Y):**")
+        off_ch = st.slider("Desplazamiento Y (Channel)", -80, 80, int(st.session_state.exchanger_data["components"].get("channel_offset_y", 0)))
+        off_sh = st.slider("Desplazamiento Y (Shell)", -80, 80, int(st.session_state.exchanger_data["components"].get("shell_offset_y", 0)))
+        off_bo = st.slider("Desplazamiento Y (Bonnet)", -80, 80, int(st.session_state.exchanger_data["components"].get("bonnet_offset_y", 0)))
 
         if st.form_submit_button("Aplicar Cambios"):
             new_sequence = ["CHANNEL", "SHELL", "BONNET"] if chosen_seq_label.startswith("Channel") else ["BONNET", "SHELL", "CHANNEL"]
@@ -454,6 +510,14 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
             st.session_state.exchanger_data["equipment"]["channel_diameter"] = new_ch_diam
             st.session_state.exchanger_data["equipment"]["shell_diameter"] = new_diam
             st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = new_bonnet_diam
+            
+            st.session_state.exchanger_data["components"]["gaps"] = {
+                "CHANNEL_SHELL": gap_cs,
+                "SHELL_BONNET": gap_sb
+            }
+            st.session_state.exchanger_data["components"]["channel_offset_y"] = off_ch
+            st.session_state.exchanger_data["components"]["shell_offset_y"] = off_sh
+            st.session_state.exchanger_data["components"]["bonnet_offset_y"] = off_bo
             st.rerun()
 
 st.sidebar.divider()
@@ -519,10 +583,59 @@ with col_view:
     st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
-    components.html(
-        f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
-        height=520
-    )
+    # HTML + JS INTERACTIVO PARA PERMITIR ARRASTRAR (DRAG) PIEZAS Y BOQUILLAS CON EL MOUSE
+    html_interactive_content = f"""
+    <div id="svg-container" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center; user-select:none;">
+        {svg_code}
+    </div>
+    <script>
+        const svg = document.getElementById("exchanger-svg");
+        let selectedElement = null;
+        let offset = {{ x: 0, y: 0 }};
+
+        if (svg) {{
+            svg.addEventListener('mousedown', startDrag);
+            svg.addEventListener('mousemove', drag);
+            svg.addEventListener('mouseup', endDrag);
+            svg.addEventListener('mouseleave', endDrag);
+        }}
+
+        function startDrag(evt) {{
+            let target = evt.target.closest('.nozzle-group, .component-body, .saddle-body');
+            if (target) {{
+                selectedElement = target;
+                let CTM = svg.getScreenCTM();
+                offset.x = (evt.clientX - CTM.e) / CTM.a;
+                offset.y = (evt.clientY - CTM.f) / CTM.d;
+
+                let transform = selectedElement.getAttribute('transform');
+                if (transform) {{
+                    let match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
+                    if (match) {{
+                        offset.x -= parseFloat(match[1]);
+                        offset.y -= parseFloat(match[2]);
+                    }}
+                }}
+            }}
+        }}
+
+        function drag(evt) {{
+            if (selectedElement) {{
+                evt.preventDefault();
+                let CTM = svg.getScreenCTM();
+                let coordX = (evt.clientX - CTM.e) / CTM.a - offset.x;
+                let coordY = (evt.clientY - CTM.f) / CTM.d - offset.y;
+                selectedElement.setAttribute('transform', `translate(${{coordX}}, ${{coordY}})`);
+            }}
+        }}
+
+        function endDrag(evt) {{
+            selectedElement = null;
+        }}
+    </script>
+    """
+    
+    components.html(html_interactive_content, height=550)
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
     
@@ -558,7 +671,7 @@ with col_view:
 
     df_nozzles = pd.DataFrame(table_rows)
 
-    # ESTILOS CSS CON TAMAÑO UN 20% MÁS GRANDE (13.2px)
+    # ESTILOS CSS
     st.markdown("""
         <style>
         [data-testid="stTable"] {
@@ -590,7 +703,7 @@ with col_view:
 
     st.table(df_nozzles.style.hide(axis='index'))
 
-    # FOTO FRANJA2.PNG ROBUSTA (DEBAJO DE LA TABLA NOZZLE SCHEDULE)
+    # FOTO FRANJA2.PNG ROBUSTA
     st.markdown("<br>", unsafe_allow_html=True)
     
     rutas_franja = [
