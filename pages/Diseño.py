@@ -49,7 +49,9 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     orientation = config.get("equipment", {}).get("orientation", "HORIZONTAL")
     is_vertical = (orientation == "VERTICAL")
 
-    width, height = (550, 850) if is_vertical else (1100, 520)
+    # Mantenemos las dimensiones viewBox consistentes para no deformar la escala
+    width, height = 1100, 520
+    
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
@@ -63,11 +65,13 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     style.text = """
         .component-body { fill: url(#metal-gradient); stroke: #334155; stroke-width: 2.2; }
         .flange-joint { fill: url(#metal-dark-gradient); stroke: #1e293b; stroke-width: 1.8; }
-        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; cursor: pointer; }
+        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; cursor: grab; }
+        .saddle-body:active { cursor: grabbing; }
         .centerline { stroke: #ef4444; stroke-width: 1.2; stroke-dasharray: 8,4,2,4; }
         .connector-line { stroke: #0ea5e9; stroke-width: 2; stroke-dasharray: 5,4; }
         
-        .nozzle-group { cursor: pointer; }
+        .nozzle-group { cursor: grab; }
+        .nozzle-group:active { cursor: grabbing; }
         .nozzle-neck { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
         .nozzle-flange { fill: url(#metal-dark-gradient); stroke: #0f172a; stroke-width: 2; }
         .plug-body { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
@@ -96,12 +100,13 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
+    # Transformación limpia para mantener la proporción idéntica en Vertical
     if is_vertical:
-        main_g = ET.SubElement(svg, "g", {"transform": f"translate({width}, 0) rotate(90)"})
-        cy_base = 275
+        main_g = ET.SubElement(svg, "g", {"transform": "translate(810, -290) rotate(90)"})
     else:
         main_g = ET.SubElement(svg, "g")
-        cy_base = 250
+
+    cy_base = 250
 
     r_shell = config["equipment"]["shell_diameter"] / 2
     r_channel = config["equipment"].get("channel_diameter", config["equipment"]["shell_diameter"]) / 2
@@ -162,7 +167,14 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         is_sad_selected = (sad["id"] == selected_id)
         sad_class = "saddle-body selected" if is_sad_selected else "saddle-body"
         
-        sad_g = ET.SubElement(saddles_layer, "g", {"id": sad["id"], "class": sad_class, "data-id": sad["id"]})
+        sad_g = ET.SubElement(saddles_layer, "g", {
+            "id": sad["id"], 
+            "class": sad_class, 
+            "data-id": sad["id"],
+            "data-type": "saddle",
+            "data-comp-start": str(shell_info["start"]),
+            "data-comp-width": str(w_shell)
+        })
         ET.SubElement(sad_g, "path", {
             "d": f"M {sad_x - saddle_w/2} {saddle_y} L {sad_x - saddle_w/2 - 10} {saddle_y + saddle_h} L {sad_x + saddle_w/2 + 10} {saddle_y + saddle_h} L {sad_x + saddle_w/2} {saddle_y} Z",
             "class": "saddle-body"
@@ -250,13 +262,22 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     for noz in config["nozzles"]:
         is_selected = (noz["id"] == selected_id)
         group_class = "nozzle-group selected" if is_selected else "nozzle-group"
-        noz_g = ET.SubElement(nozzles_layer, "g", {"id": noz["id"], "class": group_class, "data-id": noz["id"]})
 
         comp = noz.get("component", "SHELL")
+        comp_data = coords.get(comp, coords["SHELL"])
+
+        noz_g = ET.SubElement(nozzles_layer, "g", {
+            "id": noz["id"], 
+            "class": group_class, 
+            "data-id": noz["id"],
+            "data-type": "nozzle",
+            "data-comp-start": str(comp_data["start"]),
+            "data-comp-width": str(widths[comp])
+        })
+
         ratio = float(noz.get("position_ratio", 0.5))
         style_type = noz.get("style", "FLANGED")
 
-        comp_data = coords.get(comp, coords["SHELL"])
         nx = comp_data["start"] + widths[comp] * ratio
         c_cy = comp_data["cy"]
 
@@ -554,12 +575,10 @@ st.title(f"🛠️ Constructor Paramétrico: {st.session_state.exchanger_data['e
 
 col_view, col_control = st.columns([2.3, 1])
 
-# Opciones combinadas para el selector de edición
 nozzle_options = {f"📌 Boquilla: {noz['tag']} ({noz['component']})": noz['id'] for noz in st.session_state.exchanger_data["nozzles"]}
 saddle_options = {f"🛋️ Soporte: {sad['tag']}": sad['id'] for sad in st.session_state.exchanger_data["saddles"]}
 all_options = {**nozzle_options, **saddle_options}
 
-# Selector ubicado exactamente en la columna derecha superior
 with col_control:
     st.subheader("📝 Edición de Elemento")
     if all_options:
@@ -577,13 +596,52 @@ with col_view:
     st.subheader(f"Plano Esquemático ({sel_orient}) - {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
-    container_height = 880 if sel_orient == "VERTICAL" else 540
+    container_height = 650 if sel_orient == "VERTICAL" else 540
     
-    # Render con interacción JS integrada directamente en el recuadro
+    # Motor de Arrastre JS en tiempo real
     html_content = f"""
     <div id="svg-wrap" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center; user-select:none;">
         {svg_code}
     </div>
+    <script>
+        const svg = document.getElementById("exchanger-svg");
+        let activeElem = null;
+        let startX = 0;
+        let compStart = 0;
+        let compWidth = 0;
+
+        if (svg) {{
+            svg.addEventListener('mousedown', (e) => {{
+                let target = e.target.closest('[data-id]');
+                if (target) {{
+                    activeElem = target;
+                    let ctm = svg.getScreenCTM();
+                    startX = (e.clientX - ctm.e) / ctm.a;
+                    compStart = parseFloat(target.getAttribute('data-comp-start') || 0);
+                    compWidth = parseFloat(target.getAttribute('data-comp-width') || 100);
+                }}
+            }});
+
+            svg.addEventListener('mousemove', (e) => {{
+                if (activeElem) {{
+                    e.preventDefault();
+                    let ctm = svg.getScreenCTM();
+                    let currentX = (e.clientX - ctm.e) / ctm.a;
+                    let newRatio = (currentX - compStart) / compWidth;
+                    newRatio = Math.max(0.05, Math.min(0.95, newRatio));
+                    
+                    activeElem.setAttribute('transform', `translate(${{(currentX - startX)}}, 0)`);
+                }}
+            }});
+
+            const stopDrag = () => {{
+                activeElem = null;
+            }};
+
+            svg.addEventListener('mouseup', stopDrag);
+            svg.addEventListener('mouseleave', stopDrag);
+        }}
+    </script>
     """
     components.html(html_content, height=container_height)
 
@@ -696,8 +754,7 @@ with col_control:
             d3, d4 = st.columns(2)
             selected_noz["side"] = d3.selectbox("Lado", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1, key=f"noz_sd_{selected_noz['id']}")
             
-            # Ajuste de posición instantáneo
-            selected_noz["position_ratio"] = st.slider("Posición Pos. %", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
+            selected_noz["position_ratio"] = d4.slider("Posición %", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
 
             if st.button(f"🗑️ Eliminar {selected_noz['tag']}", use_container_width=True):
                 st.session_state.exchanger_data["nozzles"] = [n for n in st.session_state.exchanger_data["nozzles"] if n["id"] != selected_id]
