@@ -43,7 +43,7 @@ def obtener_lista_equipos_oficiales():
 
 
 # ==========================================
-# 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES (HORIZONTAL / VERTICAL)
+# 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
     orientation = config.get("equipment", {}).get("orientation", "HORIZONTAL")
@@ -95,7 +95,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
-    # Grupo principal con rotación opcional si la orientación es VERTICAL
     if is_vertical:
         main_g = ET.SubElement(svg, "g", {"transform": f"translate({width}, 0) rotate(90)"})
         cy_base = 275
@@ -206,7 +205,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
             # Dibujo dinámico de líneas conectoras superiores e inferiores
             if gap_val > 0 or abs(p_cy - c_cy) > 0 or flg_ox != 0 or flg_oy != 0:
-                # Conector 1: Cuerpo Izq/Sup -> Placa
                 ET.SubElement(main_g, "line", {
                     "x1": str(p_end), "y1": str(p_cy - p_r),
                     "x2": str(flange_x), "y2": str(flange_cy - max_r_joint),
@@ -217,7 +215,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                     "x2": str(flange_x), "y2": str(flange_cy + max_r_joint),
                     "class": "connector-line"
                 })
-                # Conector 2: Placa -> Cuerpo Der/Inf
                 ET.SubElement(main_g, "line", {
                     "x1": str(flange_x + 12), "y1": str(flange_cy - max_r_joint),
                     "x2": str(c_start), "y2": str(c_cy - c_r),
@@ -394,7 +391,7 @@ if "tag_para_diseño" in st.session_state:
             pass
 
 # ==========================================
-# 3. INTERFAZ Y BARRA LATERAL COMPACTA
+# 3. BARRA LATERAL COMPACTA (CONFIGURACIÓN GENERAL)
 # ==========================================
 st.sidebar.markdown("### 🏷️ Equipo Seleccionado")
 
@@ -474,13 +471,10 @@ if st.sidebar.button("🏠 Inicio", use_container_width=True):
 
 st.sidebar.divider()
 
-# ==========================================
-# CONTROLES COMPACTOS EN EL SIDEBAR
-# ==========================================
-st.sidebar.markdown("#### ⚙️ Orientación del Equipo")
+st.sidebar.markdown("#### ⚙️ Posición de Montaje")
 orient_opciones = ["HORIZONTAL", "VERTICAL"]
 idx_orient = orient_opciones.index(st.session_state.exchanger_data["equipment"].get("orientation", "HORIZONTAL"))
-sel_orient = st.sidebar.radio("Posición de montaje:", orient_opciones, index=idx_orient, horizontal=True)
+sel_orient = st.sidebar.radio("Orientación:", orient_opciones, index=idx_orient, horizontal=True)
 st.session_state.exchanger_data["equipment"]["orientation"] = sel_orient
 
 st.sidebar.divider()
@@ -501,7 +495,7 @@ with st.sidebar.expander("📐 Cuerpos (Largo / Diámetro)", expanded=True):
     st.session_state.exchanger_data["components"]["bonnet_length"] = c5.number_input("Largo", 50, 250, int(st.session_state.exchanger_data["components"]["bonnet_length"]), step=5, key="num_bo_len")
     st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = c6.number_input("Diámetro", 100, 300, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)), step=5, key="num_bo_diam")
 
-with st.sidebar.expander("🔗 Separación X / Desplazamiento Y", expanded=False):
+with st.sidebar.expander("🔗 Separación X / Placas de Unión", expanded=False):
     st.caption("Gaps / Separación X")
     g1, g2 = st.columns(2)
     gap_cs = g1.number_input("Channel-Shell", 0, 200, int(st.session_state.exchanger_data["components"]["gaps"].get("CHANNEL_SHELL", 0)), step=5, key="n_gap_cs")
@@ -574,18 +568,31 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
         })
         st.rerun()
 
-st.sidebar.divider()
-
-nozzle_options = {f"📌 {noz['tag']} ({noz['component']})": noz['id'] for noz in st.session_state.exchanger_data["nozzles"]}
-saddle_options = {f"🛋️ {sad['tag']}": sad['id'] for sad in st.session_state.exchanger_data["saddles"]}
-all_options = {**nozzle_options, **saddle_options}
-
-selected_label = st.sidebar.radio("🔍 Elemento a Editar:", options=list(all_options.keys()) if all_options else [])
-selected_id = all_options.get(selected_label)
-
+# ==========================================
+# 4. ÁREA PRINCIPAL Y PANEL DERECHO
+# ==========================================
 st.title(f"🛠️ Constructor Paramétrico: {st.session_state.exchanger_data['equipment']['tag']}")
 
 col_view, col_control = st.columns([2.3, 1])
+
+# Opciones combinadas para el selector de edición
+nozzle_options = {f"📌 Boquilla: {noz['tag']} ({noz['component']})": noz['id'] for noz in st.session_state.exchanger_data["nozzles"]}
+saddle_options = {f"🛋️ Soporte: {sad['tag']}": sad['id'] for sad in st.session_state.exchanger_data["saddles"]}
+all_options = {**nozzle_options, **saddle_options}
+
+# Selector ubicado en la columna derecha superior
+with col_control:
+    st.subheader("📝 Edición de Elemento")
+    if all_options:
+        selected_label = st.selectbox(
+            "🔍 Seleccionar Elemento:", 
+            options=list(all_options.keys()),
+            key="right_panel_element_selector"
+        )
+        selected_id = all_options.get(selected_label)
+    else:
+        selected_id = None
+        st.caption("No hay elementos para editar.")
 
 with col_view:
     st.subheader(f"Plano Esquemático ({sel_orient}) - {st.session_state.exchanger_data['equipment']['tag']}")
@@ -691,8 +698,11 @@ with col_view:
         except Exception:
             pass
 
+# ==========================================
+# EDICIÓN RECTIFICADA EN EL PANEL DERECHO
+# ==========================================
 with col_control:
-    tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Boq. / Tapón", "🔌 NS/FS (Editar)", "🛋️ Soportes"])
+    tab_noz, tab_aux, tab_saddles = st.tabs(["⚙️ Detalle Elemento", "🔌 NS/FS Auxiliares", "🛋️ Soportes"])
 
     selected_noz = next((n for n in st.session_state.exchanger_data["nozzles"] if n["id"] == selected_id), None)
 
@@ -709,18 +719,21 @@ with col_control:
             selected_noz["style"] = st.selectbox("Representación", ["FLANGED", "TAPÓN / COUPLING"], index=0 if selected_noz.get("style", "FLANGED") == "FLANGED" else 1, key=f"noz_stl_{selected_noz['id']}")
             selected_noz["component"] = st.selectbox("Componente:", ["CHANNEL", "SHELL", "BONNET"], index=["CHANNEL", "SHELL", "BONNET"].index(selected_noz.get("component", "SHELL")), key=f"noz_cmp_{selected_noz['id']}")
             
-            selected_noz["size"] = st.text_input("Tamaño", value=selected_noz.get("size", ""), key=f"noz_sz_{selected_noz['id']}")
-            selected_noz["rating"] = st.text_input("Rating", value=selected_noz.get("rating", ""), key=f"noz_rt_{selected_noz['id']}")
+            d1, d2 = st.columns(2)
+            selected_noz["size"] = d1.text_input("Tamaño", value=selected_noz.get("size", ""), key=f"noz_sz_{selected_noz['id']}")
+            selected_noz["rating"] = d2.text_input("Rating", value=selected_noz.get("rating", ""), key=f"noz_rt_{selected_noz['id']}")
+            
             selected_noz["type"] = st.text_input("Tipo (ej. RF WN)", value=selected_noz.get("type", ""), key=f"noz_tp_{selected_noz['id']}")
             
-            selected_noz["side"] = st.selectbox("Orientación", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1, key=f"noz_sd_{selected_noz['id']}")
-            selected_noz["position_ratio"] = st.slider("Posición horizontal", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
+            d3, d4 = st.columns(2)
+            selected_noz["side"] = d3.selectbox("Lado", ["TOP", "BOTTOM"], index=0 if selected_noz.get("side")=="TOP" else 1, key=f"noz_sd_{selected_noz['id']}")
+            selected_noz["position_ratio"] = d4.slider("Posición %", 0.05, 0.95, float(selected_noz.get("position_ratio", 0.5)), key=f"noz_pr_{selected_noz['id']}")
 
-            if st.button(f"🗑️ Eliminar {selected_noz['tag']}"):
+            if st.button(f"🗑️ Eliminar {selected_noz['tag']}", use_container_width=True):
                 st.session_state.exchanger_data["nozzles"] = [n for n in st.session_state.exchanger_data["nozzles"] if n["id"] != selected_id]
                 st.rerun()
         else:
-            st.caption("Selecciona una boquilla en la barra lateral.")
+            st.caption("Selecciona una boquilla en el desplegable superior.")
 
     with tab_aux:
         st.write("**Rating Global de Auxiliares:**")
@@ -757,6 +770,8 @@ with col_control:
 
     with tab_saddles:
         st.write("**Soportes de Apoyo:**")
+        selected_sad = next((s for s in st.session_state.exchanger_data.get("saddles", []) if s["id"] == selected_id), None)
+        
         for idx, sad in enumerate(st.session_state.exchanger_data.get("saddles", [])):
             with st.expander(f"🛋️ {sad['tag']}", expanded=(sad["id"] == selected_id)):
                 sad["tag"] = st.text_input("Nombre", value=sad["tag"], key=f"sad_tag_{sad['id']}")
