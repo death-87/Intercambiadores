@@ -43,10 +43,13 @@ def obtener_lista_equipos_oficiales():
 
 
 # ==========================================
-# 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES
+# 1. MOTOR SVG PARAMÉTRICO DE COMPONENTES (HORIZONTAL / VERTICAL)
 # ==========================================
 def generate_modular_exchanger_svg(config, selected_id=None):
-    width, height = 1100, 520
+    orientation = config.get("equipment", {}).get("orientation", "HORIZONTAL")
+    is_vertical = (orientation == "VERTICAL")
+
+    width, height = (550, 850) if is_vertical else (1100, 520)
     svg = ET.Element("svg", {
         "xmlns": "http://www.w3.org/2000/svg",
         "viewBox": f"0 0 {width} {height}",
@@ -56,20 +59,17 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     })
 
     defs = ET.SubElement(svg, "defs")
-    
     style = ET.SubElement(defs, "style")
     style.text = """
-        .component-body { fill: url(#metal-gradient); stroke: #334155; stroke-width: 2.2; cursor: grab; }
-        .component-body:active { cursor: grabbing; }
-        .flange-joint { fill: url(#metal-dark-gradient); stroke: #1e293b; stroke-width: 1.8; cursor: pointer; }
-        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; transition: all 0.2s; cursor: pointer; }
+        .component-body { fill: url(#metal-gradient); stroke: #334155; stroke-width: 2.2; }
+        .flange-joint { fill: url(#metal-dark-gradient); stroke: #1e293b; stroke-width: 1.8; }
+        .saddle-body { fill: #64748b; stroke: #0f172a; stroke-width: 2; }
         .centerline { stroke: #ef4444; stroke-width: 1.2; stroke-dasharray: 8,4,2,4; }
-        .connector-line { stroke: #0ea5e9; stroke-width: 1.8; stroke-dasharray: 4,4; }
+        .connector-line { stroke: #0ea5e9; stroke-width: 2; stroke-dasharray: 5,4; }
         
-        .nozzle-neck { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; cursor: pointer; }
-        .nozzle-flange { fill: url(#metal-dark-gradient); stroke: #0f172a; stroke-width: 2; cursor: pointer; }
-        
-        .plug-body { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; cursor: pointer; }
+        .nozzle-neck { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
+        .nozzle-flange { fill: url(#metal-dark-gradient); stroke: #0f172a; stroke-width: 2; }
+        .plug-body { fill: url(#metal-gradient); stroke: #1e293b; stroke-width: 1.8; }
         .plug-line { stroke: #1e293b; stroke-width: 1.5; }
 
         .selected .nozzle-flange { fill: #0ea5e9 !important; stroke: #0369a1 !important; }
@@ -80,7 +80,6 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
         .nozzle-text { font-family: monospace; font-size: 13px; font-weight: bold; fill: #0f172a; text-anchor: middle; }
         .comp-label { font-family: sans-serif; font-size: 11px; font-weight: 700; fill: #334155; text-anchor: middle; }
-        
         .marker-aux { fill: #ffffff; stroke: #0f172a; stroke-width: 1.2; }
         .text-aux { font-family: sans-serif; font-size: 8px; font-weight: bold; fill: #0f172a; text-anchor: middle; dominant-baseline: central; }
     """
@@ -96,27 +95,26 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     ET.SubElement(metal_dark, "stop", {"offset": "50%", "stop-color": "#475569"})
     ET.SubElement(metal_dark, "stop", {"offset": "100%", "stop-color": "#334155"})
 
-    cy_base = 250
-    
-    # Diámetros
+    # Grupo principal con rotación opcional si la orientación es VERTICAL
+    if is_vertical:
+        main_g = ET.SubElement(svg, "g", {"transform": f"translate({width}, 0) rotate(90)"})
+        cy_base = 275
+    else:
+        main_g = ET.SubElement(svg, "g")
+        cy_base = 250
+
     r_shell = config["equipment"]["shell_diameter"] / 2
     r_channel = config["equipment"].get("channel_diameter", config["equipment"]["shell_diameter"]) / 2
     r_bonnet = config["equipment"].get("bonnet_diameter", config["equipment"]["shell_diameter"]) / 2
     
-    radii = {
-        "CHANNEL": r_channel,
-        "SHELL": r_shell,
-        "BONNET": r_bonnet
-    }
+    radii = {"CHANNEL": r_channel, "SHELL": r_shell, "BONNET": r_bonnet}
 
-    # Desplazamientos Y
     offset_y = {
         "CHANNEL": config["components"].get("channel_offset_y", 0),
         "SHELL": config["components"].get("shell_offset_y", 0),
         "BONNET": config["components"].get("bonnet_offset_y", 0)
     }
 
-    # Desplazamientos/Gaps X
     gaps = config["components"].get("gaps", {"CHANNEL_SHELL": 0, "SHELL_BONNET": 0})
     flange_offsets = config["components"].get("flange_offsets", {
         "CHANNEL_SHELL_X": 0, "CHANNEL_SHELL_Y": 0,
@@ -126,17 +124,12 @@ def generate_modular_exchanger_svg(config, selected_id=None):
     w_channel = config["components"]["channel_length"]
     w_shell = config["components"]["shell_length"]
     w_bonnet = config["components"]["bonnet_length"]
+    widths = {"CHANNEL": w_channel, "SHELL": w_shell, "BONNET": w_bonnet}
     
     seq = config["components"].get("sequence", ["CHANNEL", "SHELL", "BONNET"])
 
     x_current = 120
     coords = {}
-    
-    widths = {
-        "CHANNEL": w_channel,
-        "SHELL": w_shell,
-        "BONNET": w_bonnet
-    }
 
     for idx, comp in enumerate(seq):
         if idx > 0:
@@ -152,15 +145,13 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         }
         x_current = coords[comp]["end"]
 
-    main_layer = ET.SubElement(svg, "g", {"id": "assembly-layer"})
-
     # Eje de centro
-    ET.SubElement(main_layer, "line", {
+    ET.SubElement(main_g, "line", {
         "x1": "30", "y1": str(cy_base), "x2": str(x_current + 40), "y2": str(cy_base), "class": "centerline"
     })
 
     # Soportes (Saddles)
-    saddles_layer = ET.SubElement(main_layer, "g", {"id": "saddles-layer"})
+    saddles_layer = ET.SubElement(main_g, "g", {"id": "saddles-layer"})
     shell_info = coords.get("SHELL", {"start": 140, "end": 140 + w_shell, "cy": cy_base})
     saddle_y = shell_info["cy"] + r_shell
     saddle_w, saddle_h = 28, 45
@@ -177,7 +168,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
             "class": "saddle-body"
         })
 
-    # Dibujo de Componentes, Bridas Independientes y Conectores
+    # Dibujo de Componentes, Bridas y Líneas Conectoras
     for idx, comp in enumerate(seq):
         c_start = coords[comp]["start"]
         c_end = coords[comp]["end"]
@@ -203,7 +194,8 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
             fill_style = "url(#metal-gradient)" if gap_val == 0 else "url(#metal-dark-gradient)"
 
-            ET.SubElement(main_layer, "rect", {
+            # Placa / Brida entre cuerpos
+            ET.SubElement(main_g, "rect", {
                 "x": str(flange_x),
                 "y": str(flange_cy - max_r_joint - 8),
                 "width": "12",
@@ -212,35 +204,38 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 "style": f"fill: {fill_style};"
             })
 
-            if gap_val > 0 or abs(p_cy - c_cy) > 0:
-                ET.SubElement(main_layer, "line", {
+            # Dibujo dinámico de líneas conectoras superiores e inferiores
+            if gap_val > 0 or abs(p_cy - c_cy) > 0 or flg_ox != 0 or flg_oy != 0:
+                # Conector 1: Cuerpo Izq/Sup -> Placa
+                ET.SubElement(main_g, "line", {
                     "x1": str(p_end), "y1": str(p_cy - p_r),
                     "x2": str(flange_x), "y2": str(flange_cy - max_r_joint),
                     "class": "connector-line"
                 })
-                ET.SubElement(main_layer, "line", {
+                ET.SubElement(main_g, "line", {
                     "x1": str(p_end), "y1": str(p_cy + p_r),
                     "x2": str(flange_x), "y2": str(flange_cy + max_r_joint),
                     "class": "connector-line"
                 })
-                ET.SubElement(main_layer, "line", {
+                # Conector 2: Placa -> Cuerpo Der/Inf
+                ET.SubElement(main_g, "line", {
                     "x1": str(flange_x + 12), "y1": str(flange_cy - max_r_joint),
                     "x2": str(c_start), "y2": str(c_cy - c_r),
                     "class": "connector-line"
                 })
-                ET.SubElement(main_layer, "line", {
+                ET.SubElement(main_g, "line", {
                     "x1": str(flange_x + 12), "y1": str(flange_cy + max_r_joint),
                     "x2": str(c_start), "y2": str(c_cy + c_r),
                     "class": "connector-line"
                 })
 
         if comp == "SHELL":
-            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(c_cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body", "id": "comp-SHELL"})
-            ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(c_cy + 4), "class": "comp-label"}).text = "SHELL"
+            ET.SubElement(main_g, "rect", {"x": str(c_start), "y": str(c_cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body"})
+            ET.SubElement(main_g, "text", {"x": str(c_start + c_width/2), "y": str(c_cy + 4), "class": "comp-label"}).text = "SHELL"
 
         elif comp == "CHANNEL":
-            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(c_cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body", "id": "comp-CHANNEL"})
-            ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(c_cy + 4), "class": "comp-label"}).text = "CHANNEL"
+            ET.SubElement(main_g, "rect", {"x": str(c_start), "y": str(c_cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body"})
+            ET.SubElement(main_g, "text", {"x": str(c_start + c_width/2), "y": str(c_cy + 4), "class": "comp-label"}).text = "CHANNEL"
 
         elif comp == "BONNET":
             if idx == 0:
@@ -250,11 +245,11 @@ def generate_modular_exchanger_svg(config, selected_id=None):
                 bonnet_path = f"M {c_start} {c_cy - c_r} L {c_start + 20} {c_cy - c_r} A {c_r} {c_r} 0 0 1 {c_start + 20} {c_cy + c_r} L {c_start} {c_cy + c_r} Z"
                 label_x = c_start + 30
 
-            ET.SubElement(main_layer, "path", {"d": bonnet_path, "class": "component-body", "id": "comp-BONNET"})
-            ET.SubElement(main_layer, "text", {"x": str(label_x), "y": str(c_cy + 4), "class": "comp-label"}).text = "BONNET"
+            ET.SubElement(main_g, "path", {"d": bonnet_path, "class": "component-body"})
+            ET.SubElement(main_g, "text", {"x": str(label_x), "y": str(c_cy + 4), "class": "comp-label"}).text = "BONNET"
 
     # Boquillas
-    nozzles_layer = ET.SubElement(svg, "g", {"id": "nozzles-layer"})
+    nozzles_layer = ET.SubElement(main_g, "g", {"id": "nozzles-layer"})
 
     for noz in config["nozzles"]:
         is_selected = (noz["id"] == selected_id)
@@ -350,7 +345,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 # ==========================================
 if "exchanger_data" not in st.session_state:
     st.session_state.exchanger_data = {
-        "equipment": {"tag": "C702", "shell_diameter": 170, "channel_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
+        "equipment": {"tag": "C702", "orientation": "HORIZONTAL", "shell_diameter": 170, "channel_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
         "components": {
             "channel_length": 150,
             "shell_length": 420,
@@ -377,6 +372,9 @@ if "exchanger_data" not in st.session_state:
         ]
     }
 
+if "orientation" not in st.session_state.exchanger_data["equipment"]:
+    st.session_state.exchanger_data["equipment"]["orientation"] = "HORIZONTAL"
+
 if "flange_offsets" not in st.session_state.exchanger_data["components"]:
     st.session_state.exchanger_data["components"]["flange_offsets"] = {
         "CHANNEL_SHELL_X": 0, "CHANNEL_SHELL_Y": 0,
@@ -396,9 +394,9 @@ if "tag_para_diseño" in st.session_state:
             pass
 
 # ==========================================
-# 3. INTERFAZ Y BARRA LATERAL
+# 3. INTERFAZ Y BARRA LATERAL COMPACTA
 # ==========================================
-st.sidebar.markdown("### 🏷️ Equipo Seleccionado (Tabla Google Sheets)")
+st.sidebar.markdown("### 🏷️ Equipo Seleccionado")
 
 lista_equipos_oficiales = obtener_lista_equipos_oficiales()
 tag_actual = st.session_state.exchanger_data["equipment"].get("tag", "C702")
@@ -406,12 +404,11 @@ tag_actual = st.session_state.exchanger_data["equipment"].get("tag", "C702")
 if lista_equipos_oficiales:
     idx_default = lista_equipos_oficiales.index(tag_actual) if tag_actual in lista_equipos_oficiales else 0
     selected_tag_from_list = st.sidebar.selectbox(
-        "Seleccionar TAG oficial (Columna 'Equipo'):", 
+        "TAG oficial:", 
         options=lista_equipos_oficiales, 
         index=idx_default,
         key="select_official_tag"
     )
-    
     if selected_tag_from_list != st.session_state.exchanger_data["equipment"].get("tag"):
         st.session_state.exchanger_data["equipment"]["tag"] = selected_tag_from_list
         archivo_sel = f"config_{selected_tag_from_list}.json"
@@ -424,7 +421,7 @@ if lista_equipos_oficiales:
         st.rerun()
     tag_actual = selected_tag_from_list
 else:
-    tag_actual = st.sidebar.text_input("TAG del Intercambiador:", value=tag_actual)
+    tag_actual = st.sidebar.text_input("TAG:", value=tag_actual)
     st.session_state.exchanger_data["equipment"]["tag"] = tag_actual
 
 archivo_json = f"config_{tag_actual}.json"
@@ -433,7 +430,6 @@ col_save1, col_save2 = st.sidebar.columns(2)
 with col_save1:
     if st.button("💾 Guardar", type="primary", use_container_width=True):
         st.session_state.exchanger_data["equipment"]["tag"] = tag_actual
-        
         json_str = json.dumps(st.session_state.exchanger_data, indent=4, ensure_ascii=False)
         with open(archivo_json, "w", encoding="utf-8") as f:
             f.write(json_str)
@@ -456,19 +452,19 @@ with col_save1:
                 envio_cloud_ok = False
 
         if envio_cloud_ok:
-            st.sidebar.success(f"¡Guardado local y en Google Drive para {tag_actual}!")
+            st.sidebar.success(f"¡Guardado en Drive: {tag_actual}!")
         else:
-            st.sidebar.success(f"¡Guardado local para {tag_actual}!")
+            st.sidebar.success(f"¡Guardado local: {tag_actual}!")
 
 with col_save2:
     if os.path.exists(archivo_json):
         if st.button("📂 Cargar", use_container_width=True):
             with open(archivo_json, "r", encoding="utf-8") as f:
                 st.session_state.exchanger_data = json.load(f)
-            st.sidebar.success(f"¡Cargado desde {archivo_json}!")
+            st.sidebar.success(f"¡Cargado {archivo_json}!")
             st.rerun()
 
-if st.sidebar.button("🏠 Volver a Página Principal", use_container_width=True):
+if st.sidebar.button("🏠 Inicio", use_container_width=True):
     for root_page in ["Intercambiadores.py", "intercambiadores.py"]:
         try:
             st.switch_page(root_page)
@@ -479,57 +475,58 @@ if st.sidebar.button("🏠 Volver a Página Principal", use_container_width=True
 st.sidebar.divider()
 
 # ==========================================
-# CONTROLES DIRECTOS (SIN BOTÓN GUARDAR)
+# CONTROLES COMPACTOS EN EL SIDEBAR
 # ==========================================
-with st.sidebar.expander("📐 Secuencia, Dimensiones y Placas de Unión", expanded=True):
-    st.write("**Secuencia de Izquierda a Derecha:**")
-    current_seq = st.session_state.exchanger_data["components"]["sequence"]
-    seq_labels = [
-        "Channel (Izq) -> Shell -> Bonnet (Der)",
-        "Bonnet (Izq) -> Shell -> Channel (Der)"
-    ]
-    default_idx = 0 if current_seq == ["CHANNEL", "SHELL", "BONNET"] else 1
-    
-    chosen_seq_label = st.selectbox("Seleccione Secuencia:", seq_labels, index=default_idx, key="seq_sel")
-    st.session_state.exchanger_data["components"]["sequence"] = ["CHANNEL", "SHELL", "BONNET"] if chosen_seq_label.startswith("Channel") else ["BONNET", "SHELL", "CHANNEL"]
+st.sidebar.markdown("#### ⚙️ Orientación del Equipo")
+orient_opciones = ["HORIZONTAL", "VERTICAL"]
+idx_orient = orient_opciones.index(st.session_state.exchanger_data["equipment"].get("orientation", "HORIZONTAL"))
+sel_orient = st.sidebar.radio("Posición de montaje:", orient_opciones, index=idx_orient, horizontal=True)
+st.session_state.exchanger_data["equipment"]["orientation"] = sel_orient
 
-    st.divider()
-    st.write("**Dimensiones Independientes:**")
-    st.session_state.exchanger_data["components"]["channel_length"] = st.slider("Largo Channel", 100, 250, int(st.session_state.exchanger_data["components"]["channel_length"]), key="s_ch_len")
-    st.session_state.exchanger_data["equipment"]["channel_diameter"] = st.slider("Diámetro Channel", 120, 260, int(st.session_state.exchanger_data["equipment"].get("channel_diameter", 170)), key="s_ch_diam")
-    
-    st.session_state.exchanger_data["components"]["shell_length"] = st.slider("Largo Shell", 250, 650, int(st.session_state.exchanger_data["components"]["shell_length"]), key="s_sh_len")
-    st.session_state.exchanger_data["equipment"]["shell_diameter"] = st.slider("Diámetro Shell", 120, 260, int(st.session_state.exchanger_data["equipment"]["shell_diameter"]), key="s_sh_diam")
-    
-    st.session_state.exchanger_data["components"]["bonnet_length"] = st.slider("Largo Bonnet", 60, 180, int(st.session_state.exchanger_data["components"]["bonnet_length"]), key="s_bo_len")
-    st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = st.slider("Diámetro Bonnet", 120, 260, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)), key="s_bo_diam")
+st.sidebar.divider()
 
-    st.divider()
-    st.write("**Separación Horizontal (Gap X):**")
-    gap_cs = st.slider("Separación Channel ↔ Shell", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("CHANNEL_SHELL", 0)), key="s_gap_cs")
-    gap_sb = st.slider("Separación Shell ↔ Bonnet", 0, 150, int(st.session_state.exchanger_data["components"]["gaps"].get("SHELL_BONNET", 0)), key="s_gap_sb")
+with st.sidebar.expander("📐 Cuerpos (Largo / Diámetro)", expanded=True):
+    st.caption("Channel")
+    c1, c2 = st.columns(2)
+    st.session_state.exchanger_data["components"]["channel_length"] = c1.number_input("Largo", 80, 300, int(st.session_state.exchanger_data["components"]["channel_length"]), step=5, key="num_ch_len")
+    st.session_state.exchanger_data["equipment"]["channel_diameter"] = c2.number_input("Diámetro", 100, 300, int(st.session_state.exchanger_data["equipment"].get("channel_diameter", 170)), step=5, key="num_ch_diam")
+
+    st.caption("Shell")
+    c3, c4 = st.columns(2)
+    st.session_state.exchanger_data["components"]["shell_length"] = c3.number_input("Largo", 150, 800, int(st.session_state.exchanger_data["components"]["shell_length"]), step=10, key="num_sh_len")
+    st.session_state.exchanger_data["equipment"]["shell_diameter"] = c4.number_input("Diámetro", 100, 300, int(st.session_state.exchanger_data["equipment"]["shell_diameter"]), step=5, key="num_sh_diam")
+
+    st.caption("Bonnet")
+    c5, c6 = st.columns(2)
+    st.session_state.exchanger_data["components"]["bonnet_length"] = c5.number_input("Largo", 50, 250, int(st.session_state.exchanger_data["components"]["bonnet_length"]), step=5, key="num_bo_len")
+    st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = c6.number_input("Diámetro", 100, 300, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)), step=5, key="num_bo_diam")
+
+with st.sidebar.expander("🔗 Separación X / Desplazamiento Y", expanded=False):
+    st.caption("Gaps / Separación X")
+    g1, g2 = st.columns(2)
+    gap_cs = g1.number_input("Channel-Shell", 0, 200, int(st.session_state.exchanger_data["components"]["gaps"].get("CHANNEL_SHELL", 0)), step=5, key="n_gap_cs")
+    gap_sb = g2.number_input("Shell-Bonnet", 0, 200, int(st.session_state.exchanger_data["components"]["gaps"].get("SHELL_BONNET", 0)), step=5, key="n_gap_sb")
     st.session_state.exchanger_data["components"]["gaps"] = {"CHANNEL_SHELL": gap_cs, "SHELL_BONNET": gap_sb}
 
-    st.divider()
-    st.write("**Desplazamiento Placa/Brida de Unión (Channel ↔ Shell):**")
-    flg_cs_x = st.slider("Desplazar Placa C-S (X)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_X", 0)), key="s_flg_cs_x")
-    flg_cs_y = st.slider("Desplazar Placa C-S (Y)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_Y", 0)), key="s_flg_cs_y")
+    st.caption("Posición de Brida / Placa de Unión")
+    f1, f2 = st.columns(2)
+    flg_cs_x = f1.number_input("Placa C-S (X)", -80, 80, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_X", 0)), step=2, key="n_flg_cs_x")
+    flg_cs_y = f2.number_input("Placa C-S (Y)", -80, 80, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("CHANNEL_SHELL_Y", 0)), step=2, key="n_flg_cs_y")
 
-    st.divider()
-    st.write("**Desplazamiento Placa/Brida de Unión (Shell ↔ Bonnet):**")
-    flg_sb_x = st.slider("Desplazar Placa S-B (X)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_X", 0)), key="s_flg_sb_x")
-    flg_sb_y = st.slider("Desplazar Placa S-B (Y)", -50, 50, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_Y", 0)), key="s_flg_sb_y")
+    f3, f4 = st.columns(2)
+    flg_sb_x = f3.number_input("Placa S-B (X)", -80, 80, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_X", 0)), step=2, key="n_flg_sb_x")
+    flg_sb_y = f4.number_input("Placa S-B (Y)", -80, 80, int(st.session_state.exchanger_data["components"]["flange_offsets"].get("SHELL_BONNET_Y", 0)), step=2, key="n_flg_sb_y")
 
     st.session_state.exchanger_data["components"]["flange_offsets"] = {
         "CHANNEL_SHELL_X": flg_cs_x, "CHANNEL_SHELL_Y": flg_cs_y,
         "SHELL_BONNET_X": flg_sb_x, "SHELL_BONNET_Y": flg_sb_y
     }
 
-    st.divider()
-    st.write("**Desplazamiento Vertical Cuerpos (Offset Y):**")
-    st.session_state.exchanger_data["components"]["channel_offset_y"] = st.slider("Desplazamiento Y (Channel)", -80, 80, int(st.session_state.exchanger_data["components"].get("channel_offset_y", 0)), key="s_off_ch")
-    st.session_state.exchanger_data["components"]["shell_offset_y"] = st.slider("Desplazamiento Y (Shell)", -80, 80, int(st.session_state.exchanger_data["components"].get("shell_offset_y", 0)), key="s_off_sh")
-    st.session_state.exchanger_data["components"]["bonnet_offset_y"] = st.slider("Desplazamiento Y (Bonnet)", -80, 80, int(st.session_state.exchanger_data["components"].get("bonnet_offset_y", 0)), key="s_off_bo")
+    st.caption("Desplazamiento Vertical (Offset Y)")
+    o1, o2, o3 = st.columns(3)
+    st.session_state.exchanger_data["components"]["channel_offset_y"] = o1.number_input("Channel Y", -100, 100, int(st.session_state.exchanger_data["components"].get("channel_offset_y", 0)), step=5, key="n_off_ch")
+    st.session_state.exchanger_data["components"]["shell_offset_y"] = o2.number_input("Shell Y", -100, 100, int(st.session_state.exchanger_data["components"].get("shell_offset_y", 0)), step=5, key="n_off_sh")
+    st.session_state.exchanger_data["components"]["bonnet_offset_y"] = o3.number_input("Bonnet Y", -100, 100, int(st.session_state.exchanger_data["components"].get("bonnet_offset_y", 0)), step=5, key="n_off_bo")
 
 st.sidebar.divider()
 
@@ -541,13 +538,15 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
     default_prefix = prefix_map.get(new_srv, "S")
     count_srv = sum(1 for n in st.session_state.exchanger_data["nozzles"] if n.get("service") == new_srv) + 1
     
-    new_tag = st.text_input("MK (Tag)", value=f"{default_prefix}{count_srv}", key="sidebar_new_tag")
+    b1, b2 = st.columns(2)
+    new_tag = b1.text_input("MK Tag", value=f"{default_prefix}{count_srv}", key="sidebar_new_tag")
     style_default = 1 if is_vent_drain else 0
-    new_style = st.selectbox("Estilo", ["FLANGED", "TAPÓN / COUPLING"], index=style_default, key="sidebar_new_style")
-    new_comp = st.selectbox("Componente", ["SHELL", "CHANNEL", "BONNET"], key="sidebar_new_comp")
+    new_style = b2.selectbox("Estilo", ["FLANGED", "TAPÓN / COUPLING"], index=style_default, key="sidebar_new_style")
     
+    b3, b4 = st.columns(2)
+    new_comp = b3.selectbox("Cuerpo", ["SHELL", "CHANNEL", "BONNET"], key="sidebar_new_comp")
     side_default = 0 if new_srv == "VENT" else (1 if new_srv == "DRAIN" else 0)
-    new_side = st.selectbox("Lado", ["TOP", "BOTTOM"], index=side_default, key="sidebar_new_side")
+    new_side = b4.selectbox("Lado", ["TOP", "BOTTOM"], index=side_default, key="sidebar_new_side")
     
     if is_vent_drain or new_style == "TAPÓN / COUPLING":
         new_size = st.selectbox("Tamaño", ["3/4\"", "1/2\"", "1\"", "1.1/2\"", "2\""], key="sidebar_new_size_sel")
@@ -577,11 +576,11 @@ with st.sidebar.expander("➕ Crear Nueva Boquilla"):
 
 st.sidebar.divider()
 
-nozzle_options = {f"📌 Boquilla: {noz['tag']} ({noz['component']})": noz['id'] for noz in st.session_state.exchanger_data["nozzles"]}
+nozzle_options = {f"📌 {noz['tag']} ({noz['component']})": noz['id'] for noz in st.session_state.exchanger_data["nozzles"]}
 saddle_options = {f"🛋️ {sad['tag']}": sad['id'] for sad in st.session_state.exchanger_data["saddles"]}
 all_options = {**nozzle_options, **saddle_options}
 
-selected_label = st.sidebar.radio("🔍 Seleccionar Elemento para Editar:", options=list(all_options.keys()) if all_options else [])
+selected_label = st.sidebar.radio("🔍 Elemento a Editar:", options=list(all_options.keys()) if all_options else [])
 selected_id = all_options.get(selected_label)
 
 st.title(f"🛠️ Constructor Paramétrico: {st.session_state.exchanger_data['equipment']['tag']}")
@@ -589,61 +588,14 @@ st.title(f"🛠️ Constructor Paramétrico: {st.session_state.exchanger_data['e
 col_view, col_control = st.columns([2.3, 1])
 
 with col_view:
-    st.subheader(f"Plano Esquemático SVG - Equipo: {st.session_state.exchanger_data['equipment']['tag']}")
+    st.subheader(f"Plano Esquemático ({sel_orient}) - {st.session_state.exchanger_data['equipment']['tag']}")
     svg_code = generate_modular_exchanger_svg(st.session_state.exchanger_data, selected_id=selected_id)
     
-    html_interactive_content = f"""
-    <div id="svg-container" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center; user-select:none;">
-        {svg_code}
-    </div>
-    <script>
-        const svg = document.getElementById("exchanger-svg");
-        let selectedElement = null;
-        let offset = {{ x: 0, y: 0 }};
-
-        if (svg) {{
-            svg.addEventListener('mousedown', startDrag);
-            svg.addEventListener('mousemove', drag);
-            svg.addEventListener('mouseup', endDrag);
-            svg.addEventListener('mouseleave', endDrag);
-        }}
-
-        function startDrag(evt) {{
-            let target = evt.target.closest('.nozzle-group, .component-body, .saddle-body, .flange-joint');
-            if (target) {{
-                selectedElement = target;
-                let CTM = svg.getScreenCTM();
-                offset.x = (evt.clientX - CTM.e) / CTM.a;
-                offset.y = (evt.clientY - CTM.f) / CTM.d;
-
-                let transform = selectedElement.getAttribute('transform');
-                if (transform) {{
-                    let match = /translate\(([^,]+),([^)]+)\)/.exec(transform);
-                    if (match) {{
-                        offset.x -= parseFloat(match[1]);
-                        offset.y -= parseFloat(match[2]);
-                    }}
-                }}
-            }}
-        }}
-
-        function drag(evt) {{
-            if (selectedElement) {{
-                evt.preventDefault();
-                let CTM = svg.getScreenCTM();
-                let coordX = (evt.clientX - CTM.e) / CTM.a - offset.x;
-                let coordY = (evt.clientY - CTM.f) / CTM.d - offset.y;
-                selectedElement.setAttribute('transform', `translate(${{coordX}}, ${{coordY}})`);
-            }}
-        }}
-
-        function endDrag(evt) {{
-            selectedElement = null;
-        }}
-    </script>
-    """
-    
-    components.html(html_interactive_content, height=550)
+    container_height = 880 if sel_orient == "VERTICAL" else 540
+    components.html(
+        f'<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; padding:10px; width:100%; height:100%; box-sizing:border-box; display:flex; justify-content:center; align-items:center;">{svg_code}</div>', 
+        height=container_height
+    )
 
     st.markdown(f"### 📋 NOZZLE SCHEDULE - {st.session_state.exchanger_data['equipment']['tag']}")
     
@@ -773,10 +725,8 @@ with col_control:
     with tab_aux:
         st.write("**Rating Global de Auxiliares:**")
         current_global_rating = st.session_state.exchanger_data["equipment"].get("aux_rating", "6000#")
-        new_global_rating = st.selectbox("Rating General para CPLGS:", ["3000#", "6000#"], index=["3000#", "6000#"].index(current_global_rating) if current_global_rating in ["3000#", "6000#"] else 1)
-        if new_global_rating != current_global_rating:
-            st.session_state.exchanger_data["equipment"]["aux_rating"] = new_global_rating
-            st.rerun()
+        new_global_rating = st.selectbox("Rating General para CPLGS:", ["3000#", "6000#"], index=["3000#", "6000#"].index(current_global_rating) if current_global_rating in ["3000#", "6000#"] else 1, key="sb_aux_rt_gl")
+        st.session_state.exchanger_data["equipment"]["aux_rating"] = new_global_rating
 
         st.divider()
 
@@ -787,9 +737,8 @@ with col_control:
                 with col_a:
                     new_pos_text = st.text_input(f"Etiqueta #{idx+1}", value=aux.get("position", ""), key=f"edit_pos_{selected_noz['id']}_{idx}")
                     new_sz_text = st.text_input(f"Medida #{idx+1}", value=aux.get("size", ""), key=f"edit_sz_{selected_noz['id']}_{idx}")
-                    if new_pos_text != aux.get("position") or new_sz_text != aux.get("size"):
-                        aux["position"] = new_pos_text
-                        aux["size"] = new_sz_text
+                    aux["position"] = new_pos_text
+                    aux["size"] = new_sz_text
                 with col_b:
                     if st.button("🗑️", key=f"del_aux_{selected_noz['id']}_{idx}"):
                         selected_noz["auxiliaries"].pop(idx)
