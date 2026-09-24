@@ -16,7 +16,6 @@ st.set_page_config(page_title="Diseño Paramétrico de Intercambiadores", layout
 # CONFIGURACIÓN DE GOOGLE DRIVE Y APPS SCRIPT
 # ==========================================
 GDRIVE_FOLDER_ID = "10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
-# PEGA AQUÍ TU URL COPIADA AL IMPLEMENTAR EN GOOGLE APPS SCRIPT (la que termina en /exec)
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxKabZkU0Ri_SD4oIA3reQW4HAQI52hHvVAaeEPn5nosdicBwmxN_3tBfdqbNMFUT9Kow/exec"
 
 # ==========================================
@@ -97,8 +96,15 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 
     cy = 225
     r_shell = config["equipment"]["shell_diameter"] / 2
+    r_channel = config["equipment"].get("channel_diameter", config["equipment"]["shell_diameter"]) / 2
     r_bonnet = config["equipment"].get("bonnet_diameter", config["equipment"]["shell_diameter"]) / 2
     
+    radii = {
+        "CHANNEL": r_channel,
+        "SHELL": r_shell,
+        "BONNET": r_bonnet
+    }
+
     w_channel = config["components"]["channel_length"]
     w_shell = config["components"]["shell_length"]
     w_bonnet = config["components"]["bonnet_length"]
@@ -148,31 +154,48 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         c_start = coords[comp]["start"]
         c_end = coords[comp]["end"]
         c_width = widths[comp]
+        c_r = radii[comp]
 
         if idx > 0:
-            ET.SubElement(main_layer, "rect", {"x": str(c_start - 10), "y": str(cy - r_shell - 8), "width": "10", "height": str(r_shell*2 + 16), "class": "flange-joint"})
+            prev_comp = seq[idx - 1]
+            max_r_joint = max(radii[prev_comp], c_r)
+            ET.SubElement(main_layer, "rect", {
+                "x": str(c_start - 10), 
+                "y": str(cy - max_r_joint - 8), 
+                "width": "10", 
+                "height": str(max_r_joint * 2 + 16), 
+                "class": "flange-joint"
+            })
 
         if comp == "SHELL":
-            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(cy - r_shell), "width": str(c_width), "height": str(r_shell*2), "class": "component-body"})
+            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body"})
             ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(cy + 4), "class": "comp-label"}).text = "SHELL"
 
         elif comp == "CHANNEL":
-            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(cy - r_shell), "width": str(c_width), "height": str(r_shell*2), "class": "component-body"})
+            ET.SubElement(main_layer, "rect", {"x": str(c_start), "y": str(cy - c_r), "width": str(c_width), "height": str(c_r*2), "class": "component-body"})
             ET.SubElement(main_layer, "text", {"x": str(c_start + c_width/2), "y": str(cy + 4), "class": "comp-label"}).text = "CHANNEL"
 
         elif comp == "BONNET":
             if idx == 0:
-                bonnet_path = f"M {c_end} {cy - r_bonnet} L {c_end - 20} {cy - r_bonnet} A {r_bonnet} {r_bonnet} 0 0 0 {c_end - 20} {cy + r_bonnet} L {c_end} {cy + r_bonnet} Z"
+                bonnet_path = f"M {c_end} {cy - c_r} L {c_end - 20} {cy - c_r} A {c_r} {c_r} 0 0 0 {c_end - 20} {cy + c_r} L {c_end} {cy + c_r} Z"
                 label_x = c_end - 30
             else:
-                bonnet_path = f"M {c_start} {cy - r_bonnet} L {c_start + 20} {cy - r_bonnet} A {r_bonnet} {r_bonnet} 0 0 1 {c_start + 20} {cy + r_bonnet} L {c_start} {cy + r_bonnet} Z"
+                bonnet_path = f"M {c_start} {cy - c_r} L {c_start + 20} {cy - c_r} A {c_r} {c_r} 0 0 1 {c_start + 20} {cy + c_r} L {c_start} {cy + c_r} Z"
                 label_x = c_start + 30
 
             ET.SubElement(main_layer, "path", {"d": bonnet_path, "class": "component-body"})
             ET.SubElement(main_layer, "text", {"x": str(label_x), "y": str(cy + 4), "class": "comp-label"}).text = "BONNET"
 
         if idx < len(seq) - 1:
-            ET.SubElement(main_layer, "rect", {"x": str(c_end), "y": str(cy - r_shell - 8), "width": "12", "height": str(r_shell*2 + 16), "class": "flange-joint"})
+            next_comp = seq[idx + 1]
+            max_r_joint = max(c_r, radii[next_comp])
+            ET.SubElement(main_layer, "rect", {
+                "x": str(c_end), 
+                "y": str(cy - max_r_joint - 8), 
+                "width": "12", 
+                "height": str(max_r_joint * 2 + 16), 
+                "class": "flange-joint"
+            })
 
     nozzles_layer = ET.SubElement(svg, "g", {"id": "nozzles-layer"})
 
@@ -195,7 +218,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
         neck_height = 52
         flange_width = 44
 
-        active_r = r_bonnet if comp == "BONNET" else r_shell
+        active_r = radii.get(comp, r_shell)
 
         if noz.get("side", "TOP") == "TOP":
             ny_base = cy - active_r
@@ -269,7 +292,7 @@ def generate_modular_exchanger_svg(config, selected_id=None):
 # ==========================================
 if "exchanger_data" not in st.session_state:
     st.session_state.exchanger_data = {
-        "equipment": {"tag": "C702", "shell_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
+        "equipment": {"tag": "C702", "shell_diameter": 170, "channel_diameter": 170, "bonnet_diameter": 170, "aux_rating": "6000#"},
         "components": {
             "channel_length": 150,
             "shell_length": 420,
@@ -290,6 +313,9 @@ if "exchanger_data" not in st.session_state:
 
 if "aux_rating" not in st.session_state.exchanger_data["equipment"]:
     st.session_state.exchanger_data["equipment"]["aux_rating"] = "6000#"
+
+if "channel_diameter" not in st.session_state.exchanger_data["equipment"]:
+    st.session_state.exchanger_data["equipment"]["channel_diameter"] = st.session_state.exchanger_data["equipment"]["shell_diameter"]
 
 if "bonnet_diameter" not in st.session_state.exchanger_data["equipment"]:
     st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = st.session_state.exchanger_data["equipment"]["shell_diameter"]
@@ -409,11 +435,15 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
         chosen_seq_label = st.selectbox("Seleccione Secuencia:", seq_labels, index=default_idx)
 
         st.divider()
+        st.write("**Dimensiones Independientes de Componentes:**")
         new_ch_len = st.slider("Largo Channel", 100, 250, int(st.session_state.exchanger_data["components"]["channel_length"]))
+        new_ch_diam = st.slider("Diámetro Channel", 120, 260, int(st.session_state.exchanger_data["equipment"].get("channel_diameter", 170)))
+        
         new_sh_len = st.slider("Largo Shell", 250, 650, int(st.session_state.exchanger_data["components"]["shell_length"]))
+        new_diam = st.slider("Diámetro Shell", 120, 260, int(st.session_state.exchanger_data["equipment"]["shell_diameter"]))
+        
         new_bo_len = st.slider("Largo Bonnet", 60, 180, int(st.session_state.exchanger_data["components"]["bonnet_length"]))
-        new_diam = st.slider("Diámetro de Shell / Channel", 120, 240, int(st.session_state.exchanger_data["equipment"]["shell_diameter"]))
-        new_bonnet_diam = st.slider("Diámetro de Bonnet", 120, 260, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)))
+        new_bonnet_diam = st.slider("Diámetro Bonnet", 120, 260, int(st.session_state.exchanger_data["equipment"].get("bonnet_diameter", 170)))
 
         if st.form_submit_button("Aplicar Cambios"):
             new_sequence = ["CHANNEL", "SHELL", "BONNET"] if chosen_seq_label.startswith("Channel") else ["BONNET", "SHELL", "CHANNEL"]
@@ -421,6 +451,7 @@ with st.sidebar.expander("📐 Secuencia y Dimensiones del Equipo"):
             st.session_state.exchanger_data["components"]["channel_length"] = new_ch_len
             st.session_state.exchanger_data["components"]["shell_length"] = new_sh_len
             st.session_state.exchanger_data["components"]["bonnet_length"] = new_bo_len
+            st.session_state.exchanger_data["equipment"]["channel_diameter"] = new_ch_diam
             st.session_state.exchanger_data["equipment"]["shell_diameter"] = new_diam
             st.session_state.exchanger_data["equipment"]["bonnet_diameter"] = new_bonnet_diam
             st.rerun()
