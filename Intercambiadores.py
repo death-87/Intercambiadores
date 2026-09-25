@@ -289,7 +289,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
 
     def linea(texto, bold=False, size=9):
         pdf.set_font("Helvetica", "B" if bold else "", size)
-        pdf.multi_cell(0, 5.5, texto_pdf(texto), new_x="LMARGIN", new_y="NEXT")
+        # API compartida por PyFPDF y fpdf2: restablecer X explícitamente.
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(0, 5.5, texto_pdf(texto), align="L")
+        pdf.set_x(pdf.l_margin)
 
     linea(f"Ficha técnica - {tag}", True, 16)
     linea(f"Generado: {datetime.now():%Y-%m-%d %H:%M} (hora del servidor)")
@@ -316,7 +319,9 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         pdf.ln(3)
         linea(f"Venteo bonete: {config.get('vent') or 'Sin medida registrada'}")
         linea(f"Drenaje bonete: {config.get('drain') or 'Sin medida registrada'}")
-    return bytes(pdf.output())
+    salida = pdf.output(dest="S")
+    # PyFPDF devuelve str con bytes latin-1; fpdf2 devuelve bytearray.
+    return salida.encode("latin-1") if isinstance(salida, str) else bytes(salida)
 
 
 def main():
@@ -514,7 +519,7 @@ def main():
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
             except Exception as exc:
-                st.error(f"No se pudo generar el PDF: {exc}. Instala fpdf2 según requirements.txt.")
+                st.error(f"No se pudo generar el PDF: {exc}")
             st.divider()
             foto = st.file_uploader("Evidencia fotográfica", type=["png", "jpg", "jpeg"],
                                     key="foto_" + hashlib.sha256(normalizar(tag).encode()).hexdigest()[:16])
