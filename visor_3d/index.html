@@ -53,10 +53,6 @@
 
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
-    <div class="input-group">
-      <label>Nameplate / TAG:</label>
-      <input type="text" id="name-input" value="" placeholder="Ej: E-101">
-    </div>
     
     <div style="background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px; border: 1px solid #334155; margin-bottom: 8px;">
       <strong style="display:block; font-size:10px; color:#38bdf8; margin-bottom:4px;">Plugs Bonete</strong>
@@ -172,9 +168,11 @@
       }
     });
 
+    let currentNameplate = "";
+
     function syncStateToParent() {
       const exportData = {
-        nameplate: document.getElementById('name-input').value || "",
+        nameplate: currentNameplate,
         vent: document.getElementById('vent-input').value || "",
         drain: document.getElementById('drain-input').value || "",
         nozzles: nozzlesList.map(nz => ({
@@ -246,8 +244,6 @@
     const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.4, metalness: 0.8 });
     const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.2, metalness: 0.5 });
     const partitionMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.5, metalness: 0.6 });
-    
-    // MATERIAL BRONCE CLARO / LATÓN BRILLANTE (#d4af37)
     const plugMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.25, metalness: 0.85 }); 
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
 
@@ -450,8 +446,8 @@
     }
 
     function loadExchangerData(data) {
-      document.getElementById('name-input').value = data.nameplate || "";
-      updateNameplateText(data.nameplate || "");
+      currentNameplate = data.nameplate || "";
+      updateNameplateText(currentNameplate);
       
       document.getElementById('vent-input').value = data.vent || "";
       document.getElementById('drain-input').value = data.drain || "";
@@ -634,13 +630,12 @@
       syncStateToParent();
     });
 
-    // LÓGICA BOTÓN ELIMINAR BOQUILLA
     document.getElementById('btn-delete-nz').addEventListener('click', () => {
       if(!selectedNozzle) return;
-      heatExchanger.remove(selectedNozzle); // Borra del entorno 3D
-      nozzlesList = nozzlesList.filter(nz => nz !== selectedNozzle); // Borra de la memoria
-      deselectNozzle(); // Oculta el panel
-      syncStateToParent(); // Avisa a Streamlit del cambio
+      heatExchanger.remove(selectedNozzle);
+      nozzlesList = nozzlesList.filter(nz => nz !== selectedNozzle);
+      deselectNozzle();
+      syncStateToParent();
     });
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
@@ -701,10 +696,6 @@
     nameplate.position.set(0, 0, R + 0.02); 
     heatExchanger.add(nameplate);
 
-    document.getElementById('name-input').addEventListener('input', (e) => {
-      updateNameplateText(e.target.value);
-      syncStateToParent();
-    });
     document.getElementById('vent-input').addEventListener('input', () => syncStateToParent());
     document.getElementById('drain-input').addEventListener('input', () => syncStateToParent());
 
