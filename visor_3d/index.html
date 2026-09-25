@@ -57,7 +57,6 @@
   </div>
 
   <div id="ui-container">
-    
     <div class="panel-title">Etiquetas Generales</div>
     <div class="input-group">
       <label>Nombre del Equipo (Nameplate):</label>
@@ -79,7 +78,6 @@
     <!-- EDITOR DE BOQUILLA SELECCIONADA -->
     <div id="editor-panel">
       <div id="editor-title">✏️ Editando Boquilla</div>
-      
       <div class="input-group">
         <label>Tag (Nombre de la Boquilla):</label>
         <input type="text" id="edit-nz-name" value="" placeholder="Ej: N1 - IN">
@@ -177,7 +175,7 @@
     </div>
     <button id="btn-add-nz">AGREGAR BOQUILLA</button>
 
-    <button id="btn-save-db">💾 GUARDAR EQUIPO EN STREAMLIT</button>
+    <button id="btn-save-db">💾 GUARDAR EQUIPO</button>
   </div>
 
   <div id="canvas-container"></div>
@@ -186,7 +184,6 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    // --- PUNTO DE ENTRADA INYECTADO DESDE PYTHON ---
     /*__INJECT_DATA_HERE__*/
 
     window.addEventListener("DOMContentLoaded", () => {
@@ -195,7 +192,8 @@
       }
     });
 
-    function guardarCambiosCliente() {
+    // Envía los datos directamente a Streamlit vía postMessage
+    document.getElementById('btn-save-db').addEventListener('click', () => {
       const exportData = {
         nameplate: document.getElementById('name-input').value,
         vent: document.getElementById('vent-input').value,
@@ -214,11 +212,8 @@
         }))
       };
       
-      navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
-      alert("✅ ¡Datos del equipo copiados al portapapeles y listos para actualizar en el sistema!");
-    }
-
-    document.getElementById('btn-save-db').addEventListener('click', guardarCambiosCliente);
+      window.parent.postMessage({ isStreamlitMessage: true, type: "setComponentValue", value: exportData }, "*");
+    });
 
     let nozzlesList = [];
     let customNozzleCount = 0;
