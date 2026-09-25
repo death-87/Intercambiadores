@@ -158,6 +158,7 @@
   </div>
 
   <div id="canvas-container"></div>
+  <div id="load-error" role="alert" style="display:none;position:absolute;bottom:12px;right:12px;max-width:440px;padding:12px;background:#7f1d1d;color:white;border-radius:6px;z-index:30;white-space:pre-wrap;font-size:12px"></div>
 
   <script>
     // La conexión con Streamlit no depende de Three.js ni de WebGL.
@@ -175,6 +176,9 @@
           status.textContent = 'No se pudo iniciar el visor 3D: ' +
             (error && error.message ? error.message : String(error)) +
             '\nRecarga la página. Si persiste, copia este mensaje.';
+          const errorBox = document.getElementById('load-error');
+          errorBox.textContent = status.textContent;
+          errorBox.style.display = 'block';
           console.error('Visor 3D:', error);
         },
         attach(render) {
@@ -185,6 +189,7 @@
       window.addEventListener('message', event => {
         if (event.source !== window.parent || event.data?.type !== 'streamlit:render') return;
         bridge.args = event.data.args;
+        if (bridge.args.readonly) document.getElementById('ui-container').style.display = 'none';
         if (bridge.render) {
           try { bridge.render(bridge.args); } catch (error) { bridge.fail(error); }
         }
@@ -204,7 +209,7 @@
     const THREE = await import('three');
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
-    let initialized = false, loading = false, saving = false;
+    let initialized = false, loading = false, saving = false, readOnly = false;
     let revision = 0, pendingSave = null;
     const sessionId = globalThis.crypto?.randomUUID?.() ||
       Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
@@ -214,7 +219,7 @@
     let currentNameplate = "";
 
     function syncStateToParent(action = "change") {
-      if (loading || !initialized) return;
+      if (loading || !initialized || readOnly) return;
       const exportData = {
         nameplate: currentNameplate,
         vent: document.getElementById('vent-input').value || "",
@@ -630,6 +635,7 @@
     let selectedNozzle = null;
 
     window.addEventListener('pointerdown', (event) => {
+      if (readOnly || saving) return;
       if (event.target.closest('#ui-container')) return;
 
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -882,12 +888,14 @@
       syncStateToParent('save');
     });
     window.exchangerBridge.attach(args => {
+      readOnly = Boolean(args.readonly);
+      document.getElementById('ui-container').style.display = readOnly ? 'none' : '';
       if (!initialized) {
         loading = true;
         loadExchangerData(args.initial_data);
         loading = false;
         initialized = true;
-        document.getElementById('save-equipment').disabled = false;
+        document.getElementById('save-equipment').disabled = readOnly;
         clearTimeout(window.exchangerBridge.timer);
         document.getElementById('save-status').textContent = 'Visor listo.';
       }
@@ -899,7 +907,7 @@
         editFsName.disabled = !editFsCheck.checked;
         document.getElementById('save-status').textContent = args.ack.message;
       }
-      send('streamlit:setFrameHeight', {height: 720});
+      send('streamlit:setFrameHeight', {height: args.height || 720});
     });
 
     window.addEventListener('resize', () => {
