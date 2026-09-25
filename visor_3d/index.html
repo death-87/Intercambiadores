@@ -177,7 +177,7 @@
           rating: nz.userData.rating || "150#",
           bodyPart: nz.userData.bodyPart || "shell",
           pos: nz.userData.pos || "superior",
-          valX: nz.userData.valX || 0,
+          valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
           hasNS: !!nz.userData.hasNS,
           tagNS: nz.userData.tagNS || "",
           hasFS: !!nz.userData.hasFS,
@@ -238,7 +238,10 @@
 
     const shellMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.6 });
     const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.4, metalness: 0.8 });
-    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3, metalness: 0.7 });
+    
+    // AZUL CELESTE MÁS CLARO Y VISIBLE (#38bdf8)
+    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.2, metalness: 0.5 });
+    
     const partitionMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.5, metalness: 0.6 });
     const plugMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.3, metalness: 0.8 }); 
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
@@ -369,9 +372,11 @@
 
     function buildNozzle(internalName, tagText, diaIndex, rating, bodyPart, pos, posX, hasNS, tagNS, hasFS, tagFS) {
       const group = new THREE.Group();
+      const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
+      
       group.userData = {
         isNozzle: true, idName: internalName, tagName: tagText,
-        diaIndex: diaIndex, rating: rating, bodyPart: bodyPart, pos: pos,      
+        diaIndex: dIndex, rating: rating, bodyPart: bodyPart, pos: pos,      
         valX: posX, valY: NOZZLE_Y, 
         hasNS: hasNS, tagNS: tagNS, hasFS: hasFS, tagFS: tagFS
       };
@@ -424,7 +429,7 @@
       group.add(nozzleSprite);
       group.userData.nozzleSprite = nozzleSprite;
 
-      const scaleFactor = 0.3 + (diaIndex * 0.1);
+      const scaleFactor = 0.3 + (dIndex * 0.1);
       group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       if(pos === 'superior') {
@@ -639,7 +644,6 @@
       syncStateToParent();
     });
 
-    // --- NAMEPLATE INDUSTRIAL DE ALTA VISIBILIDAD ---
     const nameCanvas = document.createElement('canvas');
     nameCanvas.width = 1024;
     nameCanvas.height = 384; 
@@ -679,7 +683,6 @@
     }
 
     const plateMat = new THREE.MeshStandardMaterial({ map: plateTexture, metalness: 0.5, roughness: 0.3, transparent: true });
-    // Dimensión de la placa más amplia en el modelo (1.4m x 0.52m)
     const nameplate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.52, 0.02), plateMat);
     nameplate.position.set(0, 0, R + 0.02); 
     heatExchanger.add(nameplate);
