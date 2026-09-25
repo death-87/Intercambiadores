@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 import sys
+import unicodedata
 import requests
 import pandas as pd
 import streamlit as st
@@ -69,6 +70,37 @@ if "ex_drafts" not in ss:
     ss.ex_seen = {}
     ss.ex_ack = None
 
+def normalizar_tag(value):
+    value = unicodedata.normalize("NFKD", str(value).strip())
+    return " ".join("".join(c for c in value if not unicodedata.combining(c)).upper().split())
+
+
+# La página principal entrega el TAG por sesión; switch_page puede limpiar la URL.
+requested = ss.get("tag_para_diseño")
+if requested:
+    try:
+        ss.ex_db = cargar_db()
+    except Exception as exc:
+        st.error(f"No se pudo actualizar Diseño3D antes de abrir {requested}: {exc}")
+        st.stop()
+    coincidencias = [k for k in ss.ex_db if normalizar_tag(k) == normalizar_tag(requested)]
+    if len(coincidencias) > 1:
+        st.error(f"Hay varios TAG equivalentes a {requested} en Diseño3D. Corrige el duplicado.")
+        st.stop()
+    if coincidencias:
+        ss.ex_select = coincidencias[0]
+    else:
+        # Conservar otro borrador nuevo por TAG antes de abrir el solicitado.
+        previous = ss.ex_drafts.get(NEW)
+        if previous and previous.get("nameplate"):
+            ss.ex_drafts["draft:" + normalizar_tag(previous["nameplate"])] = deepcopy(previous)
+        ss.ex_select = NEW
+        draft_key = "draft:" + normalizar_tag(requested)
+        ss.ex_drafts[NEW] = deepcopy(ss.ex_drafts.get(draft_key, plantilla_blanco))
+        ss.ex_drafts[NEW]["nameplate"] = str(requested).strip()
+    ss.ex_loaded = None
+    ss.pop("tag_para_diseño", None)
+
 options = [NEW] + sorted(ss.ex_db)
 if "ex_select" not in ss:
     initial = st.query_params.get("equipo")
@@ -117,6 +149,7 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                 with st.spinner("Guardando y verificando en Sheets..."):
                     ss.ex_db = guardar_db(tag, data)
                 ss.ex_drafts[tag] = deepcopy(data)
+                ss.design_revision = ss.get("design_revision", 0) + 1
                 message = f"✅ Equipo '{tag}' guardado y verificado en Sheets."
             except Exception as exc:
                 message = f"❌ Guardado no confirmado: {exc}"
