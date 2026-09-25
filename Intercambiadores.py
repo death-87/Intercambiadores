@@ -132,7 +132,6 @@ def tiene_diseno_creado(val_equipo):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
                 db = json.load(f)
-                # Comprobar coincidencias exactas o limpias de tags
                 for k in db.keys():
                     if k.strip().upper() == val_clean.upper():
                         return True
@@ -185,7 +184,6 @@ def calcular_total_conexiones_roscadas(df_sub, df_columns):
         
         if col_eq:
             tag = str(row[col_eq]).strip()
-            # Buscar en la base de datos local de diseños
             cfg = next((v for k, v in db_local.items() if k.strip().upper() == tag.upper()), None)
             if cfg:
                 for noz in cfg.get("nozzles", []):
@@ -507,6 +505,47 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
         st.table(df_ficha.style.hide(axis='index'))
 
         config_equipo = obtener_config_equipo(val_equipo_clean)
+
+        # TABLA NOZZLE SCHEDULE RESTAURADA
+        st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
+        
+        table_rows = []
+        nozzles = config_equipo.get("nozzles", [])
+        
+        for noz in nozzles:
+            tag_noz = noz.get("tagName", "")
+            part_noz = noz.get("bodyPart", "").upper()
+            pos_noz = noz.get("pos", "")
+            rating_noz = noz.get("rating", "150#")
+            dia_idx = noz.get("diaIndex", 6)
+            
+            desc_full = f'{dia_idx}" - {rating_noz} RF WN'
+            
+            aux_parts = []
+            if noz.get("hasNS", False):
+                aux_parts.append(f"{noz.get('tagNS', '3/4\"')} NS")
+            if noz.get("hasFS", False):
+                aux_parts.append(f"{noz.get('tagFS', '1\"')} FS")
+            aux_combined = "  ".join(aux_parts)
+
+            table_rows.append({
+                "MK": tag_noz if tag_noz else f"{part_noz[:3]}-{pos_noz[:3]}".upper(),
+                "QT": 1,
+                "DESCRIPTION": desc_full,
+                "PROCESS": f"{part_noz} ({pos_noz})",
+                "AUXILLARIES": aux_combined
+            })
+
+        if not table_rows:
+            table_rows.append({
+                "MK": "S1", "QT": 1, "DESCRIPTION": "6\" - 150# RF WN", "PROCESS": "SHELL (superior)", "AUXILLARIES": "3/4\" NS  1\" FS"
+            })
+            table_rows.append({
+                "MK": "S2", "QT": 1, "DESCRIPTION": "6\" - 150# RF WN", "PROCESS": "SHELL (inferior)", "AUXILLARIES": "3/4\" NS  1\" FS"
+            })
+
+        df_nozzles = pd.DataFrame(table_rows)
+        st.table(df_nozzles.style.hide(axis='index'))
 
         # Botón directo para saltar al editor 3D de este equipo específico
         st.markdown("---")
