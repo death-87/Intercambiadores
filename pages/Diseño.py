@@ -25,34 +25,14 @@ def guardar_db(db):
 
 db = cargar_db()
 
-# --- RECEPTOR DE GUARDADO DIRECTO ---
-if "guardar_datos" in st.query_params:
-    try:
-        raw_json = st.query_params["guardar_datos"]
-        datos_guardar = json.loads(raw_json)
-        tag_equipo = datos_guardar.get("nameplate", "").strip()
-        
-        if tag_equipo and tag_equipo != "EQUIPO_SIN_NOMBRE":
-            db[tag_equipo] = datos_guardar
-            guardar_db(db)
-            st.success(f"✅ ¡Equipo '{tag_equipo}' guardado correctamente en la base de datos!")
-            st.query_params["equipo"] = tag_equipo
-            del st.query_params["guardar_datos"]
-            st.rerun()
-        else:
-            st.warning("⚠️ Debes ingresar un TAG / Nameplate válido para guardar el equipo.")
-            del st.query_params["guardar_datos"]
-    except Exception as e:
-        st.error(f"❌ Error al guardar datos: {e}")
-
-params = st.query_params
-equipo_url = params.get("equipo", None)
-
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
 
 col1, col2 = st.columns([3, 3])
 
 lista_equipos = ["-- NUEVO EQUIPO (En blanco) --"] + list(db.keys())
+
+params = st.query_params
+equipo_url = params.get("equipo", None)
 
 index_default = 0
 if equipo_url and equipo_url in db:
@@ -71,12 +51,12 @@ elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in par
 nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
 
 with col2:
-    tag_input = st.text_input("TAG del Equipo (Ej: C702):", value=nombre_default)
+    tag_input = st.text_input("TAG / Nameplate del Equipo (Ej: E-101):", value=nombre_default)
 
 plantilla_blanco = {
     "nameplate": tag_input if tag_input else "",
-    "vent": "",
-    "drain": "",
+    "vent": '3/4"',
+    "drain": '3/4"',
     "nozzles": [
         {"tagName": "S1", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "superior", "valX": -1.5, "hasNS": True, "tagNS": '3/4"', "hasFS": True, "tagFS": '1"'},
         {"tagName": "S2", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "inferior", "valX": 1.5, "hasNS": True, "tagNS": '3/4"', "hasFS": True, "tagFS": '1"'},
@@ -90,7 +70,36 @@ datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equip
 if tag_input:
     datos_actuales["nameplate"] = tag_input
 
-# Renderizar el Visor HTML
+if "current_editor_data" not in st.session_state:
+    st.session_state.current_editor_data = datos_actuales
+
+st.markdown("---")
+col_guardar, _ = st.columns([2, 4])
+with col_guardar:
+    if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
+        tag_final = tag_input.strip()
+        if tag_final:
+            data_to_save = st.session_state.get("current_editor_data", datos_actuales)
+            data_to_save["nameplate"] = tag_final
+            db[tag_final] = data_to_save
+            guardar_db(db)
+            st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente en 'equipos.json'!")
+            st.query_params["equipo"] = tag_final
+            st.rerun()
+        else:
+            st.warning("⚠️ Debes ingresar un TAG / Nameplate válido para poder guardar.")
+
+js_listener = """
+<script>
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'UPDATE_EXCHANGER_DATA') {
+        const payload = JSON.stringify(event.data.payload);
+        window.parent.postMessage({type: 'streamlit:setComponentValue', value: payload}, '*');
+    }
+});
+</script>
+"""
+
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
@@ -101,6 +110,13 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    components.html(html_injectado, height=780, scrolling=False)
+    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
+    
+    if component_value:
+        try:
+            parsed_data = json.loads(component_value)
+            st.session_state.current_editor_data = parsed_data
+        except Exception:
+            pass
 else:
     st.error(f"⚠️ No se encontró el visor HTML en: {HTML_FILE}")
