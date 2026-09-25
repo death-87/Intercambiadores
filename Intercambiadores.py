@@ -123,36 +123,33 @@ def extraer_coordenadas(coordenadas):
         return lat, lon
     return None, None
 
-def tiene_diseno_creado(val_equipo):
-    """Verifica si el equipo tiene un archivo de configuración/diseño creado en equipos.json"""
-    val_clean = str(val_equipo).strip()
+def cargar_db_general():
+    """Carga única y centralizada del archivo equipos.json"""
     current_dir = os.path.dirname(__file__)
     DB_FILE = os.path.join(current_dir, "equipos.json")
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
-                db = json.load(f)
-                for k in db.keys():
-                    if k.strip().upper() == val_clean.upper():
-                        return True
+                return json.load(f)
         except Exception:
-            pass
+            return {}
+    return {}
+
+def tiene_diseno_creado(val_equipo):
+    val_clean = str(val_equipo).strip().upper()
+    db = cargar_db_general()
+    for k in db.keys():
+        if k.strip().upper() == val_clean:
+            return True
     return False
 
 def obtener_config_equipo(val_equipo):
-    val_clean = str(val_equipo).strip()
-    current_dir = os.path.dirname(__file__)
-    DB_FILE = os.path.join(current_dir, "equipos.json")
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                db = json.load(f)
-                for k, v in db.items():
-                    if k.strip().upper() == val_clean.upper():
-                        return v
-        except Exception:
-            pass
-                
+    val_clean = str(val_equipo).strip().upper()
+    db = cargar_db_general()
+    for k, v in db.items():
+        if k.strip().upper() == val_clean:
+            return v
+    # Plantilla por defecto si no está guardado
     return {
         "nameplate": val_clean,
         "nozzles": []
@@ -163,15 +160,7 @@ def calcular_total_conexiones_roscadas(df_sub, df_columns):
     col_eq = next((c for c in df_columns if 'EQUIPO' in str(c).upper()), None)
     total = 0
     
-    current_dir = os.path.dirname(__file__)
-    DB_FILE = os.path.join(current_dir, "equipos.json")
-    db_local = {}
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                db_local = json.load(f)
-        except Exception:
-            pass
+    db_local = cargar_db_general()
 
     for _, row in df_sub.iterrows():
         val_col = str(row[col_roscadas]).strip() if col_roscadas else ""
@@ -183,8 +172,8 @@ def calcular_total_conexiones_roscadas(df_sub, df_columns):
                 pass
         
         if col_eq:
-            tag = str(row[col_eq]).strip()
-            cfg = next((v for k, v in db_local.items() if k.strip().upper() == tag.upper()), None)
+            tag = str(row[col_eq]).strip().upper()
+            cfg = next((v for k, v in db_local.items() if k.strip().upper() == tag), None)
             if cfg:
                 for noz in cfg.get("nozzles", []):
                     if noz.get("hasNS", False): total += 1
@@ -506,7 +495,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
 
         config_equipo = obtener_config_equipo(val_equipo_clean)
 
-        # TABLA NOZZLE SCHEDULE
+        # TABLA NOZZLE SCHEDULE (Cargando datos reales del equipo si existen)
         st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
         
         table_rows = []
@@ -667,25 +656,13 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
 st.markdown("---")
 st.subheader("🔍 Vista Previa 3D de Equipos Registrados (Modo Presentación)")
 
-current_dir = os.path.dirname(__file__)
-DB_FILE = os.path.join(current_dir, "equipos.json")
-HTML_FILE = os.path.join(current_dir, "visor_3d", "index.html")
-
-def cargar_db_visor():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
-
-db_equipos = cargar_db_visor()
+HTML_FILE = os.path.join(os.path.dirname(__file__), "visor_3d", "index.html")
+db_equipos = cargar_db_general()
 
 if not db_equipos:
     st.info("💡 No hay equipos creados todavía. Guarda configuraciones desde la página de diseño para poder visualizarlas aquí.")
 else:
-    # Solo mostrar los tags que están explícitamente registrados en la base de datos de diseños
+    # Filtrar estrictamente para mostrar solo las llaves guardadas en el JSON
     tags_disponibles = list(db_equipos.keys())
     tag_visualizar = st.selectbox("Selecciona un equipo creado para inspeccionar en 3D:", tags_disponibles, key="preview_3d_select")
 
@@ -707,5 +684,5 @@ else:
             f"window.initialExchangerData = {json_data_str};"
         )
         
-        # Renderizar visor 3D limpio libre de controles de edición
+        # Renderizar visor 3D limpio cargando exactamente la configuración guardada del equipo
         components.html(html_injectado, height=650, scrolling=False)
