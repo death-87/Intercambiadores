@@ -18,3 +18,8 @@ fpdf
 streamlit>=1.30,<2
 pandas>=2,<3
 requests>=2.31,<3
+streamlit>=1.35,<2
+pandas>=2,<3
+requests>=2.31,<3
+plotly>=5.18,<7
+fpdf2>=2.8,<3
