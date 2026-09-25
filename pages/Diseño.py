@@ -43,22 +43,16 @@ with col1:
 
 if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" and equipo_seleccionado != equipo_url:
     st.query_params["equipo"] = equipo_seleccionado
-    if "current_editor_data" in st.session_state:
-        del st.session_state["current_editor_data"]
     st.rerun()
 elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in params:
     st.query_params.clear()
-    if "current_editor_data" in st.session_state:
-        del st.session_state["current_editor_data"]
     st.rerun()
 
 nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
 
-with col2:
-    tag_input = st.text_input("TAG / Nameplate del Equipo (Ej: E-101):", value=nombre_default)
-
+# Carga de datos base
 plantilla_blanco = {
-    "nameplate": tag_input if tag_input else "",
+    "nameplate": nombre_default,
     "vent": '3/4"',
     "drain": '3/4"',
     "nozzles": [
@@ -69,24 +63,35 @@ plantilla_blanco = {
     ]
 }
 
-datos_actuales = db.get(equipo_seleccionado, plantilla_blanco) if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else plantilla_blanco
+datos_base = db.get(equipo_seleccionado, plantilla_blanco) if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else plantilla_blanco
 
-if tag_input:
-    datos_actuales["nameplate"] = tag_input
+# Sincronización con session_state por cambio de equipo
+if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_team != equipo_seleccionado:
+    st.session_state.last_loaded_team = equipo_seleccionado
+    st.session_state.working_data = json.loads(json.dumps(datos_base))
 
-if "current_editor_data" not in st.session_state or st.session_state.get("last_selected") != equipo_seleccionado:
-    st.session_state.current_editor_data = datos_actuales
-    st.session_state.last_selected = equipo_seleccionado
+datos_trabajo = st.session_state.working_data
+
+with col2:
+    tag_input = st.text_input("TAG / Nameplate del Equipo (Ej: E-101):", value=datos_trabajo.get("nameplate", nombre_default))
+    datos_trabajo["nameplate"] = tag_input
+
+# Formulario secundario para vent / drain nativos
+col_v, col_d = st.columns(2)
+with col_v:
+    datos_trabajo["vent"] = st.text_input("Plug Venteo:", value=datos_trabajo.get("vent", '3/4"'))
+with col_d:
+    datos_trabajo["drain"] = st.text_input("Plug Drenaje:", value=datos_trabajo.get("drain", '3/4"'))
 
 st.markdown("---")
+
 col_guardar, _ = st.columns([2, 4])
 with col_guardar:
     if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
         tag_final = tag_input.strip()
         if tag_final:
-            data_to_save = st.session_state.get("current_editor_data", datos_actuales)
-            data_to_save["nameplate"] = tag_final
-            db[tag_final] = data_to_save
+            datos_trabajo["nameplate"] = tag_final
+            db[tag_final] = datos_trabajo
             guardar_db(db)
             st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente con todas sus medidas!")
             st.query_params["equipo"] = tag_final
@@ -94,6 +99,7 @@ with col_guardar:
         else:
             st.warning("⚠️ Debes ingresar un TAG / Nameplate válido para poder guardar.")
 
+# Listener Javascript para capturar cambios desde el canvas 3D
 js_listener = """
 <script>
 window.addEventListener('message', function(event) {
@@ -109,7 +115,7 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    json_data_str = json.dumps(st.session_state.current_editor_data)
+    json_data_str = json.dumps(datos_trabajo)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
@@ -117,10 +123,12 @@ if os.path.exists(HTML_FILE):
     
     component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
     
+    # Si el visor 3D envía una actualización de boquillas, la procesamos en la sesión
     if component_value:
         try:
             parsed_data = json.loads(component_value)
-            st.session_state.current_editor_data = parsed_data
+            if "nozzles" in parsed_data:
+                st.session_state.working_data["nozzles"] = parsed_data["nozzles"]
         except Exception:
             pass
 else:
