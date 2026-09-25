@@ -113,17 +113,6 @@ if "current_loaded_team" not in st.session_state or st.session_state.current_loa
     st.session_state.current_loaded_team = equipo_seleccionado
     st.session_state.working_data = json.loads(json.dumps(datos_actuales))
 
-js_listener = """
-<script>
-window.addEventListener('message', function(event) {
-    if (event.data && event.data.type === 'UPDATE_EXCHANGER_DATA') {
-        const payload = JSON.stringify(event.data.payload);
-        window.parent.postMessage({type: 'streamlit:setComponentValue', value: payload}, '*');
-    }
-});
-</script>
-"""
-
 st.markdown("---")
 
 if os.path.exists(HTML_FILE):
@@ -138,11 +127,20 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # 🔑 TRUCO MAESTRO: Agregamos un comentario HTML dinámico con la hora exacta y el equipo.
-    # Esto obliga a Streamlit a destruir el iframe viejo y crear uno nuevo en cada cambio.
+    js_listener_mejorado = """
+    <script>
+    window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'UPDATE_EXCHANGER_DATA') {
+            const payload = JSON.stringify(event.data.payload);
+            window.parent.postMessage({type: 'streamlit:setComponentValue', value: payload}, '*');
+        }
+    });
+    </script>
+    """
+    
     html_forzado = html_injectado + f"\n<!-- Creado para {equipo_seleccionado} a las {time.time()} -->"
     
-    component_value = components.html(js_listener + html_forzado, height=720, scrolling=False)
+    component_value = components.html(js_listener_mejorado + html_forzado, height=720, scrolling=False)
     
     if component_value:
         try:
@@ -162,13 +160,14 @@ with col_guardar:
         
         if tag_final:
             st.session_state.working_data["nameplate"] = tag_final
+            datos_a_guardar = st.session_state.working_data
             
             with st.spinner('Guardando en la nube...'):
-                exito = guardar_db(tag_final, st.session_state.working_data)
+                exito = guardar_db(tag_final, datos_a_guardar)
             
             if exito:
                 st.cache_data.clear()
-                st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente con todas sus boquillas y plugs en Google Sheets!")
+                st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente con todas sus modificaciones en Google Sheets!")
                 st.query_params["equipo"] = tag_final
                 st.rerun()
             else:
