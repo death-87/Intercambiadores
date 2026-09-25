@@ -11,8 +11,7 @@ st.set_page_config(page_title="Editor 3D de Equipos", layout="wide")
 # =====================================================================
 # 🔗 CONFIGURACIÓN DE CONEXIÓN A GOOGLE SHEETS
 # =====================================================================
-# PEGA AQUÍ LA URL QUE OBTUVISTE EN EL PLAN B:
-WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec"
+WEBAPP_URL = "AQUI_PEGA_TU_URL_DE_APPS_SCRIPT"
 
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 HOJA_3D = "Diseño3D"
@@ -22,7 +21,8 @@ current_dir = os.path.dirname(__file__)
 parent_dir = os.path.dirname(current_dir)
 HTML_FILE = os.path.join(parent_dir, "visor_3d", "index.html")
 
-@st.cache_data(ttl=5)
+# SIN CACHÉ o con TTL 0 para garantizar lectura fresca de la nube
+@st.cache_data(ttl=0)
 def cargar_db():
     """Lee la pestaña Diseño3D de Google Sheets y la convierte en diccionario."""
     try:
@@ -57,6 +57,7 @@ def guardar_db(tag, datos):
         st.error(f"Error de conexión con Google Sheets: {e}")
         return False
 
+# Forzamos recarga de base de datos fresca
 db = cargar_db()
 
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
@@ -82,7 +83,7 @@ elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in par
     st.query_params.clear()
     st.rerun()
 
-# Plantilla base
+# Plantilla base en caso de ser un equipo totalmente nuevo
 plantilla_blanco = {
     "nameplate": "",
     "vent": '3/4"',
@@ -95,9 +96,13 @@ plantilla_blanco = {
     ]
 }
 
-datos_base = db.get(equipo_seleccionado, plantilla_blanco) if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else plantilla_blanco
+# Obtener los datos reales del equipo seleccionado desde la base de datos de Google Sheets
+if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --":
+    datos_base = db.get(equipo_seleccionado, plantilla_blanco)
+else:
+    datos_base = plantilla_blanco
 
-# Memoria de trabajo
+# Sincronización estricta de la memoria de trabajo con el equipo seleccionado
 if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_team != equipo_seleccionado:
     st.session_state.last_loaded_team = equipo_seleccionado
     st.session_state.working_data = json.loads(json.dumps(datos_base))
@@ -124,6 +129,7 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
+    # Pasamos siempre la memoria de trabajo actual al visor 3D
     json_data_str = json.dumps(st.session_state.working_data)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
@@ -156,7 +162,7 @@ with col_guardar:
                 exito = guardar_db(tag_final, st.session_state.working_data)
             
             if exito:
-                cargar_db.clear() # Limpiamos la caché para que la tabla se actualice inmediatamente
+                cargar_db.clear() # Limpiamos la caché de Streamlit de inmediato
                 st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente en Google Sheets!")
                 st.query_params["equipo"] = tag_final
                 st.rerun()
