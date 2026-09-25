@@ -15,3 +15,6 @@ fpdf2
 pandas
 plotly
 fpdf
+streamlit>=1.30,<2
+pandas>=2,<3
+requests>=2.31,<3
