@@ -48,7 +48,7 @@ elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in par
     st.query_params.clear()
     st.rerun()
 
-# Plantilla base por si el equipo no existe o es nuevo
+# Plantilla base
 plantilla_blanco = {
     "nameplate": "",
     "vent": '3/4"',
@@ -61,13 +61,20 @@ plantilla_blanco = {
     ]
 }
 
-# SE CARGAN LOS DATOS FIJOS DESDE LA BASE DE DATOS
 datos_base = db.get(equipo_seleccionado, plantilla_blanco) if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else plantilla_blanco
 
-# Inicializamos la memoria de trabajo temporal
+# Memoria de trabajo
 if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_team != equipo_seleccionado:
     st.session_state.last_loaded_team = equipo_seleccionado
     st.session_state.working_data = json.loads(json.dumps(datos_base))
+
+with col2:
+    # INPUT NATIVO DE STREAMLIT PARA EL TAG (evita el problema de sincronización asíncrona)
+    nombre_default = datos_base.get("nameplate", "") if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else ""
+    tag_input_streamlit = st.text_input("TAG / Nameplate del Equipo (Obligatorio para guardar):", value=nombre_default)
+    
+    # Actualizamos el nameplate en la memoria de trabajo con lo que se escriba aquí
+    st.session_state.working_data["nameplate"] = tag_input_streamlit
 
 js_listener = """
 <script>
@@ -82,25 +89,27 @@ window.addEventListener('message', function(event) {
 
 st.markdown("---")
 
-# Renderizamos el componente 3D pasándole los datos_base fijos
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    json_data_str = json.dumps(datos_base)
+    # Pasamos los datos de trabajo actuales (que incluyen el nameplate escrito en Streamlit) al visor 3D
+    json_data_str = json.dumps(st.session_state.working_data)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # Se eliminó el parámetro `key` que causaba el TypeError
     component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
     
-    # Cualquier interacción dentro del visor se guarda en memoria antes de hacer clic en guardar
     if component_value:
         try:
             parsed_data = json.loads(component_value)
-            st.session_state.working_data = parsed_data
+            # Solo actualizamos boquillas, venteo y drenaje desde el 3D. 
+            # El nameplate manda el de Streamlit.
+            st.session_state.working_data["nozzles"] = parsed_data.get("nozzles", [])
+            st.session_state.working_data["vent"] = parsed_data.get("vent", "")
+            st.session_state.working_data["drain"] = parsed_data.get("drain", "")
         except Exception:
             pass
 else:
@@ -110,12 +119,14 @@ st.markdown("---")
 col_guardar, _ = st.columns([2, 4])
 with col_guardar:
     if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
-        tag_final = st.session_state.working_data.get("nameplate", "").strip()
+        tag_final = tag_input_streamlit.strip() # Usamos el input nativo de Streamlit
+        
         if tag_final:
+            st.session_state.working_data["nameplate"] = tag_final
             db[tag_final] = st.session_state.working_data
             guardar_db(db)
             st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente!")
             st.query_params["equipo"] = tag_final
             st.rerun()
         else:
-            st.warning("⚠️ Debes ingresar el Nameplate / TAG en el panel del visor 3D para poder guardar.")
+            st.warning("⚠️ Debes ingresar el TAG / Nameplate en el campo de texto de arriba para poder guardar.")
