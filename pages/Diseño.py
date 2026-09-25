@@ -82,7 +82,7 @@ window.addEventListener('message', function(event) {
 
 st.markdown("---")
 
-# Renderizamos el componente 3D pasándole los datos_base fijos (evita parpadeos o borrados intermedios)
+# Renderizamos el componente 3D pasándole los datos_base fijos
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
@@ -93,7 +93,8 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False, key=f"visor_{equipo_seleccionado}")
+    # Se eliminó el parámetro `key` que causaba el TypeError
+    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
     
     # Cualquier interacción dentro del visor se guarda en memoria antes de hacer clic en guardar
     if component_value:
