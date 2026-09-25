@@ -1,27 +1,61 @@
 import streamlit as st
 import json
 import os
+import requests
+import pandas as pd
+import urllib.parse
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Editor 3D de Equipos", layout="wide")
 
+# =====================================================================
+# 🔗 CONFIGURACIÓN DE CONEXIÓN A GOOGLE SHEETS
+# =====================================================================
+# PEGA AQUÍ LA URL QUE OBTUVISTE EN EL PLAN B:
+WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec"
+
+SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
+HOJA_3D = "Diseño3D"
+# =====================================================================
+
 current_dir = os.path.dirname(__file__)
 parent_dir = os.path.dirname(current_dir)
-DB_FILE = os.path.join(parent_dir, "equipos.json")
 HTML_FILE = os.path.join(parent_dir, "visor_3d", "index.html")
 
+@st.cache_data(ttl=5)
 def cargar_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
+    """Lee la pestaña Diseño3D de Google Sheets y la convierte en diccionario."""
+    try:
+        hoja_encoded = urllib.parse.quote(HOJA_3D)
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja_encoded}"
+        df = pd.read_csv(url)
+        
+        db = {}
+        if not df.empty and len(df.columns) >= 2:
+            for _, row in df.iterrows():
+                tag = str(row.iloc[0]).strip()
+                datos_str = str(row.iloc[1]).strip()
+                if tag and tag != 'nan' and datos_str != 'nan':
+                    try:
+                        db[tag] = json.loads(datos_str)
+                    except json.JSONDecodeError:
+                        pass
+        return db
+    except Exception:
+        return {}
 
-def guardar_db(db):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(db, f, indent=4, ensure_ascii=False)
+def guardar_db(tag, datos):
+    """Envía los datos al Google Apps Script para escribirlos en Google Sheets."""
+    payload = {
+        "tag": tag,
+        "datos": json.dumps(datos, ensure_ascii=False)
+    }
+    try:
+        respuesta = requests.post(WEBAPP_URL, json=payload)
+        return respuesta.status_code == 200
+    except Exception as e:
+        st.error(f"Error de conexión con Google Sheets: {e}")
+        return False
 
 db = cargar_db()
 
@@ -29,7 +63,7 @@ st.title("🛠️ Editor 3D de Intercambiadores de Calor")
 
 col1, col2 = st.columns([3, 3])
 
-lista_equipos = ["-- NUEVO EQUIPO (En blanco) --"] + list(db.keys())
+lista_equipos = ["-- NUEVO EQUIPO (En blanco) --"] + sorted(list(db.keys()))
 
 params = st.query_params
 equipo_url = params.get("equipo", None)
@@ -69,10 +103,8 @@ if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_te
     st.session_state.working_data = json.loads(json.dumps(datos_base))
 
 with col2:
-    # EL ÚNICO LUGAR PARA ESCRIBIR EL NAMEPLATE:
     nombre_default = datos_base.get("nameplate", "") if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else ""
     tag_input_streamlit = st.text_input("TAG / Nameplate del Equipo (Escríbelo aquí para guardar):", value=st.session_state.working_data.get("nameplate", nombre_default))
-    
     st.session_state.working_data["nameplate"] = tag_input_streamlit
 
 js_listener = """
@@ -92,7 +124,6 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    # Pasamos los datos actualizados al 3D (incluyendo el texto recién escrito arriba)
     json_data_str = json.dumps(st.session_state.working_data)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
@@ -104,7 +135,6 @@ if os.path.exists(HTML_FILE):
     if component_value:
         try:
             parsed_data = json.loads(component_value)
-            # Aceptamos todo del 3D EXCEPTO el nameplate, que lo controla Streamlit
             st.session_state.working_data["nozzles"] = parsed_data.get("nozzles", [])
             st.session_state.working_data["vent"] = parsed_data.get("vent", "")
             st.session_state.working_data["drain"] = parsed_data.get("drain", "")
@@ -116,16 +146,21 @@ else:
 st.markdown("---")
 col_guardar, _ = st.columns([2, 4])
 with col_guardar:
-    if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
+    if st.button("💾 GUARDAR EQUIPO EN SHEETS", type="primary", use_container_width=True):
         tag_final = tag_input_streamlit.strip() 
         
         if tag_final:
             st.session_state.working_data["nameplate"] = tag_final
-            db[tag_final] = st.session_state.working_data
-            guardar_db(db)
-            st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente!")
-            st.query_params["equipo"] = tag_final
-            st.rerun()
+            
+            with st.spinner('Guardando en la nube...'):
+                exito = guardar_db(tag_final, st.session_state.working_data)
+            
+            if exito:
+                cargar_db.clear() # Limpiamos la caché para que la tabla se actualice inmediatamente
+                st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente en Google Sheets!")
+                st.query_params["equipo"] = tag_final
+                st.rerun()
+            else:
+                st.error("❌ Ocurrió un problema al intentar guardar los datos.")
         else:
-            # Mensaje corregido y exacto a tu pantalla
             st.warning("⚠️ Debes ingresar el TAG / Nameplate en el campo de texto de arriba para poder guardar.")
