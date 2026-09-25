@@ -69,11 +69,10 @@ if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_te
     st.session_state.working_data = json.loads(json.dumps(datos_base))
 
 with col2:
-    # INPUT NATIVO DE STREAMLIT PARA EL TAG (evita el problema de sincronización asíncrona)
+    # EL ÚNICO LUGAR PARA ESCRIBIR EL NAMEPLATE:
     nombre_default = datos_base.get("nameplate", "") if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else ""
-    tag_input_streamlit = st.text_input("TAG / Nameplate del Equipo (Obligatorio para guardar):", value=nombre_default)
+    tag_input_streamlit = st.text_input("TAG / Nameplate del Equipo (Escríbelo aquí para guardar):", value=st.session_state.working_data.get("nameplate", nombre_default))
     
-    # Actualizamos el nameplate en la memoria de trabajo con lo que se escriba aquí
     st.session_state.working_data["nameplate"] = tag_input_streamlit
 
 js_listener = """
@@ -93,7 +92,7 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    # Pasamos los datos de trabajo actuales (que incluyen el nameplate escrito en Streamlit) al visor 3D
+    # Pasamos los datos actualizados al 3D (incluyendo el texto recién escrito arriba)
     json_data_str = json.dumps(st.session_state.working_data)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
@@ -105,8 +104,7 @@ if os.path.exists(HTML_FILE):
     if component_value:
         try:
             parsed_data = json.loads(component_value)
-            # Solo actualizamos boquillas, venteo y drenaje desde el 3D. 
-            # El nameplate manda el de Streamlit.
+            # Aceptamos todo del 3D EXCEPTO el nameplate, que lo controla Streamlit
             st.session_state.working_data["nozzles"] = parsed_data.get("nozzles", [])
             st.session_state.working_data["vent"] = parsed_data.get("vent", "")
             st.session_state.working_data["drain"] = parsed_data.get("drain", "")
@@ -119,7 +117,7 @@ st.markdown("---")
 col_guardar, _ = st.columns([2, 4])
 with col_guardar:
     if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
-        tag_final = tag_input_streamlit.strip() # Usamos el input nativo de Streamlit
+        tag_final = tag_input_streamlit.strip() 
         
         if tag_final:
             st.session_state.working_data["nameplate"] = tag_final
@@ -129,4 +127,5 @@ with col_guardar:
             st.query_params["equipo"] = tag_final
             st.rerun()
         else:
+            # Mensaje corregido y exacto a tu pantalla
             st.warning("⚠️ Debes ingresar el TAG / Nameplate en el campo de texto de arriba para poder guardar.")
