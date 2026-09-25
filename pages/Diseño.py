@@ -25,6 +25,26 @@ def guardar_db(db):
 
 db = cargar_db()
 
+# --- RECEPTOR DE GUARDADO DIRECTO ---
+if "guardar_datos" in st.query_params:
+    try:
+        raw_json = st.query_params["guardar_datos"]
+        datos_guardar = json.loads(raw_json)
+        tag_equipo = datos_guardar.get("nameplate", "").strip()
+        
+        if tag_equipo and tag_equipo != "EQUIPO_SIN_NOMBRE":
+            db[tag_equipo] = datos_guardar
+            guardar_db(db)
+            st.success(f"✅ ¡Equipo '{tag_equipo}' guardado correctamente en la base de datos!")
+            st.query_params["equipo"] = tag_equipo
+            del st.query_params["guardar_datos"]
+            st.rerun()
+        else:
+            st.warning("⚠️ Debes ingresar un TAG / Nameplate válido para guardar el equipo.")
+            del st.query_params["guardar_datos"]
+    except Exception as e:
+        st.error(f"❌ Error al guardar datos: {e}")
+
 params = st.query_params
 equipo_url = params.get("equipo", None)
 
@@ -70,6 +90,7 @@ datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equip
 if tag_input:
     datos_actuales["nameplate"] = tag_input
 
+# Renderizar el Visor HTML
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
@@ -80,20 +101,6 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    components.html(html_injectado, height=750, scrolling=False)
-
-    if "guardar_datos" in st.query_params:
-        try:
-            raw_json = st.query_params["guardar_datos"]
-            datos_guardar = json.loads(raw_json)
-            tag_equipo = datos_guardar.get("nameplate", "").strip()
-            
-            if tag_equipo:
-                db[tag_equipo] = datos_guardar
-                guardar_db(db)
-                st.success(f"✅ ¡Equipo '{tag_equipo}' guardado exitosamente!")
-                st.query_params["equipo"] = tag_equipo
-                del st.query_params["guardar_datos"]
-                st.rerun()
-        except Exception as e:
-            st.error(f"Error procesando el guardado: {e}")
+    components.html(html_injectado, height=780, scrolling=False)
+else:
+    st.error(f"⚠️ No se encontró el visor HTML en: {HTML_FILE}")
