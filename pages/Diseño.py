@@ -43,9 +43,13 @@ with col1:
 
 if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" and equipo_seleccionado != equipo_url:
     st.query_params["equipo"] = equipo_seleccionado
+    if "current_editor_data" in st.session_state:
+        del st.session_state["current_editor_data"]
     st.rerun()
 elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in params:
     st.query_params.clear()
+    if "current_editor_data" in st.session_state:
+        del st.session_state["current_editor_data"]
     st.rerun()
 
 nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
@@ -65,7 +69,7 @@ plantilla_blanco = {
     ]
 }
 
-datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equipo_seleccionado else db.get(equipo_seleccionado, plantilla_blanco)
+datos_actuales = db.get(equipo_seleccionado, plantilla_blanco) if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else plantilla_blanco
 
 if tag_input:
     datos_actuales["nameplate"] = tag_input
@@ -84,7 +88,7 @@ with col_guardar:
             data_to_save["nameplate"] = tag_final
             db[tag_final] = data_to_save
             guardar_db(db)
-            st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente en 'equipos.json'!")
+            st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente con todas sus medidas!")
             st.query_params["equipo"] = tag_final
             st.rerun()
         else:
@@ -105,7 +109,7 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    json_data_str = json.dumps(datos_actuales)
+    json_data_str = json.dumps(st.session_state.current_editor_data)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
