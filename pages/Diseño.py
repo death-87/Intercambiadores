@@ -120,7 +120,6 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    # Aseguramos que el nameplate actual de Streamlit se inyecte correctamente
     datos_actuales["nameplate"] = tag_input_streamlit if tag_input_streamlit else equipo_seleccionado
     
     json_data_str = json.dumps(datos_actuales)
@@ -129,12 +128,9 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # 🔑 CLAVE: Usamos un 'key' dinámico basado en el equipo seleccionado. 
-    # Esto obliga a Streamlit a destruir y recrear el componente HTML por completo cada vez que cambias de equipo, 
-    # cargando sus boquillas, diámetros y plugs reales desde cero.
-    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False, key=f"html_visor_{equipo_seleccionado}")
+    # SE ELIMINÓ EL PARÁMETRO `key` QUE CAUSABA EL TypeError
+    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
     
-    # Guardamos cambios temporales en session_state ante modificaciones en el 3D
     if "working_data" not in st.session_state or st.session_state.get("current_loaded") != equipo_seleccionado:
         st.session_state.working_data = json.loads(json.dumps(datos_actuales))
         st.session_state.current_loaded = equipo_seleccionado
@@ -156,7 +152,6 @@ with col_guardar:
         tag_final = tag_input_streamlit.strip() 
         
         if tag_final:
-            # Asegurar que el nameplate final y los datos del 3D se guarden unidos
             if "working_data" in st.session_state:
                 datos_a_guardar = st.session_state.working_data
             else:
