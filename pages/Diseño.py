@@ -3,18 +3,20 @@ import json
 import os
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Diseño de Equipo", layout="wide")
+st.set_page_config(page_title="Editor 3D de Equipos", layout="wide")
 
-# Rutas de carpetas
+# Rutas de carpetas y base de datos
 current_dir = os.path.dirname(__file__)
 parent_dir = os.path.dirname(current_dir)
 DB_FILE = os.path.join(parent_dir, "equipos.json")
 
-# 1. Funciones de Base de Datos
 def cargar_db():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
     return {}
 
 def guardar_db(db):
@@ -23,27 +25,42 @@ def guardar_db(db):
 
 db = cargar_db()
 
-# 2. Inicializar el Componente 3D (apunta a la carpeta /visor_3d)
-component_path = os.path.join(parent_dir, "visor_3d")
-visor_componente = components.declare_component("visor_3d", path=component_path)
+# Leer el parámetro enviado por URL (ej. ?equipo=C702)
+params = st.query_params
+equipo_url = params.get("equipo", None)
 
-# 3. Interfaz de Streamlit
-st.title("Gestor de Intercambiadores de Calor")
+st.title("🛠️ Editor 3D de Intercambiadores de Calor")
 
-# Lista para el selector
-lista_equipos = ["-- NUEVO EQUIPO (Plantilla en blanco) --"] + list(db.keys())
+# Barra superior de control (Seleccionar o Crear Nuevo)
+col1, col2, col3 = st.columns([2, 2, 1])
 
-col1, col2 = st.columns([3, 1])
+lista_equipos = ["-- NUEVO EQUIPO (En blanco) --"] + list(db.keys())
+
+# Determinar índice inicial basado en la URL
+index_default = 0
+if equipo_url and equipo_url in db:
+    index_default = lista_equipos.index(equipo_url)
+
 with col1:
-    equipo_seleccionado = st.selectbox("Selecciona un Equipo Guardado o crea uno Nuevo:", lista_equipos)
+    equipo_seleccionado = st.selectbox("Seleccionar Equipo:", lista_equipos, index=index_default)
 
-# Manejar el nombre por defecto para guardar
-nombre_default = "" if "-- NUEVO" in equipo_seleccionado else equipo_seleccionado
+# Si cambia el selectbox manualmente, actualizamos la URL
+if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco)--" and equipo_seleccionado != equipo_url:
+    st.query_params["equipo"] = equipo_seleccionado
+elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in params:
+    st.query_params.clear()
+
+nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
 
 with col2:
-    nombre_guardar = st.text_input("TAG para Guardar (Ej: C702):", value=nombre_default)
+    tag_guardar = st.text_input("TAG del Equipo (Ej: C702):", value=nombre_default)
 
-# Plantilla base (4 boquillas por defecto, totalmente en blanco)
+with col3:
+    st.write("") # Espaciador visual
+    # Nota: El botón real de guardado está dentro del canvas 3D para capturar toda la data en tiempo real.
+    st.info("💡 Usa el botón verde del menú flotante izquierdo en el 3D para guardar.")
+
+# Plantilla inicial en blanco (4 boquillas por defecto sin texto)
 plantilla_blanco = {
     "nameplate": "",
     "vent": "",
@@ -56,18 +73,24 @@ plantilla_blanco = {
     ]
 }
 
-# Determinar qué datos enviar al HTML
-datos_actuales = plantilla_blanco if "-- NUEVO" in equipo_seleccionado else db[equipo_seleccionado]
+# Obtener los datos a enviar al HTML
+datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equipo_seleccionado else db.get(equipo_seleccionado, plantilla_blanco)
 
-# 4. Mostrar el Componente 3D y capturar cuando el usuario presione "Guardar" en el HTML
-nuevos_datos = visor_componente(datos_iniciales=datos_actuales, key=equipo_seleccionado)
+# Cargar el componente 3D de la carpeta /visor_3d
+component_path = os.path.join(parent_dir, "visor_3d")
+visor_componente = components.declare_component("visor_3d", path=component_path)
 
-# 5. Lógica de Guardado (Recibe la señal desde Javascript)
-if nuevos_datos is not None:
-    if nombre_guardar.strip() == "":
-        st.error("⚠️ Debes ponerle un nombre al TAG (Ej: C702) antes de guardar.")
+# Renderizar el visor pasando los datos iniciales
+resultado_guardar = visor_componente(datos_iniciales=datos_actuales, key=equipo_seleccionado)
+
+# Procesar cuando se presiona "Guardar" en el HTML
+if resultado_guardar is not None:
+    tag_limpio = tag_guardar.strip()
+    if not tag_limpio:
+        st.error("⚠️ Error: Debes ingresar un TAG válido (Ej: C702) en la parte superior antes de guardar.")
     else:
-        db[nombre_guardar.strip()] = nuevos_datos
+        db[tag_limpio] = resultado_guardar
         guardar_db(db)
-        st.success(f"✅ Equipo '{nombre_guardar.strip()}' guardado correctamente.")
-        st.rerun() # Recargar para que aparezca en el selectbox
+        st.success(f"✅ ¡Equipo '{tag_limpio}' guardado con éxito en la base de datos!")
+        st.query_params["equipo"] = tag_limpio
+        st.rerun()
