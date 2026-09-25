@@ -73,15 +73,9 @@ if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_te
 datos_trabajo = st.session_state.working_data
 
 with col2:
+    # Este input permanece aquí para facilitar el nombramiento directo en Streamlit
     tag_input = st.text_input("TAG / Nameplate del Equipo (Ej: E-101):", value=datos_trabajo.get("nameplate", nombre_default))
     datos_trabajo["nameplate"] = tag_input
-
-# Formulario secundario para vent / drain nativos
-col_v, col_d = st.columns(2)
-with col_v:
-    datos_trabajo["vent"] = st.text_input("Plug Venteo:", value=datos_trabajo.get("vent", '3/4"'))
-with col_d:
-    datos_trabajo["drain"] = st.text_input("Plug Drenaje:", value=datos_trabajo.get("drain", '3/4"'))
 
 st.markdown("---")
 
@@ -123,12 +117,13 @@ if os.path.exists(HTML_FILE):
     
     component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
     
-    # Si el visor 3D envía una actualización de boquillas, la procesamos en la sesión
+    # Extraemos todos los datos (boquillas, venteo, drenaje) que provengan del visor 3D en tiempo real
     if component_value:
         try:
             parsed_data = json.loads(component_value)
-            if "nozzles" in parsed_data:
-                st.session_state.working_data["nozzles"] = parsed_data["nozzles"]
+            st.session_state.working_data["nozzles"] = parsed_data.get("nozzles", st.session_state.working_data.get("nozzles", []))
+            st.session_state.working_data["vent"] = parsed_data.get("vent", st.session_state.working_data.get("vent", ""))
+            st.session_state.working_data["drain"] = parsed_data.get("drain", st.session_state.working_data.get("drain", ""))
         except Exception:
             pass
 else:
