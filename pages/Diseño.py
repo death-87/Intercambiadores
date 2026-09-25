@@ -30,7 +30,7 @@ equipo_url = params.get("equipo", None)
 
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
 
-col1, col2, col3 = st.columns([2, 2, 2])
+col1, col2 = st.columns([3, 3])
 
 lista_equipos = ["-- NUEVO EQUIPO (En blanco) --"] + list(db.keys())
 
@@ -43,8 +43,10 @@ with col1:
 
 if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" and equipo_seleccionado != equipo_url:
     st.query_params["equipo"] = equipo_seleccionado
+    st.rerun()
 elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in params:
     st.query_params.clear()
+    st.rerun()
 
 nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
 
@@ -56,48 +58,49 @@ plantilla_blanco = {
     "vent": "",
     "drain": "",
     "nozzles": [
-        {"tagName": "S1", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "superior", "valX": -1.5, "hasNS": True, "tagNS": "3/4\"", "hasFS": True, "tagFS": "1\""},
-        {"tagName": "S2", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "inferior", "valX": 1.5, "hasNS": True, "tagNS": "3/4\"", "hasFS": True, "tagFS": "1\""},
-        {"tagName": "T1", "diaIndex": 8, "rating": "300#", "bodyPart": "channel", "pos": "superior", "valX": -2.9775, "hasNS": True, "tagNS": "1\"", "hasFS": True, "tagFS": "1\""},
-        {"tagName": "T2", "diaIndex": 8, "rating": "300#", "bodyPart": "channel", "pos": "inferior", "valX": -2.9775, "hasNS": True, "tagNS": "1\"", "hasFS": True, "tagFS": "1\""}
+        {"tagName": "S1", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "superior", "valX": -1.5, "hasNS": True, "tagNS": '3/4"', "hasFS": True, "tagFS": '1"'},
+        {"tagName": "S2", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "inferior", "valX": 1.5, "hasNS": True, "tagNS": '3/4"', "hasFS": True, "tagFS": '1"'},
+        {"tagName": "T1", "diaIndex": 8, "rating": "300#", "bodyPart": "channel", "pos": "superior", "valX": -2.9775, "hasNS": True, "tagNS": '1"', "hasFS": True, "tagFS": '1"'},
+        {"tagName": "T2", "diaIndex": 8, "rating": "300#", "bodyPart": "channel", "pos": "inferior", "valX": -2.9775, "hasNS": True, "tagNS": '1"', "hasFS": True, "tagFS": '1"'}
     ]
 }
 
-# Obtener los datos actuales del equipo seleccionado
 datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equipo_seleccionado else db.get(equipo_seleccionado, plantilla_blanco)
 
-with col3:
-    st.markdown("###") # Espaciador vertical
-    btn_guardar_streamlit = st.button("💾 Guardar Cambios en Base de Datos", type="primary", use_container_width=True)
+if tag_input:
+    datos_actuales["nameplate"] = tag_input
+
+# Capturar datos recibidos desde el visor 3D para persistencia
+component_value = components.html(
+    "", height=0
+) # Inicializador pasivo
 
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
     json_data_str = json.dumps(datos_actuales)
-    
-    # Inyectar los datos iniciales correctamente en el visor 3D
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # Renderizar el visor 3D limpio (sin conflictos de retorno)
-    components.html(html_injectado, height=820, scrolling=False)
-    
-    # Manejar el almacenamiento cuando se hace clic en el botón de Streamlit
-    if btn_guardar_streamlit:
-        tag_limpio = tag_input.strip()
-        if not tag_limpio:
-            st.error("⚠️ Por favor, ingresa un **TAG del Equipo** válido antes de guardar.")
-        else:
-            try:
-                # Asegurar que se guarden datos limpios y serializables
-                db[tag_limpio] = datos_actuales
+    # Capturar respuesta enviada por postMessage vía Streamlit Component
+    res = components.html(html_injectado, height=750, scrolling=False)
+
+    # Procesar guardado directo al presionar Guardar dentro del Visor HTML
+    if "guardar_datos" in st.query_params:
+        try:
+            raw_json = st.query_params["guardar_datos"]
+            datos_guardar = json.loads(raw_json)
+            tag_equipo = datos_guardar.get("nameplate", "").strip()
+            
+            if tag_equipo:
+                db[tag_equipo] = datos_guardar
                 guardar_db(db)
-                st.success(f"✅ ¡Equipo '{tag_limpio}' guardado exitosamente en la base de datos!")
-                st.query_params["equipo"] = tag_limpio
-            except Exception as e:
-                st.error(f"❌ Error al guardar en la base de datos: {e}")
-else:
-    st.error(f"No se encontró el archivo HTML del visor en: {HTML_FILE}")
+                st.success(f"✅ ¡Equipo '{tag_equipo}' guardado exitosamente!")
+                st.query_params["equipo"] = tag_equipo
+                del st.query_params["guardar_datos"]
+                st.rerun()
+        except Exception as e:
+            st.error(f"Error procesando el guardado: {e}")
