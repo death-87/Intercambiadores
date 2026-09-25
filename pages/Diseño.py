@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import requests
+import random
 import pandas as pd
 import urllib.parse
 import streamlit.components.v1 as components
@@ -23,10 +24,13 @@ HTML_FILE = os.path.join(parent_dir, "visor_3d", "index.html")
 
 @st.cache_data(ttl=0)
 def cargar_db():
-    """Lee la pestaña Diseño3D de Google Sheets y la convierte en diccionario."""
+    """Lee la pestaña Diseño3D de Google Sheets forzando datos frescos sin caché de Google."""
     try:
         hoja_encoded = urllib.parse.quote(HOJA_3D)
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja_encoded}"
+        # Añadimos un número aleatorio para obligar a Google Sheets a entregar datos frescos al instante
+        rand_id = random.randint(1, 9999999)
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja_encoded}&nc={rand_id}"
+        
         df = pd.read_csv(url)
         
         db = {}
@@ -55,6 +59,8 @@ def guardar_db(tag, datos):
         st.error(f"Error de conexión con Google Sheets: {e}")
         return False
 
+# Limpiamos caché de Streamlit al iniciar para forzar lectura limpia
+st.cache_data.clear()
 db = cargar_db()
 
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
@@ -93,7 +99,7 @@ plantilla_blanco = {
     ]
 }
 
-# Seleccionar datos de la base de datos o plantilla
+# Obtener datos reales de la base de datos según el equipo seleccionado
 if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --":
     datos_actuales = db.get(equipo_seleccionado, plantilla_blanco)
 else:
@@ -102,6 +108,11 @@ else:
 with col2:
     nombre_default = datos_actuales.get("nameplate", "") if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else ""
     tag_input_streamlit = st.text_input("TAG / Nameplate del Equipo:", value=nombre_default, key="input_nameplate")
+
+# Forzar actualización completa de la memoria de trabajo al cambiar de equipo en el selectbox
+if "current_loaded_team" not in st.session_state or st.session_state.current_loaded_team != equipo_seleccionado:
+    st.session_state.current_loaded_team = equipo_seleccionado
+    st.session_state.working_data = json.loads(json.dumps(datos_actuales))
 
 js_listener = """
 <script>
@@ -120,21 +131,17 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    datos_actuales["nameplate"] = tag_input_streamlit if tag_input_streamlit else equipo_seleccionado
+    # Sincronizamos el nameplate con el estado actual
+    st.session_state.working_data["nameplate"] = tag_input_streamlit if tag_input_streamlit else equipo_seleccionado
     
-    json_data_str = json.dumps(datos_actuales)
+    json_data_str = json.dumps(st.session_state.working_data)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # SE ELIMINÓ EL PARÁMETRO `key` QUE CAUSABA EL TypeError
     component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
     
-    if "working_data" not in st.session_state or st.session_state.get("current_loaded") != equipo_seleccionado:
-        st.session_state.working_data = json.loads(json.dumps(datos_actuales))
-        st.session_state.current_loaded = equipo_seleccionado
-
     if component_value:
         try:
             parsed_data = json.loads(component_value)
@@ -152,18 +159,13 @@ with col_guardar:
         tag_final = tag_input_streamlit.strip() 
         
         if tag_final:
-            if "working_data" in st.session_state:
-                datos_a_guardar = st.session_state.working_data
-            else:
-                datos_a_guardar = datos_actuales
-                
-            datos_a_guardar["nameplate"] = tag_final
+            st.session_state.working_data["nameplate"] = tag_final
             
             with st.spinner('Guardando en la nube...'):
-                exito = guardar_db(tag_final, datos_a_guardar)
+                exito = guardar_db(tag_final, st.session_state.working_data)
             
             if exito:
-                cargar_db.clear()
+                st.cache_data.clear()
                 st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente con todas sus boquillas y plugs en Google Sheets!")
                 st.query_params["equipo"] = tag_final
                 st.rerun()
