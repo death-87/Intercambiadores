@@ -186,21 +186,39 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    function sendValueToStreamlit(value) {
-      window.parent.postMessage({ isStreamlitMessage: true, type: "setComponentValue", value: value }, "*");
-    }
+    // --- PUNTO DE ENTRADA INYECTADO DESDE PYTHON ---
+    /*__INJECT_DATA_HERE__*/
 
-    window.addEventListener("message", function(event) {
-      if (event.data.type === "streamlit:render") {
-        const args = event.data.args;
-        if(args.datos_iniciales && !window.hasLoadedData) {
-          loadExchangerData(args.datos_iniciales);
-          window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: 850}, "*");
-          window.hasLoadedData = true;
-        }
+    window.addEventListener("DOMContentLoaded", () => {
+      if (window.initialExchangerData) {
+        loadExchangerData(window.initialExchangerData);
       }
     });
-    window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*");
+
+    function guardarCambiosCliente() {
+      const exportData = {
+        nameplate: document.getElementById('name-input').value,
+        vent: document.getElementById('vent-input').value,
+        drain: document.getElementById('drain-input').value,
+        nozzles: nozzlesList.map(nz => ({
+          tagName: nz.userData.tagName,
+          diaIndex: nz.userData.diaIndex,
+          rating: nz.userData.rating,
+          bodyPart: nz.userData.bodyPart,
+          pos: nz.userData.pos,
+          valX: nz.userData.valX,
+          hasNS: nz.userData.hasNS,
+          tagNS: nz.userData.tagNS,
+          hasFS: nz.userData.hasFS,
+          tagFS: nz.userData.tagFS
+        }))
+      };
+      
+      navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+      alert("✅ ¡Datos del equipo copiados al portapapeles y listos para actualizar en el sistema!");
+    }
+
+    document.getElementById('btn-save-db').addEventListener('click', guardarCambiosCliente);
 
     let nozzlesList = [];
     let customNozzleCount = 0;
@@ -493,27 +511,6 @@
       }
       deselectNozzle();
     }
-
-    document.getElementById('btn-save-db').addEventListener('click', () => {
-      const exportData = {
-        nameplate: document.getElementById('name-input').value,
-        vent: document.getElementById('vent-input').value,
-        drain: document.getElementById('drain-input').value,
-        nozzles: nozzlesList.map(nz => ({
-          tagName: nz.userData.tagName,
-          diaIndex: nz.userData.diaIndex,
-          rating: nz.userData.rating,
-          bodyPart: nz.userData.bodyPart,
-          pos: nz.userData.pos,
-          valX: nz.userData.valX,
-          hasNS: nz.userData.hasNS,
-          tagNS: nz.userData.tagNS,
-          hasFS: nz.userData.hasFS,
-          tagFS: nz.userData.tagFS
-        }))
-      };
-      sendValueToStreamlit(exportData);
-    });
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
