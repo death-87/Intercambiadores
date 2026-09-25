@@ -30,7 +30,7 @@ equipo_url = params.get("equipo", None)
 
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
 
-col1, col2 = st.columns([2, 2])
+col1, col2, col3 = st.columns([2, 2, 2])
 
 lista_equipos = ["-- NUEVO EQUIPO (En blanco) --"] + list(db.keys())
 
@@ -49,21 +49,26 @@ elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in par
 nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
 
 with col2:
-    tag_input = st.text_input("TAG del Equipo (Obligatorio para guardar, Ej: C702):", value=nombre_default)
+    tag_input = st.text_input("TAG del Equipo (Ej: C702):", value=nombre_default)
 
 plantilla_blanco = {
-    "nameplate": "",
+    "nameplate": tag_input if tag_input else "",
     "vent": "",
     "drain": "",
     "nozzles": [
-        {"tagName": "", "diaIndex": 6, "rating": "150#", "bodyPart": "shell", "pos": "superior", "valX": -1.5, "hasNS": False, "tagNS": "", "hasFS": False, "tagFS": ""},
-        {"tagName": "", "diaIndex": 6, "rating": "150#", "bodyPart": "shell", "pos": "inferior", "valX": 1.5, "hasNS": False, "tagNS": "", "hasFS": False, "tagFS": ""},
-        {"tagName": "", "diaIndex": 6, "rating": "150#", "bodyPart": "channel", "pos": "superior", "valX": -2.9775, "hasNS": False, "tagNS": "", "hasFS": False, "tagFS": ""},
-        {"tagName": "", "diaIndex": 6, "rating": "150#", "bodyPart": "channel", "pos": "inferior", "valX": -2.9775, "hasNS": False, "tagNS": "", "hasFS": False, "tagFS": ""}
+        {"tagName": "S1", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "superior", "valX": -1.5, "hasNS": True, "tagNS": "3/4\"", "hasFS": True, "tagFS": "1\""},
+        {"tagName": "S2", "diaIndex": 6, "rating": "300#", "bodyPart": "shell", "pos": "inferior", "valX": 1.5, "hasNS": True, "tagNS": "3/4\"", "hasFS": True, "tagFS": "1\""},
+        {"tagName": "T1", "diaIndex": 8, "rating": "300#", "bodyPart": "channel", "pos": "superior", "valX": -2.9775, "hasNS": True, "tagNS": "1\"", "hasFS": True, "tagFS": "1\""},
+        {"tagName": "T2", "diaIndex": 8, "rating": "300#", "bodyPart": "channel", "pos": "inferior", "valX": -2.9775, "hasNS": True, "tagNS": "1\"", "hasFS": True, "tagFS": "1\""}
     ]
 }
 
+# Obtener los datos actuales del equipo seleccionado
 datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equipo_seleccionado else db.get(equipo_seleccionado, plantilla_blanco)
+
+with col3:
+    st.markdown("###") # Espaciador vertical
+    btn_guardar_streamlit = st.button("💾 Guardar Cambios en Base de Datos", type="primary", use_container_width=True)
 
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
@@ -71,44 +76,27 @@ if os.path.exists(HTML_FILE):
     
     json_data_str = json.dumps(datos_actuales)
     
-    # Script puente para capturar la acción de guardado del visor y comunicarla con Streamlit
-    puente_js = f"""
-    <script>
-        window.initialExchangerData = {json_data_str};
-        
-        document.addEventListener("DOMContentLoaded", function() {{
-            setInterval(() => {{
-                let btnGuardar = document.getElementById("save-btn") || document.querySelector("button[id*='save']");
-                if (btnGuardar && !btnGuardar.hasAttribute("data-hooked")) {{
-                    btnGuardar.setAttribute("data-hooked", "true");
-                    btnGuardar.addEventListener("click", function() {{
-                        if (typeof getExchangerData === "function") {{
-                            let data = getExchangerData();
-                            window.parent.postMessage({{ type: "streamlit:setComponentValue", value: data }}, "*");
-                        }}
-                    }});
-                }}
-            }}, 1000);
-        }});
-    </script>
-    """
+    # Inyectar los datos iniciales correctamente en el visor 3D
+    html_injectado = html_content.replace(
+        "/*__INJECT_DATA_HERE__*/", 
+        f"window.initialExchangerData = {json_data_str};"
+    )
     
-    html_injectado = html_content.replace("/*__INJECT_DATA_HERE__*/", puente_js)
+    # Renderizar el visor 3D limpio (sin conflictos de retorno)
+    components.html(html_injectado, height=820, scrolling=False)
     
-    resultado = components.html(html_injectado, height=820, scrolling=False)
-    
-    if resultado is not None:
+    # Manejar el almacenamiento cuando se hace clic en el botón de Streamlit
+    if btn_guardar_streamlit:
         tag_limpio = tag_input.strip()
         if not tag_limpio:
-            st.error("⚠️ Por favor, ingresa el **TAG del Equipo** en la casilla superior antes de presionar guardar en el visor.")
+            st.error("⚠️ Por favor, ingresa un **TAG del Equipo** válido antes de guardar.")
         else:
             try:
-                datos_limpios = json.loads(json.dumps(resultado))
-                db[tag_limpio] = datos_limpios
+                # Asegurar que se guarden datos limpios y serializables
+                db[tag_limpio] = datos_actuales
                 guardar_db(db)
-                st.success(f"✅ ¡Equipo '{tag_limpio}' guardado y actualizado exitosamente!")
+                st.success(f"✅ ¡Equipo '{tag_limpio}' guardado exitosamente en la base de datos!")
                 st.query_params["equipo"] = tag_limpio
-                st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al guardar en la base de datos: {e}")
 else:
