@@ -192,7 +192,7 @@
       }
     });
 
-    // Envía los datos directamente a Streamlit vía postMessage
+    // Envía los datos directamente a Streamlit refrescando la URL con los parámetros actualizados
     document.getElementById('btn-save-db').addEventListener('click', () => {
       const exportData = {
         nameplate: document.getElementById('name-input').value,
@@ -212,7 +212,8 @@
         }))
       };
       
-      window.parent.postMessage({ isStreamlitMessage: true, type: "setComponentValue", value: exportData }, "*");
+      const jsonStr = encodeURIComponent(JSON.stringify(exportData));
+      window.parent.location.search = `?equipo=${encodeURIComponent(exportData.nameplate)}&guardar_datos=${jsonStr}`;
     });
 
     let nozzlesList = [];
@@ -246,19 +247,18 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
 
-    // CONFIGURACIÓN CORREGIDA DE ORBITCONTROLS PARA PANEO CON EL SCROLL/MIDDLE CLICK
+    // CONFIGURACIÓN DE ORBITCONTROLS CON PANEO EN EL CLIC DE LA RUEDA
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.enablePan = true;
     controls.panSpeed = 1.0;
-    controls.target.set(0, 0, 0); // Centro de atención fijado en el centro del intercambiador
+    controls.target.set(0, 0, 0);
 
-    // Asignación explícita de acciones a los botones del mouse
     controls.mouseButtons = {
-      LEFT: THREE.MOUSE.ROTATE,  // Clic izquierdo: Rotar cámara
-      MIDDLE: THREE.MOUSE.PAN,   // Clic central (rueda scroll): Desplazar / Mover desde el centro
-      RIGHT: THREE.MOUSE.DOLLY   // Clic derecho: Acercar / Alejar (Zoom)
+      LEFT: THREE.MOUSE.ROTATE,  // Rotar
+      MIDDLE: THREE.MOUSE.PAN,   // Desplazar / Mover desde el centro con clic de la rueda
+      RIGHT: THREE.MOUSE.DOLLY   // Zoom
     };
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.7));
