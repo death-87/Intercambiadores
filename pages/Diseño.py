@@ -70,11 +70,6 @@ datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equip
 if tag_input:
     datos_actuales["nameplate"] = tag_input
 
-# Capturar datos recibidos desde el visor 3D para persistencia
-component_value = components.html(
-    "", height=0
-) # Inicializador pasivo
-
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
@@ -85,10 +80,8 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # Capturar respuesta enviada por postMessage vía Streamlit Component
-    res = components.html(html_injectado, height=750, scrolling=False)
+    components.html(html_injectado, height=750, scrolling=False)
 
-    # Procesar guardado directo al presionar Guardar dentro del Visor HTML
     if "guardar_datos" in st.query_params:
         try:
             raw_json = st.query_params["guardar_datos"]
