@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Diseño 3D - Intercambiador de Calor Interactivo</title>
+  <title>Visor 3D Interactivo</title>
   <style>
     body { margin: 0; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
     #canvas-container { width: 100vw; height: 100vh; }
@@ -115,7 +115,7 @@
       </div>
       
       <div class="input-group">
-        <label>Orientación (Pegado al cuerpo):</label>
+        <label>Orientación:</label>
         <select id="edit-nz-pos">
           <option value="superior">Arriba (Superior)</option>
           <option value="inferior">Abajo (Inferior)</option>
@@ -123,20 +123,20 @@
       </div>
       
       <div class="input-group">
-        <label>Posición Horizontal (Deslizar):</label>
+        <label>Posición Horizontal:</label>
         <input type="range" id="edit-nz-x" step="0.05">
       </div>
       
-      <div style="margin-top:15px; margin-bottom:5px; font-size:13px; color:#4fc3f7; font-weight:bold;">Conexiones / Tapones (Plugs)</div>
+      <div style="margin-top:15px; margin-bottom:5px; font-size:13px; color:#4fc3f7; font-weight:bold;">Tapones (Plugs)</div>
       <div class="plug-edit-row">
         <input type="checkbox" id="edit-ns-check">
         <label for="edit-ns-check" style="color:#fff; font-size:12px; margin:0; width:30px;">NS:</label>
-        <input type="text" id="edit-ns-name" placeholder="Tag NS (Frente)" disabled>
+        <input type="text" id="edit-ns-name" placeholder="Tag NS" disabled>
       </div>
       <div class="plug-edit-row">
         <input type="checkbox" id="edit-fs-check">
         <label for="edit-fs-check" style="color:#fff; font-size:12px; margin:0; width:30px;">FS:</label>
-        <input type="text" id="edit-fs-name" placeholder="Tag FS (Atrás)" disabled>
+        <input type="text" id="edit-fs-name" placeholder="Tag FS" disabled>
       </div>
     </div>
 
@@ -186,7 +186,6 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    // --- COMUNICACIÓN CON STREAMLIT ---
     function sendValueToStreamlit(value) {
       window.parent.postMessage({ isStreamlitMessage: true, type: "setComponentValue", value: value }, "*");
     }
@@ -203,7 +202,6 @@
     });
     window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*");
 
-    // --- VARIABLES GLOBALES Y DE ESTADO ---
     let nozzlesList = [];
     let customNozzleCount = 0;
 
@@ -224,7 +222,6 @@
       bonnet:  { min: 2.35, max: 2.95, center: 2.6575 }
     };
 
-    // --- ESCENA, CÁMARA Y RENDERER ---
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a1a);
@@ -239,7 +236,6 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
-    // --- ILUMINACIÓN ---
     scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(15, 25, 20);
@@ -248,7 +244,6 @@
     pointLight.position.set(-10, -10, -10);
     scene.add(pointLight);
 
-    // --- MATERIALES BASE ---
     const shellMat = new THREE.MeshStandardMaterial({ color: 0x7c90a0, roughness: 0.35, metalness: 0.75 });
     const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x3b4252, roughness: 0.4, metalness: 0.85 });
     const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.3, metalness: 0.7 });
@@ -259,7 +254,6 @@
     const heatExchanger = new THREE.Group();
     scene.add(heatExchanger);
 
-    // -- CONSTRUCCIÓN DEL EQUIPO --
     const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L_SHELL, 32), shellMat);
     shell.rotation.z = Math.PI / 2;
     heatExchanger.add(shell);
@@ -275,7 +269,6 @@
     flangeLeft.position.x = FLANGE_SHELL_L_X;
     heatExchanger.add(flangeLeft);
 
-    // -- SPRITES (TEXTOS) --
     function createTextSprite(initialText, color = 'white', fontSize = 32) {
       const canvas = document.createElement('canvas');
       canvas.width = 300; 
@@ -310,7 +303,6 @@
       return sprite;
     }
 
-    // -- BONETE Y CHANNEL --
     const rearBonnetGroup = new THREE.Group();
     const bonnetSkirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.8, 32), shellMat);
     bonnetSkirt.rotation.z = Math.PI / 2;
@@ -374,7 +366,6 @@
     channelGroup.position.x = CHANNEL_GRP_X; 
     heatExchanger.add(channelGroup);
 
-    // -- BOQUILLAS WELDING NECK Y HUECAS --
     function createNozzlePlug(labelText, colorMat) {
       const plugGroup = new THREE.Group();
       const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 24), colorMat);
@@ -478,7 +469,6 @@
       return group;
     }
 
-    // -- CARGAR DATOS DESDE STREAMLIT --
     function loadExchangerData(data) {
       document.getElementById('name-input').value = data.nameplate || "";
       updateNameplateText(data.nameplate || "");
@@ -489,12 +479,10 @@
       document.getElementById('drain-input').value = data.drain || "";
       drainPlug.userData.labelSprite.updateText(data.drain || "");
 
-      // Destruir boquillas viejas de la memoria y la escena
       nozzlesList.forEach(nz => heatExchanger.remove(nz));
       nozzlesList = [];
       customNozzleCount = 0;
 
-      // Construir las nuevas según el JSON (si está en blanco cargará las 4 por defecto)
       if(data.nozzles) {
         data.nozzles.forEach(n => {
           customNozzleCount++;
@@ -506,7 +494,6 @@
       deselectNozzle();
     }
 
-    // -- ENVIAR DATOS A STREAMLIT (GUARDAR) --
     document.getElementById('btn-save-db').addEventListener('click', () => {
       const exportData = {
         nameplate: document.getElementById('name-input').value,
@@ -528,7 +515,6 @@
       sendValueToStreamlit(exportData);
     });
 
-    // -- RAYCASTER (Selección) --
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let selectedNozzle = null;
@@ -568,7 +554,6 @@
       const data = selectedNozzle.userData;
       document.getElementById('editor-panel').style.display = 'block';
       document.getElementById('edit-nz-name').value = data.tagName;
-      
       document.getElementById('edit-nz-dia').selectedIndex = data.diaIndex;
       document.getElementById('edit-nz-rating').value = data.rating;
       
@@ -600,7 +585,6 @@
       document.getElementById('editor-panel').style.display = 'none';
     }
 
-    // -- EVENTOS DEL EDITOR DE BOQUILLA --
     const editName = document.getElementById('edit-nz-name');
     const editDia = document.getElementById('edit-nz-dia');
     const editRating = document.getElementById('edit-nz-rating');
@@ -703,7 +687,6 @@
       selectedNozzle.userData.plugFS.userData.labelSprite.updateText(val);
     });
 
-    // -- AGREGAR BOQUILLA NUEVA --
     document.getElementById('btn-add-nz').addEventListener('click', () => {
       customNozzleCount++;
       const diaSelect = document.getElementById('new-nz-dia');
@@ -718,7 +701,6 @@
       selectNozzle(newNz);
     });
 
-    // -- PLACA DE IDENTIFICACIÓN (NAMEPLATE) --
     const nameCanvas = document.createElement('canvas');
     nameCanvas.width = 512;
     nameCanvas.height = 170; 
@@ -762,7 +744,6 @@
     document.getElementById('vent-input').addEventListener('input', (e) => ventPlug.userData.labelSprite.updateText(e.target.value));
     document.getElementById('drain-input').addEventListener('input', (e) => drainPlug.userData.labelSprite.updateText(e.target.value));
 
-    // -- RENDER LOOP --
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
