@@ -12,7 +12,7 @@ HTML_FILE = os.path.join(parent_dir, "visor_3d", "index.html")
 
 def cargar_db():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
             try:
                 return json.load(f)
             except json.JSONDecodeError:
@@ -20,8 +20,8 @@ def cargar_db():
     return {}
 
 def guardar_db(db):
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=4)
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=4, ensure_ascii=False)
 
 db = cargar_db()
 
@@ -79,18 +79,23 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # Captura el resultado cuando se presiona el botón en el 3D
     resultado_guardar = components.html(html_injectado, height=820, scrolling=False)
     
-    if resultado_guardar is not None:
+    # Procesar y validar rigurosamente lo que devuelve el componente antes de guardarlo
+    if resultado_guardar is not None and isinstance(resultado_guardar, dict):
         tag_limpio = tag_guardar.strip()
         if not tag_limpio:
             st.error("⚠️ Error: Debes ingresar un TAG válido (Ej: C702) en la casilla superior antes de hacer clic en guardar.")
         else:
-            db[tag_limpio] = resultado_guardar
-            guardar_db(db)
-            st.success(f"✅ ¡Equipo '{tag_limpio}' guardado exitosamente en la base de datos!")
-            st.query_params["equipo"] = tag_limpio
-            st.rerun()
+            try:
+                # Forzar conversión limpia a tipos estándar de Python para evitar errores de serialización
+                datos_limpios = json.loads(json.dumps(resultado_guardar))
+                db[tag_limpio] = datos_limpios
+                guardar_db(db)
+                st.success(f"✅ ¡Equipo '{tag_limpio}' guardado exitosamente en la base de datos!")
+                st.query_params["equipo"] = tag_limpio
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al procesar los datos para JSON: {e}")
 else:
     st.error(f"No se encontró el archivo HTML en: {HTML_FILE}")
