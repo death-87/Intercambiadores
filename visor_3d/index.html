@@ -9,9 +9,10 @@
     
     #info { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.65); padding: 8px 12px; border-radius: 6px; border: 1px solid #444; text-align: right; pointer-events: none; color: #fff;}
     
+    /* PANEL FLOTANTE COMPACTO */
     #ui-container { 
       position: absolute; top: 10px; left: 10px; z-index: 10; 
-      background: rgba(15, 23, 42, 0.88); padding: 10px; border-radius: 6px; 
+      background: rgba(15, 23, 42, 0.9); padding: 10px; border-radius: 6px; 
       border: 1px solid #475569; width: 240px; max-height: 92vh; overflow-y: auto; 
       box-shadow: 0 4px 6px rgba(0,0,0,0.3); color: #f8fafc;
     }
@@ -172,7 +173,7 @@
       }
     });
 
-    // Guardado mediante redirección en la ventana raíz de Streamlit
+    // Envío del mensaje seguro hacia el contenedor Streamlit
     document.getElementById('btn-save-db').addEventListener('click', () => {
       const exportData = {
         nameplate: document.getElementById('name-input').value || "EQUIPO_SIN_NOMBRE",
@@ -192,13 +193,7 @@
         }))
       };
       
-      const jsonStr = encodeURIComponent(JSON.stringify(exportData));
-      
-      try {
-        window.top.location.href = window.top.location.pathname + `?equipo=${encodeURIComponent(exportData.nameplate)}&guardar_datos=${jsonStr}`;
-      } catch (e) {
-        window.parent.location.search = `?equipo=${encodeURIComponent(exportData.nameplate)}&guardar_datos=${jsonStr}`;
-      }
+      window.parent.postMessage({ type: 'GUARDAR_EQUIPO_3D', payload: exportData }, '*');
     });
 
     let nozzlesList = [];
@@ -245,16 +240,17 @@
       RIGHT: THREE.MOUSE.DOLLY
     };
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
     dirLight.position.set(15, 25, 20);
     scene.add(dirLight);
 
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0x7c90a0, roughness: 0.35, metalness: 0.75 });
-    const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x3b4252, roughness: 0.4, metalness: 0.85 });
-    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.3, metalness: 0.7 });
-    const partitionMat = new THREE.MeshStandardMaterial({ color: 0x505a69, roughness: 0.5, metalness: 0.6 });
-    const plugMat = new THREE.MeshStandardMaterial({ color: 0x8a9ba8, roughness: 0.3, metalness: 0.8 }); 
+    // GRIS MÁS CLARO E INDUSTRIAL (#d1d5db)
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.6 });
+    const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.4, metalness: 0.8 });
+    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3, metalness: 0.7 });
+    const partitionMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.5, metalness: 0.6 });
+    const plugMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.3, metalness: 0.8 }); 
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
 
     const heatExchanger = new THREE.Group();
@@ -673,20 +669,20 @@
         return; 
       }
 
-      ctx.fillStyle = '#b0b5b9';
+      ctx.fillStyle = '#cbd5e1';
       ctx.fillRect(0, 0, nameCanvas.width, nameCanvas.height);
-      ctx.strokeStyle = '#333';
+      ctx.strokeStyle = '#1e293b';
       ctx.lineWidth = 20;
       ctx.strokeRect(0, 0, nameCanvas.width, nameCanvas.height);
       
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = '#1e293b';
       ctx.beginPath(); ctx.arc(40, 40, 12, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(nameCanvas.width-40, 40, 12, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(40, nameCanvas.height-40, 12, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(nameCanvas.width-40, nameCanvas.height-40, 12, 0, Math.PI*2); ctx.fill();
 
       ctx.fillStyle = '#000';
-      ctx.font = 'bold 80px sans-serif'; // LETRA MÁS GRANDE Y LEGIBLE
+      ctx.font = 'bold 80px sans-serif'; 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, nameCanvas.width / 2, nameCanvas.height / 2);
@@ -695,7 +691,6 @@
     }
 
     const plateMat = new THREE.MeshStandardMaterial({ map: plateTexture, metalness: 0.6, roughness: 0.4, transparent: true });
-    // Placa más grande en el modelo 3D (1.1m x 0.42m)
     const nameplate = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.42, 0.02), plateMat);
     nameplate.position.set(0, 0, R + 0.02); 
     heatExchanger.add(nameplate);
