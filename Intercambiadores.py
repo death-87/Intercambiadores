@@ -979,6 +979,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
 st.markdown("---")
 st.subheader("🔍 Vista Previa 3D de Equipos Registrados (Modo Presentación)")
 
+current_dir = os.path.dirname(__file__)
 DB_FILE = os.path.join(current_dir, "equipos.json")
 HTML_FILE = os.path.join(current_dir, "visor_3d", "index.html")
 
