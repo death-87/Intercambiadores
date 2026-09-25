@@ -48,11 +48,9 @@ elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in par
     st.query_params.clear()
     st.rerun()
 
-nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
-
-# Carga de datos base
+# Plantilla base por si el equipo no existe o es nuevo
 plantilla_blanco = {
-    "nameplate": nombre_default,
+    "nameplate": "",
     "vent": '3/4"',
     "drain": '3/4"',
     "nozzles": [
@@ -63,37 +61,14 @@ plantilla_blanco = {
     ]
 }
 
+# SE CARGAN LOS DATOS FIJOS DESDE LA BASE DE DATOS
 datos_base = db.get(equipo_seleccionado, plantilla_blanco) if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else plantilla_blanco
 
-# Sincronización con session_state por cambio de equipo
+# Inicializamos la memoria de trabajo temporal
 if "last_loaded_team" not in st.session_state or st.session_state.last_loaded_team != equipo_seleccionado:
     st.session_state.last_loaded_team = equipo_seleccionado
     st.session_state.working_data = json.loads(json.dumps(datos_base))
 
-datos_trabajo = st.session_state.working_data
-
-with col2:
-    # Este input permanece aquí para facilitar el nombramiento directo en Streamlit
-    tag_input = st.text_input("TAG / Nameplate del Equipo (Ej: E-101):", value=datos_trabajo.get("nameplate", nombre_default))
-    datos_trabajo["nameplate"] = tag_input
-
-st.markdown("---")
-
-col_guardar, _ = st.columns([2, 4])
-with col_guardar:
-    if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
-        tag_final = tag_input.strip()
-        if tag_final:
-            datos_trabajo["nameplate"] = tag_final
-            db[tag_final] = datos_trabajo
-            guardar_db(db)
-            st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente con todas sus medidas!")
-            st.query_params["equipo"] = tag_final
-            st.rerun()
-        else:
-            st.warning("⚠️ Debes ingresar un TAG / Nameplate válido para poder guardar.")
-
-# Listener Javascript para capturar cambios desde el canvas 3D
 js_listener = """
 <script>
 window.addEventListener('message', function(event) {
@@ -105,26 +80,41 @@ window.addEventListener('message', function(event) {
 </script>
 """
 
+st.markdown("---")
+
+# Renderizamos el componente 3D pasándole los datos_base fijos (evita parpadeos o borrados intermedios)
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    json_data_str = json.dumps(datos_trabajo)
+    json_data_str = json.dumps(datos_base)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
+    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False, key=f"visor_{equipo_seleccionado}")
     
-    # Extraemos todos los datos (boquillas, venteo, drenaje) que provengan del visor 3D en tiempo real
+    # Cualquier interacción dentro del visor se guarda en memoria antes de hacer clic en guardar
     if component_value:
         try:
             parsed_data = json.loads(component_value)
-            st.session_state.working_data["nozzles"] = parsed_data.get("nozzles", st.session_state.working_data.get("nozzles", []))
-            st.session_state.working_data["vent"] = parsed_data.get("vent", st.session_state.working_data.get("vent", ""))
-            st.session_state.working_data["drain"] = parsed_data.get("drain", st.session_state.working_data.get("drain", ""))
+            st.session_state.working_data = parsed_data
         except Exception:
             pass
 else:
     st.error(f"⚠️ No se encontró el visor HTML en: {HTML_FILE}")
+
+st.markdown("---")
+col_guardar, _ = st.columns([2, 4])
+with col_guardar:
+    if st.button("💾 GUARDAR EQUIPO EN JSON", type="primary", use_container_width=True):
+        tag_final = st.session_state.working_data.get("nameplate", "").strip()
+        if tag_final:
+            db[tag_final] = st.session_state.working_data
+            guardar_db(db)
+            st.success(f"✅ ¡Equipo '{tag_final}' guardado exitosamente!")
+            st.query_params["equipo"] = tag_final
+            st.rerun()
+        else:
+            st.warning("⚠️ Debes ingresar el Nameplate / TAG en el panel del visor 3D para poder guardar.")
