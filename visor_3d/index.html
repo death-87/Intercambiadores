@@ -266,7 +266,11 @@
     camera.position.set(6, 4, 10); 
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setClearColor(0x000000, 0); 
+    renderer.setClearColor(0x172231, 1);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
 
@@ -283,14 +287,24 @@
       RIGHT: THREE.MOUSE.DOLLY
     };
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    scene.add(new THREE.HemisphereLight(0xe5efff, 0x38404b, 2.1));
+    const dirLight = new THREE.DirectionalLight(0xfff4e6, 3.2);
     dirLight.position.set(15, 25, 20);
     scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0xb9d8ff, 2.2);
+    fillLight.position.set(-8, 3, -6);
+    scene.add(fillLight);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 2.6);
+    rimLight.position.set(2, -2, 8);
+    scene.add(rimLight);
 
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.6 });
-    const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.4, metalness: 0.8 });
-    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.2, metalness: 0.5 });
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0xa5b0b9, roughness: 0.38, metalness: 0.55 });
+    const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x788693, roughness: 0.29, metalness: 0.65 });
+    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x8a9ba7, roughness: 0.34, metalness: 0.55 });
+    const studMat = new THREE.MeshStandardMaterial({color: 0x343c46, roughness: 0.38, metalness: 0.7});
+    const nutMat = new THREE.MeshStandardMaterial({color: 0xa6adb5, roughness: 0.26, metalness: 0.7});
+    const gasketMat = new THREE.MeshStandardMaterial({color: 0x222932, roughness: 0.9, metalness: 0.1});
+    const weldMat = new THREE.MeshStandardMaterial({color: 0x7c8790, roughness: 0.55, metalness: 0.5});
     const partitionMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.5, metalness: 0.6 });
     const plugMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.25, metalness: 0.85 }); 
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
@@ -298,11 +312,58 @@
     const heatExchanger = new THREE.Group();
     scene.add(heatExchanger);
 
-    const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L_SHELL, 32), shellMat);
+    // Detalles visuales orientativos; no representan un patrón normativo de pernos.
+    function ringX(parent, x, radius, tube, material) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 8, 96), material);
+      ring.rotation.y = Math.PI / 2;
+      ring.position.x = x;
+      parent.add(ring);
+      return ring;
+    }
+    function cylinderX(parent, x, radius, thickness, material) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, thickness, 96), material);
+      mesh.rotation.z = Math.PI / 2;
+      mesh.position.x = x;
+      parent.add(mesh);
+      return mesh;
+    }
+    function studCircle(parent, leftFace, rightFace, count = 20, pitchRadius = 0.603) {
+      const shaftRadius = 0.014, nutHeight = 0.026;
+      const shaftLength = rightFace - leftFace + 0.094;
+      const groups = [
+        {geo: new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 12), mat: studMat, positions: []},
+        {geo: new THREE.CylinderGeometry(0.026, 0.026, nutHeight, 6), mat: nutMat, positions: []},
+        {geo: new THREE.TorusGeometry(shaftRadius, 0.0015, 4, 12), mat: nutMat, positions: [], torus: true}
+      ];
+      for (let i = 0; i < count; i++) {
+        const angle = (i + 0.5) * Math.PI * 2 / count;
+        const y = Math.cos(angle) * pitchRadius, z = Math.sin(angle) * pitchRadius;
+        groups[0].positions.push([(leftFace + rightFace) / 2, y, z]);
+        for (const [face, sign] of [[leftFace, -1], [rightFace, 1]]) {
+          groups[1].positions.push([face + sign * nutHeight / 2, y, z]);
+          // Anillos finos simulan los filetes visibles en los extremos del espárrago.
+          for (let t = 0; t < 5; t++) groups[2].positions.push([face + sign * (0.028 + t * 0.0035), y, z]);
+        }
+      }
+      const transform = new THREE.Object3D();
+      for (const part of groups) {
+        const mesh = new THREE.InstancedMesh(part.geo, part.mat, part.positions.length);
+        part.positions.forEach((pos, index) => {
+          transform.position.set(...pos);
+          transform.rotation.set(0, part.torus ? Math.PI / 2 : 0, part.torus ? 0 : Math.PI / 2);
+          transform.updateMatrix();
+          mesh.setMatrixAt(index, transform.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        parent.add(mesh);
+      }
+    }
+
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L_SHELL, 96), shellMat);
     shell.rotation.z = Math.PI / 2;
     heatExchanger.add(shell);
 
-    const flangeGeo = new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, T_FLANGE, 32);
+    const flangeGeo = new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, T_FLANGE, 96);
     const flangeRight = new THREE.Mesh(flangeGeo, flangeMatBase);
     flangeRight.rotation.z = Math.PI / 2;
     flangeRight.position.x = FLANGE_SHELL_R_X;
@@ -312,6 +373,11 @@
     flangeLeft.rotation.z = Math.PI / 2;
     flangeLeft.position.x = FLANGE_SHELL_L_X;
     heatExchanger.add(flangeLeft);
+    for (const x of [-2.13, 2.13, -0.7, 0.7]) ringX(heatExchanger, x, R, 0.006, weldMat);
+    for (const x of [FLANGE_SHELL_R_X, FLANGE_SHELL_L_X]) {
+      ringX(heatExchanger, x - 0.053, R_FLANGE, 0.003, nutMat);
+      ringX(heatExchanger, x + 0.053, R_FLANGE, 0.003, nutMat);
+    }
 
     function createTextSprite(initialText, color = 'white', fontSize = 32) {
       const canvas = document.createElement('canvas');
@@ -348,16 +414,27 @@
     }
 
     const rearBonnetGroup = new THREE.Group();
-    const bonnetSkirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.8, 32), shellMat);
+    const bonnetSkirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.8, 96), shellMat);
     bonnetSkirt.rotation.z = Math.PI / 2;
     bonnetSkirt.position.x = 0.4;
     rearBonnetGroup.add(bonnetSkirt);
 
-    const bonnetHeadGeo = new THREE.SphereGeometry(R, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const bonnetHeadGeo = new THREE.SphereGeometry(R, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     const bonnetHead = new THREE.Mesh(bonnetHeadGeo, shellMat);
     bonnetHead.rotation.z = -Math.PI / 2;
-    bonnetHead.position.x = 0.8;
+    bonnetHead.scale.y = 0.65;
+    bonnetHead.position.x = 0.926;
     rearBonnetGroup.add(bonnetHead);
+    // Bonete con tapa abombada desmontable y dos bridas enfrentadas.
+    cylinderX(rearBonnetGroup, 0.74, R_FLANGE, 0.12, flangeMatBase);
+    cylinderX(rearBonnetGroup, 0.803, R_FLANGE - 0.008, 0.006, gasketMat);
+    cylinderX(rearBonnetGroup, 0.866, R_FLANGE, 0.12, flangeMatBase);
+    studCircle(rearBonnetGroup, 0.68, 0.926);
+    ringX(rearBonnetGroup, 0.67, R, 0.009, weldMat);
+    ringX(rearBonnetGroup, 0.933, R, 0.007, weldMat);
+    cylinderX(rearBonnetGroup, 0.06, R_FLANGE, 0.12, flangeMatBase);
+    ringX(rearBonnetGroup, 0, R_FLANGE - 0.005, 0.004, gasketMat);
+    studCircle(rearBonnetGroup, -0.12, 0.12);
 
     function createBonnetPlug(yPos, rotZ) {
       const plugGroup = new THREE.Group();
@@ -383,7 +460,7 @@
     heatExchanger.add(rearBonnetGroup);
 
     const channelGroup = new THREE.Group();
-    const channelBody = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 1.2, 32), shellMat);
+    const channelBody = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 1.2, 96), shellMat);
     channelBody.rotation.z = Math.PI / 2;
     channelBody.position.x = -0.72;
     channelGroup.add(channelBody);
@@ -395,10 +472,17 @@
     channelOuterFlange.rotation.z = Math.PI / 2;
     channelOuterFlange.position.x = -1.38;
     channelGroup.add(channelOuterFlange);
-    const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 32), flangeMatBase);
+    const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
     coverPlate.rotation.z = Math.PI / 2;
-    coverPlate.position.x = -1.49;
+    coverPlate.position.x = -1.496;
     channelGroup.add(coverPlate);
+    cylinderX(channelGroup, -1.443, R_FLANGE - 0.008, 0.006, gasketMat);
+    studCircle(channelGroup, -1.546, -1.32);
+    studCircle(channelGroup, -0.12, 0.12);
+    ringX(channelGroup, 0, R_FLANGE - 0.005, 0.004, gasketMat);
+    ringX(channelGroup, -1.31, R, 0.009, weldMat);
+    ringX(channelGroup, -0.13, R, 0.009, weldMat);
+    ringX(channelGroup, -1.548, R_FLANGE - 0.02, 0.003, nutMat);
     const partitionPlate = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 1.09), partitionMat);
     partitionPlate.position.x = -0.72;
     channelGroup.add(partitionPlate);
@@ -442,22 +526,46 @@
       const nHeight = 0.08;
       const fThick = 0.03;
 
-      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(pOuter, pOuter, pHeight, 32), nzMat);
-      pipe.position.y = pHeight / 2;
+      const tubeProfile = [
+        [pInner, 0], [pOuter, 0], [pOuter, pHeight],
+        [nTop, pHeight + nHeight], [pInner, pHeight + nHeight], [pInner, 0]
+      ].map(([x, y]) => new THREE.Vector2(x, y));
+      const pipe = new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat);
       group.add(pipe);
 
-      const neck = new THREE.Mesh(new THREE.CylinderGeometry(nTop, pOuter, nHeight, 32), nzMat);
-      neck.position.y = pHeight + (nHeight / 2);
-      group.add(neck);
-
-      const flange = new THREE.Mesh(new THREE.CylinderGeometry(fOuter, fOuter, fThick, 32), flMat);
-      flange.position.y = pHeight + nHeight + (fThick / 2);
+      const flangeShape = new THREE.Shape();
+      flangeShape.absarc(0, 0, fOuter, 0, Math.PI * 2, false);
+      const bore = new THREE.Path();
+      bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
+      flangeShape.holes.push(bore);
+      for (let i = 0; i < 8; i++) {
+        const angle = (i + 0.5) * Math.PI / 4;
+        const hole = new THREE.Path();
+        hole.absarc(Math.cos(angle) * 0.18, Math.sin(angle) * 0.18, 0.014, 0, Math.PI * 2, true);
+        flangeShape.holes.push(hole);
+      }
+      const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
+        depth: fThick, bevelEnabled: true, bevelThickness: 0.0015,
+        bevelSize: 0.0015, bevelSegments: 1, steps: 1, curveSegments: 32
+      }), flMat);
+      flange.rotation.x = -Math.PI / 2;
+      flange.position.y = pHeight + nHeight;
       group.add(flange);
 
       const totalH = pHeight + nHeight + fThick;
-      const hole = new THREE.Mesh(new THREE.CylinderGeometry(pInner, pInner, totalH + 0.01, 32), holeMat);
-      hole.position.y = totalH / 2;
+      const faceProfile = [[pInner, totalH], [0.145, totalH],
+        [0.145, totalH + 0.008], [pInner, totalH + 0.008], [pInner, totalH]]
+        .map(([x, y]) => new THREE.Vector2(x, y));
+      group.add(new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat));
+      // Fondo oscuro dentro del conducto, sin tapar la boca de la brida.
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
+      hole.rotation.x = -Math.PI / 2;
+      hole.position.y = 0.003;
       group.add(hole);
+      const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pOuter, 0.008, 8, 48), weldMat);
+      baseWeld.rotation.x = Math.PI / 2;
+      baseWeld.position.y = 0.007;
+      group.add(baseWeld);
 
       const plugNS = createNozzlePlug(flMat);
       plugNS.rotation.x = Math.PI / 2; 
