@@ -123,17 +123,32 @@ def extraer_coordenadas(coordenadas):
         return lat, lon
     return None, None
 
+# =============================================================================
+# NUEVA FUNCIÓN PARA LEER EL DISEÑO 3D DESDE GOOGLE SHEETS
+# =============================================================================
+@st.cache_data(ttl=5)
 def cargar_db_general():
-    """Carga única y centralizada del archivo equipos.json"""
-    current_dir = os.path.dirname(__file__)
-    DB_FILE = os.path.join(current_dir, "equipos.json")
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
+    """Carga los diseños 3D directamente desde la pestaña Diseño3D de Google Sheets"""
+    try:
+        sheet_id = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
+        hoja_encoded = urllib.parse.quote("Diseño3D")
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={hoja_encoded}"
+        df = pd.read_csv(url)
+        
+        db = {}
+        if not df.empty and len(df.columns) >= 2:
+            for _, row in df.iterrows():
+                tag = str(row.iloc[0]).strip()
+                datos_str = str(row.iloc[1]).strip()
+                if tag and tag != 'nan' and datos_str != 'nan':
+                    try:
+                        db[tag] = json.loads(datos_str)
+                    except json.JSONDecodeError:
+                        pass
+        return db
+    except Exception:
+        return {}
+# =============================================================================
 
 def tiene_diseno_creado(val_equipo):
     val_clean = str(val_equipo).strip().upper()
@@ -662,7 +677,7 @@ db_equipos = cargar_db_general()
 if not db_equipos:
     st.info("💡 No hay equipos creados todavía. Guarda configuraciones desde la página de diseño para poder visualizarlas aquí.")
 else:
-    # Filtrar estrictamente para mostrar solo las llaves guardadas en el JSON
+    # Filtrar estrictamente para mostrar solo las llaves guardadas
     tags_disponibles = list(db_equipos.keys())
     tag_visualizar = st.selectbox("Selecciona un equipo creado para inspeccionar en 3D:", tags_disponibles, key="preview_3d_select")
 
@@ -674,8 +689,8 @@ else:
         
         # Ocultar automáticamente el panel lateral de edición (#ui-container) en el HTML inyectado
         html_limpio = html_content.replace(
-            "body { margin: 0; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }",
-            "body { margin: 0; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; } #ui-container { display: none !important; }"
+            "body { margin: 0; background: transparent; color: inherit; font-family: sans-serif; overflow: hidden; }",
+            "body { margin: 0; background: transparent; color: inherit; font-family: sans-serif; overflow: hidden; } #ui-container { display: none !important; }"
         )
         
         json_data_str = json.dumps(datos_equipo)
