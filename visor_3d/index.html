@@ -9,7 +9,6 @@
     
     #info { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.65); padding: 8px 12px; border-radius: 6px; border: 1px solid #444; text-align: right; pointer-events: none; color: #fff;}
     
-    /* PANEL FLOTANTE COMPACTO */
     #ui-container { 
       position: absolute; top: 10px; left: 10px; z-index: 10; 
       background: rgba(15, 23, 42, 0.9); padding: 10px; border-radius: 6px; 
@@ -31,8 +30,6 @@
     
     #btn-add-nz { width: 100%; padding: 6px; background: #38bdf8; color: #0f172a; border: none; border-radius: 3px; font-weight: bold; cursor: pointer; font-size: 11px; transition: 0.2s; }
     #btn-add-nz:hover { background: #0284c7; color: #fff; }
-    #btn-save-db { width: 100%; padding: 8px; background: #22c55e; color: #0f172a; border: none; border-radius: 3px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; font-size: 12px;}
-    #btn-save-db:hover { background: #16a34a; color: #fff; }
     
     #editor-panel { display: none; background: rgba(56, 189, 248, 0.08); border: 1px solid #38bdf8; padding: 8px; border-radius: 4px; margin-bottom: 10px; }
     #editor-title { color: #38bdf8; font-weight: bold; margin-bottom: 6px; font-size: 11px; }
@@ -65,11 +62,11 @@
       <strong style="display:block; font-size:10px; color:#38bdf8; margin-bottom:4px;">Plugs Bonete</strong>
       <div class="input-group">
         <label>Venteo:</label>
-        <input type="text" id="vent-input" value="" placeholder='VENT - 3/4"'>
+        <input type="text" id="vent-input" value="" placeholder='3/4"'>
       </div>
       <div class="input-group" style="margin-bottom:0;">
         <label>Drenaje:</label>
-        <input type="text" id="drain-input" value="" placeholder='DRAIN - 3/4"'>
+        <input type="text" id="drain-input" value="" placeholder='3/4"'>
       </div>
     </div>
 
@@ -124,12 +121,12 @@
       <div class="plug-edit-row">
         <input type="checkbox" id="edit-ns-check">
         <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS:</label>
-        <input type="text" id="edit-ns-name" placeholder="Tag NS" disabled>
+        <input type="text" id="edit-ns-name" placeholder="Medida NS" disabled>
       </div>
       <div class="plug-edit-row">
         <input type="checkbox" id="edit-fs-check">
         <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS:</label>
-        <input type="text" id="edit-fs-name" placeholder="Tag FS" disabled>
+        <input type="text" id="edit-fs-name" placeholder="Medida FS" disabled>
       </div>
     </div>
 
@@ -156,7 +153,6 @@
     </div>
 
     <button id="btn-add-nz">AGREGAR BOQUILLA</button>
-    <button id="btn-save-db">💾 GUARDAR EQUIPO</button>
   </div>
 
   <div id="canvas-container"></div>
@@ -171,29 +167,6 @@
       if (window.initialExchangerData) {
         loadExchangerData(window.initialExchangerData);
       }
-    });
-
-    // Envío del mensaje seguro hacia el contenedor Streamlit
-    document.getElementById('btn-save-db').addEventListener('click', () => {
-      const exportData = {
-        nameplate: document.getElementById('name-input').value || "EQUIPO_SIN_NOMBRE",
-        vent: document.getElementById('vent-input').value,
-        drain: document.getElementById('drain-input').value,
-        nozzles: nozzlesList.map(nz => ({
-          tagName: nz.userData.tagName,
-          diaIndex: nz.userData.diaIndex,
-          rating: nz.userData.rating,
-          bodyPart: nz.userData.bodyPart,
-          pos: nz.userData.pos,
-          valX: nz.userData.valX,
-          hasNS: nz.userData.hasNS,
-          tagNS: nz.userData.tagNS,
-          hasFS: nz.userData.hasFS,
-          tagFS: nz.userData.tagFS
-        }))
-      };
-      
-      window.parent.postMessage({ type: 'GUARDAR_EQUIPO_3D', payload: exportData }, '*');
     });
 
     let nozzlesList = [];
@@ -245,7 +218,6 @@
     dirLight.position.set(15, 25, 20);
     scene.add(dirLight);
 
-    // GRIS MÁS CLARO E INDUSTRIAL (#d1d5db)
     const shellMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.6 });
     const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.4, metalness: 0.8 });
     const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3, metalness: 0.7 });
@@ -280,8 +252,8 @@
       const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
       const sprite = new THREE.Sprite(spriteMat);
       
-      sprite.userData.baseScaleX = color === '#ffcc00' ? 0.6 : 1.0;
-      sprite.userData.baseScaleY = color === '#ffcc00' ? 0.25 : 0.4;
+      sprite.userData.baseScaleX = 1.0;
+      sprite.userData.baseScaleY = 0.4;
       sprite.scale.set(sprite.userData.baseScaleX, sprite.userData.baseScaleY, 1);
 
       sprite.updateText = function(text) {
@@ -328,11 +300,6 @@
       elongatedHead.position.y = 0.15; 
       plugGroup.add(elongatedHead);
 
-      const plugLabel = createTextSprite("", '#ffcc00', 36);
-      plugLabel.position.set(0, 0, 0.15); 
-      plugGroup.add(plugLabel);
-      plugGroup.userData.labelSprite = plugLabel;
-
       plugGroup.position.set(0.4, yPos, 0); 
       plugGroup.rotation.z = rotZ;
       return plugGroup;
@@ -368,7 +335,7 @@
     channelGroup.position.x = CHANNEL_GRP_X; 
     heatExchanger.add(channelGroup);
 
-    function createNozzlePlug(labelText, colorMat) {
+    function createNozzlePlug(colorMat) {
       const plugGroup = new THREE.Group();
       const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 24), colorMat);
       coupling.position.y = 0.03; 
@@ -379,11 +346,6 @@
       const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 24), plugMat);
       elongatedHead.position.y = 0.12;
       plugGroup.add(elongatedHead);
-
-      const plugSprite = createTextSprite(labelText, '#ffcc00', 36);
-      plugSprite.position.set(0, 0.12, 0); 
-      plugGroup.add(plugSprite);
-      plugGroup.userData.labelSprite = plugSprite;
       return plugGroup;
     }
 
@@ -425,14 +387,14 @@
       hole.position.y = totalH / 2;
       group.add(hole);
 
-      const plugNS = createNozzlePlug(tagNS, flMat);
+      const plugNS = createNozzlePlug(flMat);
       plugNS.rotation.x = Math.PI / 2; 
       plugNS.position.set(0, pHeight / 2, pOuter);  
       plugNS.visible = hasNS;
       group.add(plugNS);
       group.userData.plugNS = plugNS;
 
-      const plugFS = createNozzlePlug(tagFS, flMat);
+      const plugFS = createNozzlePlug(flMat);
       plugFS.rotation.x = -Math.PI / 2; 
       plugFS.position.set(0, pHeight / 2, -pOuter);  
       plugFS.visible = hasFS;
@@ -464,10 +426,7 @@
       updateNameplateText(data.nameplate || "");
       
       document.getElementById('vent-input').value = data.vent || "";
-      ventPlug.userData.labelSprite.updateText(data.vent || "");
-      
       document.getElementById('drain-input').value = data.drain || "";
-      drainPlug.userData.labelSprite.updateText(data.drain || "");
 
       nozzlesList.forEach(nz => heatExchanger.remove(nz));
       nozzlesList = [];
@@ -622,9 +581,7 @@
     });
     editNsName.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
-      const val = e.target.value;
-      selectedNozzle.userData.tagNS = val;
-      selectedNozzle.userData.plugNS.userData.labelSprite.updateText(val);
+      selectedNozzle.userData.tagNS = e.target.value;
     });
 
     editFsCheck.addEventListener('change', (e) => {
@@ -636,9 +593,7 @@
     });
     editFsName.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
-      const val = e.target.value;
-      selectedNozzle.userData.tagFS = val;
-      selectedNozzle.userData.plugFS.userData.labelSprite.updateText(val);
+      selectedNozzle.userData.tagFS = e.target.value;
     });
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
@@ -655,7 +610,7 @@
       selectNozzle(newNz);
     });
 
-    // --- PLACA DE IDENTIFICACIÓN (NAMEPLATE AUMENTADA) ---
+    // --- PLACA DE IDENTIFICACIÓN (NAMEPLATE) ---
     const nameCanvas = document.createElement('canvas');
     nameCanvas.width = 1024;
     nameCanvas.height = 340; 
@@ -696,8 +651,6 @@
     heatExchanger.add(nameplate);
 
     document.getElementById('name-input').addEventListener('input', (e) => updateNameplateText(e.target.value));
-    document.getElementById('vent-input').addEventListener('input', (e) => ventPlug.userData.labelSprite.updateText(e.target.value));
-    document.getElementById('drain-input').addEventListener('input', (e) => drainPlug.userData.labelSprite.updateText(e.target.value));
 
     function animate() {
       requestAnimationFrame(animate);
