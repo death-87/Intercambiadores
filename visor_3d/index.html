@@ -1,1 +1,780 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Diseño 3D - Intercambiador de Calor Interactivo</title>
+  <style>
+    body { margin: 0; background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+    #canvas-container { width: 100vw; height: 100vh; }
+    
+    #info { position: absolute; top: 15px; right: 15px; z-index: 10; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: right; pointer-events: none; }
+    
+    #ui-container { 
+      position: absolute; top: 15px; left: 15px; z-index: 10; 
+      background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px; 
+      border: 1px solid #555; width: 330px; max-height: 94vh; overflow-y: auto; 
+      box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+    }
+    #ui-container::-webkit-scrollbar { width: 8px; }
+    #ui-container::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+    
+    .panel-title { font-size: 15px; font-weight: bold; margin-top: 0; margin-bottom: 12px; color: #fff; border-bottom: 1px solid #666; padding-bottom: 5px; }
+    .input-group { margin-bottom: 10px; }
+    .input-group label { display: block; font-size: 12px; color: #bbb; margin-bottom: 4px; }
+    .input-group input[type="text"], .input-group select { width: 100%; box-sizing: border-box; padding: 6px; font-size: 13px; background: #222; color: #fff; border: 1px solid #666; border-radius: 4px; outline: none; }
+    .input-group input[type="range"] { width: 100%; cursor: pointer; }
+    .input-group input:focus, .input-group select:focus { border-color: #4fc3f7; }
+    
+    .checkbox-group { display: flex; align-items: center; margin-bottom: 10px; }
+    .checkbox-group input { transform: scale(1.2); margin-right: 8px; cursor: pointer; }
+    .checkbox-group label { font-size: 13px; color: #fff; cursor: pointer; margin:0;}
+    
+    #btn-add-nz { width: 100%; padding: 10px; background: #4fc3f7; color: #000; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 5px; transition: 0.2s; }
+    #btn-add-nz:hover { background: #29b6f6; }
+    #btn-save-db { width: 100%; padding: 12px; background: #a5d6a7; color: #000; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; font-size: 14px;}
+    #btn-save-db:hover { background: #81c784; }
+    hr { border: 0; border-top: 1px dashed #555; margin: 15px 0; }
+    
+    #editor-panel { display: none; background: rgba(79, 195, 247, 0.1); border: 1px solid #4fc3f7; padding: 12px; border-radius: 6px; margin-bottom: 15px; }
+    #editor-title { color: #4fc3f7; font-weight: bold; margin-bottom: 10px; font-size: 14px; display: flex; justify-content: space-between;}
+    .plug-edit-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px;}
+    .plug-edit-row input[type="text"] { flex: 1; margin: 0; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <h3 style="margin:0 0 5px 0;">Visor 3D Interactivo</h3>
+    <p style="margin:0; font-size:12px; color:#aaa;">Dimensiones: L=7404mm, Ø=1098mm</p>
+    <p style="margin:0; font-size:12px; color:#4fc3f7;">👆 Clic en una boquilla para editarla</p>
+  </div>
 
+  <div id="ui-container">
+    
+    <div class="panel-title">Etiquetas Generales</div>
+    <div class="input-group">
+      <label>Nombre del Equipo (Nameplate):</label>
+      <input type="text" id="name-input" value="" placeholder="Ej: E-101">
+    </div>
+    
+    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; border: 1px solid #444; margin-bottom: 15px;">
+      <strong style="display:block; font-size:13px; color:#4fc3f7; margin-bottom:8px;">Plugs del Bonete (Derecha)</strong>
+      <div class="input-group">
+        <label>Venteo (Superior):</label>
+        <input type="text" id="vent-input" value="" placeholder="Ej: VENT - 3/4&quot;">
+      </div>
+      <div class="input-group" style="margin-bottom:0;">
+        <label>Drenaje (Inferior):</label>
+        <input type="text" id="drain-input" value="" placeholder="Ej: DRAIN - 3/4&quot;">
+      </div>
+    </div>
+
+    <!-- EDITOR DE BOQUILLA SELECCIONADA -->
+    <div id="editor-panel">
+      <div id="editor-title">✏️ Editando Boquilla</div>
+      
+      <div class="input-group">
+        <label>Tag (Nombre de la Boquilla):</label>
+        <input type="text" id="edit-nz-name" value="" placeholder="Ej: N1 - IN">
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <div class="input-group" style="flex:1;">
+          <label>Diámetro:</label>
+          <select id="edit-nz-dia">
+            <option value="1/2&quot;">1/2"</option><option value="3/4&quot;">3/4"</option><option value="1&quot;">1"</option>
+            <option value="1.5&quot;">1 1/2"</option><option value="2&quot;">2"</option><option value="3&quot;">3"</option>
+            <option value="4&quot;">4"</option><option value="6&quot;">6"</option><option value="8&quot;">8"</option>
+            <option value="10&quot;">10"</option><option value="12&quot;">12"</option><option value="14&quot;">14"</option>
+            <option value="16&quot;">16"</option><option value="18&quot;">18"</option><option value="20&quot;">20"</option>
+          </select>
+        </div>
+        <div class="input-group" style="flex:1;">
+          <label>Rating RF:</label>
+          <select id="edit-nz-rating">
+            <option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option>
+            <option value="900#">900#</option><option value="1500#">1500#</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Cuerpo / Sección:</label>
+        <select id="edit-nz-body">
+          <option value="shell">Shell (Carcasa)</option>
+          <option value="channel">Channel (Cabezal Frontal)</option>
+          <option value="bonnet">Bonnet (Cabezal Trasero)</option>
+        </select>
+      </div>
+      
+      <div class="input-group">
+        <label>Orientación (Pegado al cuerpo):</label>
+        <select id="edit-nz-pos">
+          <option value="superior">Arriba (Superior)</option>
+          <option value="inferior">Abajo (Inferior)</option>
+        </select>
+      </div>
+      
+      <div class="input-group">
+        <label>Posición Horizontal (Deslizar):</label>
+        <input type="range" id="edit-nz-x" step="0.05">
+      </div>
+      
+      <div style="margin-top:15px; margin-bottom:5px; font-size:13px; color:#4fc3f7; font-weight:bold;">Conexiones / Tapones (Plugs)</div>
+      <div class="plug-edit-row">
+        <input type="checkbox" id="edit-ns-check">
+        <label for="edit-ns-check" style="color:#fff; font-size:12px; margin:0; width:30px;">NS:</label>
+        <input type="text" id="edit-ns-name" placeholder="Tag NS (Frente)" disabled>
+      </div>
+      <div class="plug-edit-row">
+        <input type="checkbox" id="edit-fs-check">
+        <label for="edit-fs-check" style="color:#fff; font-size:12px; margin:0; width:30px;">FS:</label>
+        <input type="text" id="edit-fs-name" placeholder="Tag FS (Atrás)" disabled>
+      </div>
+    </div>
+
+    <!-- CREADOR DE BOQUILLAS -->
+    <div class="panel-title" style="color: #4fc3f7; border-top: 1px dashed #555; padding-top: 15px;">➕ Agregar Boquilla Nueva</div>
+    <div style="display:flex; gap:10px;">
+      <div class="input-group" style="flex:1;">
+        <label>Diámetro Inicial:</label>
+        <select id="new-nz-dia">
+          <option value="1/2&quot;">1/2"</option><option value="3/4&quot;">3/4"</option><option value="1&quot;">1"</option>
+          <option value="1.5&quot;">1 1/2"</option><option value="2&quot;">2"</option><option value="3&quot;">3"</option>
+          <option value="4&quot;" selected>4"</option><option value="6&quot;">6"</option><option value="8&quot;">8"</option>
+          <option value="10&quot;">10"</option><option value="12&quot;">12"</option><option value="14&quot;">14"</option>
+          <option value="16&quot;">16"</option><option value="18&quot;">18"</option><option value="20&quot;">20"</option>
+        </select>
+      </div>
+      <div class="input-group" style="flex:1;">
+        <label>Rating RF:</label>
+        <select id="new-nz-rating">
+          <option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option>
+          <option value="900#">900#</option><option value="1500#">1500#</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="input-group">
+      <label>Ubicación Inicial:</label>
+      <select id="new-nz-body">
+        <option value="shell" selected>Shell (Carcasa)</option>
+        <option value="channel">Channel (Cabezal Frontal)</option>
+        <option value="bonnet">Bonnet (Cabezal Trasero)</option>
+      </select>
+    </div>
+
+    <div class="checkbox-group">
+      <input type="checkbox" id="new-nz-wn" checked>
+      <label for="new-nz-wn">Welding Neck (WN)</label>
+    </div>
+    <button id="btn-add-nz">AGREGAR BOQUILLA</button>
+
+    <button id="btn-save-db">💾 GUARDAR EQUIPO EN STREAMLIT</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- COMUNICACIÓN CON STREAMLIT ---
+    function sendValueToStreamlit(value) {
+      window.parent.postMessage({ isStreamlitMessage: true, type: "setComponentValue", value: value }, "*");
+    }
+
+    window.addEventListener("message", function(event) {
+      if (event.data.type === "streamlit:render") {
+        const args = event.data.args;
+        if(args.datos_iniciales && !window.hasLoadedData) {
+          loadExchangerData(args.datos_iniciales);
+          window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: 850}, "*");
+          window.hasLoadedData = true;
+        }
+      }
+    });
+    window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*");
+
+    // --- VARIABLES GLOBALES Y DE ESTADO ---
+    let nozzlesList = [];
+    let customNozzleCount = 0;
+
+    const R = 0.549; 
+    const L_SHELL = 4.275;
+    const T_FLANGE = 0.12;
+    const R_FLANGE = 0.65;
+    
+    const FLANGE_SHELL_R_X = 2.1975;
+    const FLANGE_SHELL_L_X = -2.1975;
+    const BONNET_GRP_X = 2.2575;
+    const CHANNEL_GRP_X = -2.2575;
+    const NOZZLE_Y = R - 0.01; 
+
+    const BODY_BOUNDS = {
+      shell:   { min: -2.0, max: 2.0, center: 0 },
+      channel: { min: -3.3, max: -2.4, center: -2.9775 },
+      bonnet:  { min: 2.35, max: 2.95, center: 2.6575 }
+    };
+
+    // --- ESCENA, CÁMARA Y RENDERER ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a1a);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(6, 4, 10); 
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // --- ILUMINACIÓN ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(15, 25, 20);
+    scene.add(dirLight);
+    const pointLight = new THREE.PointLight(0xffffff, 0.5);
+    pointLight.position.set(-10, -10, -10);
+    scene.add(pointLight);
+
+    // --- MATERIALES BASE ---
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x7c90a0, roughness: 0.35, metalness: 0.75 });
+    const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x3b4252, roughness: 0.4, metalness: 0.85 });
+    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.3, metalness: 0.7 });
+    const partitionMat = new THREE.MeshStandardMaterial({ color: 0x505a69, roughness: 0.5, metalness: 0.6 });
+    const plugMat = new THREE.MeshStandardMaterial({ color: 0x8a9ba8, roughness: 0.3, metalness: 0.8 }); 
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
+
+    const heatExchanger = new THREE.Group();
+    scene.add(heatExchanger);
+
+    // -- CONSTRUCCIÓN DEL EQUIPO --
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L_SHELL, 32), shellMat);
+    shell.rotation.z = Math.PI / 2;
+    heatExchanger.add(shell);
+
+    const flangeGeo = new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, T_FLANGE, 32);
+    const flangeRight = new THREE.Mesh(flangeGeo, flangeMatBase);
+    flangeRight.rotation.z = Math.PI / 2;
+    flangeRight.position.x = FLANGE_SHELL_R_X;
+    heatExchanger.add(flangeRight);
+    
+    const flangeLeft = new THREE.Mesh(flangeGeo, flangeMatBase);
+    flangeLeft.rotation.z = Math.PI / 2;
+    flangeLeft.position.x = FLANGE_SHELL_L_X;
+    heatExchanger.add(flangeLeft);
+
+    // -- SPRITES (TEXTOS) --
+    function createTextSprite(initialText, color = 'white', fontSize = 32) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 300; 
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
+      const sprite = new THREE.Sprite(spriteMat);
+      
+      sprite.userData.baseScaleX = color === '#ffcc00' ? 0.6 : 1.0;
+      sprite.userData.baseScaleY = color === '#ffcc00' ? 0.25 : 0.4;
+      sprite.scale.set(sprite.userData.baseScaleX, sprite.userData.baseScaleY, 1);
+
+      sprite.updateText = function(text) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if(!text || text.trim() === "") {
+          texture.needsUpdate = true;
+          return;
+        }
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = 'black'; 
+        ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+        ctx.fillStyle = color;
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        texture.needsUpdate = true;
+      };
+
+      sprite.updateText(initialText);
+      return sprite;
+    }
+
+    // -- BONETE Y CHANNEL --
+    const rearBonnetGroup = new THREE.Group();
+    const bonnetSkirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.8, 32), shellMat);
+    bonnetSkirt.rotation.z = Math.PI / 2;
+    bonnetSkirt.position.x = 0.4;
+    rearBonnetGroup.add(bonnetSkirt);
+
+    const bonnetHeadGeo = new THREE.SphereGeometry(R, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const bonnetHead = new THREE.Mesh(bonnetHeadGeo, shellMat);
+    bonnetHead.rotation.z = -Math.PI / 2;
+    bonnetHead.position.x = 0.8;
+    rearBonnetGroup.add(bonnetHead);
+
+    function createBonnetPlug(yPos, rotZ) {
+      const plugGroup = new THREE.Group();
+      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 24), flangeMatBase);
+      plugGroup.add(coupling);
+      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.04, 24), plugMat);
+      threadedBody.position.y = 0.07; 
+      plugGroup.add(threadedBody);
+      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 24), plugMat);
+      elongatedHead.position.y = 0.15; 
+      plugGroup.add(elongatedHead);
+
+      const plugLabel = createTextSprite("", '#ffcc00', 36);
+      plugLabel.position.set(0, 0, 0.15); 
+      plugGroup.add(plugLabel);
+      plugGroup.userData.labelSprite = plugLabel;
+
+      plugGroup.position.set(0.4, yPos, 0); 
+      plugGroup.rotation.z = rotZ;
+      return plugGroup;
+    }
+
+    const ventPlug = createBonnetPlug(NOZZLE_Y, 0);             
+    const drainPlug = createBonnetPlug(-NOZZLE_Y, Math.PI);       
+    rearBonnetGroup.add(ventPlug);
+    rearBonnetGroup.add(drainPlug);
+    rearBonnetGroup.position.x = BONNET_GRP_X;
+    heatExchanger.add(rearBonnetGroup);
+
+    const channelGroup = new THREE.Group();
+    const channelBody = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 1.2, 32), shellMat);
+    channelBody.rotation.z = Math.PI / 2;
+    channelBody.position.x = -0.72;
+    channelGroup.add(channelBody);
+    const channelInnerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
+    channelInnerFlange.rotation.z = Math.PI / 2;
+    channelInnerFlange.position.x = -0.06;
+    channelGroup.add(channelInnerFlange);
+    const channelOuterFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
+    channelOuterFlange.rotation.z = Math.PI / 2;
+    channelOuterFlange.position.x = -1.38;
+    channelGroup.add(channelOuterFlange);
+    const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 32), flangeMatBase);
+    coverPlate.rotation.z = Math.PI / 2;
+    coverPlate.position.x = -1.49;
+    channelGroup.add(coverPlate);
+    const partitionPlate = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 1.09), partitionMat);
+    partitionPlate.position.x = -0.72;
+    channelGroup.add(partitionPlate);
+    channelGroup.position.x = CHANNEL_GRP_X; 
+    heatExchanger.add(channelGroup);
+
+    // -- BOQUILLAS WELDING NECK Y HUECAS --
+    function createNozzlePlug(labelText, colorMat) {
+      const plugGroup = new THREE.Group();
+      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 24), colorMat);
+      coupling.position.y = 0.03; 
+      plugGroup.add(coupling);
+      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 24), plugMat);
+      threadedBody.position.y = 0.07;
+      plugGroup.add(threadedBody);
+      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 24), plugMat);
+      elongatedHead.position.y = 0.12;
+      plugGroup.add(elongatedHead);
+
+      const plugSprite = createTextSprite(labelText, '#ffcc00', 36);
+      plugSprite.position.set(0, 0.12, 0); 
+      plugGroup.add(plugSprite);
+      plugGroup.userData.labelSprite = plugSprite;
+      return plugGroup;
+    }
+
+    function buildNozzle(internalName, tagText, diaIndex, rating, bodyPart, pos, posX, hasNS, tagNS, hasFS, tagFS) {
+      const group = new THREE.Group();
+      group.userData = {
+        isNozzle: true, idName: internalName, tagName: tagText,
+        diaIndex: diaIndex, rating: rating, bodyPart: bodyPart, pos: pos,      
+        valX: posX, valY: NOZZLE_Y, 
+        hasNS: hasNS, tagNS: tagNS, hasFS: hasFS, tagFS: tagFS
+      };
+
+      const nzMat = nozzleMatBase.clone();
+      const flMat = flangeMatBase.clone();
+      group.userData.materials = [nzMat, flMat]; 
+      
+      const pOuter = 0.12;
+      const pInner = 0.09;
+      const nTop = 0.14;
+      const fOuter = 0.22;
+      const pHeight = 0.15;
+      const nHeight = 0.08;
+      const fThick = 0.03;
+
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(pOuter, pOuter, pHeight, 32), nzMat);
+      pipe.position.y = pHeight / 2;
+      group.add(pipe);
+
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(nTop, pOuter, nHeight, 32), nzMat);
+      neck.position.y = pHeight + (nHeight / 2);
+      group.add(neck);
+
+      const flange = new THREE.Mesh(new THREE.CylinderGeometry(fOuter, fOuter, fThick, 32), flMat);
+      flange.position.y = pHeight + nHeight + (fThick / 2);
+      group.add(flange);
+
+      const totalH = pHeight + nHeight + fThick;
+      const hole = new THREE.Mesh(new THREE.CylinderGeometry(pInner, pInner, totalH + 0.01, 32), holeMat);
+      hole.position.y = totalH / 2;
+      group.add(hole);
+
+      const boltHoleGeo = new THREE.CylinderGeometry(0.012, 0.012, fThick + 0.002, 12);
+      for(let i=0; i<12; i++) {
+         const angle = (i / 12) * Math.PI * 2;
+         const bHole = new THREE.Mesh(boltHoleGeo, holeMat);
+         bHole.position.set(Math.cos(angle) * 0.18, pHeight + nHeight + (fThick/2), Math.sin(angle) * 0.18);
+         group.add(bHole);
+      }
+
+      const plugNS = createNozzlePlug(tagNS, flMat);
+      plugNS.rotation.x = Math.PI / 2; 
+      plugNS.position.set(0, pHeight / 2, pOuter);  
+      plugNS.visible = hasNS;
+      group.add(plugNS);
+      group.userData.plugNS = plugNS;
+
+      const plugFS = createNozzlePlug(tagFS, flMat);
+      plugFS.rotation.x = -Math.PI / 2; 
+      plugFS.position.set(0, pHeight / 2, -pOuter);  
+      plugFS.visible = hasFS;
+      group.add(plugFS);
+      group.userData.plugFS = plugFS;
+
+      const nozzleSprite = createTextSprite(tagText, 'white', 40);
+      nozzleSprite.position.set(0, totalH + 0.2, 0);
+      group.add(nozzleSprite);
+      group.userData.nozzleSprite = nozzleSprite;
+
+      const scaleFactor = 0.3 + (diaIndex * 0.1);
+      group.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      
+      nozzleSprite.scale.set(nozzleSprite.userData.baseScaleX / scaleFactor, nozzleSprite.userData.baseScaleY / scaleFactor, 1 / scaleFactor);
+      plugNS.userData.labelSprite.scale.set(plugNS.userData.labelSprite.userData.baseScaleX / scaleFactor, plugNS.userData.labelSprite.userData.baseScaleY / scaleFactor, 1 / scaleFactor);
+      plugFS.userData.labelSprite.scale.set(plugFS.userData.labelSprite.userData.baseScaleX / scaleFactor, plugFS.userData.labelSprite.userData.baseScaleY / scaleFactor, 1 / scaleFactor);
+
+      if(pos === 'superior') {
+        group.position.set(posX, NOZZLE_Y, 0);
+        group.rotation.z = 0;
+      } else {
+        group.position.set(posX, -NOZZLE_Y, 0);
+        group.rotation.z = Math.PI;
+      }
+
+      heatExchanger.add(group);
+      return group;
+    }
+
+    // -- CARGAR DATOS DESDE STREAMLIT --
+    function loadExchangerData(data) {
+      document.getElementById('name-input').value = data.nameplate || "";
+      updateNameplateText(data.nameplate || "");
+      
+      document.getElementById('vent-input').value = data.vent || "";
+      ventPlug.userData.labelSprite.updateText(data.vent || "");
+      
+      document.getElementById('drain-input').value = data.drain || "";
+      drainPlug.userData.labelSprite.updateText(data.drain || "");
+
+      // Destruir boquillas viejas de la memoria y la escena
+      nozzlesList.forEach(nz => heatExchanger.remove(nz));
+      nozzlesList = [];
+      customNozzleCount = 0;
+
+      // Construir las nuevas según el JSON (si está en blanco cargará las 4 por defecto)
+      if(data.nozzles) {
+        data.nozzles.forEach(n => {
+          customNozzleCount++;
+          const internalName = `Nozzle_${customNozzleCount}`;
+          const newNz = buildNozzle(internalName, n.tagName, n.diaIndex, n.rating, n.bodyPart, n.pos, n.valX, n.hasNS, n.tagNS, n.hasFS, n.tagFS);
+          nozzlesList.push(newNz);
+        });
+      }
+      deselectNozzle();
+    }
+
+    // -- ENVIAR DATOS A STREAMLIT (GUARDAR) --
+    document.getElementById('btn-save-db').addEventListener('click', () => {
+      const exportData = {
+        nameplate: document.getElementById('name-input').value,
+        vent: document.getElementById('vent-input').value,
+        drain: document.getElementById('drain-input').value,
+        nozzles: nozzlesList.map(nz => ({
+          tagName: nz.userData.tagName,
+          diaIndex: nz.userData.diaIndex,
+          rating: nz.userData.rating,
+          bodyPart: nz.userData.bodyPart,
+          pos: nz.userData.pos,
+          valX: nz.userData.valX,
+          hasNS: nz.userData.hasNS,
+          tagNS: nz.userData.tagNS,
+          hasFS: nz.userData.hasFS,
+          tagFS: nz.userData.tagFS
+        }))
+      };
+      sendValueToStreamlit(exportData);
+    });
+
+    // -- RAYCASTER (Selección) --
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let selectedNozzle = null;
+
+    window.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('#ui-container')) return;
+
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      const intersects = raycaster.intersectObjects(heatExchanger.children, true);
+      let clickedNozzle = null;
+
+      for (let i = 0; i < intersects.length; i++) {
+        let obj = intersects[i].object;
+        while (obj && obj !== heatExchanger) {
+          if (obj.userData && obj.userData.isNozzle) {
+            clickedNozzle = obj;
+            break;
+          }
+          obj = obj.parent;
+        }
+        if (clickedNozzle) break;
+      }
+
+      if (clickedNozzle) selectNozzle(clickedNozzle);
+      else deselectNozzle();
+    });
+
+    function selectNozzle(nozzle) {
+      if (selectedNozzle === nozzle) return;
+      deselectNozzle();
+      selectedNozzle = nozzle;
+      selectedNozzle.userData.materials.forEach(mat => mat.emissive.setHex(0x1a4b6e));
+
+      const data = selectedNozzle.userData;
+      document.getElementById('editor-panel').style.display = 'block';
+      document.getElementById('edit-nz-name').value = data.tagName;
+      
+      document.getElementById('edit-nz-dia').selectedIndex = data.diaIndex;
+      document.getElementById('edit-nz-rating').value = data.rating;
+      
+      const bodySelect = document.getElementById('edit-nz-body');
+      bodySelect.value = data.bodyPart;
+      
+      const bounds = BODY_BOUNDS[data.bodyPart];
+      const editX = document.getElementById('edit-nz-x');
+      editX.min = bounds.min;
+      editX.max = bounds.max;
+      editX.value = data.valX;
+      
+      document.getElementById('edit-nz-pos').value = data.pos;
+      
+      document.getElementById('edit-ns-check').checked = data.hasNS;
+      document.getElementById('edit-ns-name').value = data.tagNS;
+      document.getElementById('edit-ns-name').disabled = !data.hasNS;
+
+      document.getElementById('edit-fs-check').checked = data.hasFS;
+      document.getElementById('edit-fs-name').value = data.tagFS;
+      document.getElementById('edit-fs-name').disabled = !data.hasFS;
+    }
+
+    function deselectNozzle() {
+      if (selectedNozzle) {
+        selectedNozzle.userData.materials.forEach(mat => mat.emissive.setHex(0x000000));
+        selectedNozzle = null;
+      }
+      document.getElementById('editor-panel').style.display = 'none';
+    }
+
+    // -- EVENTOS DEL EDITOR DE BOQUILLA --
+    const editName = document.getElementById('edit-nz-name');
+    const editDia = document.getElementById('edit-nz-dia');
+    const editRating = document.getElementById('edit-nz-rating');
+    const editBody = document.getElementById('edit-nz-body');
+    const editPos = document.getElementById('edit-nz-pos');
+    const editX = document.getElementById('edit-nz-x');
+    
+    const editNsCheck = document.getElementById('edit-ns-check');
+    const editNsName = document.getElementById('edit-ns-name');
+    const editFsCheck = document.getElementById('edit-fs-check');
+    const editFsName = document.getElementById('edit-fs-name');
+
+    editName.addEventListener('input', (e) => {
+      if(!selectedNozzle) return;
+      const val = e.target.value;
+      selectedNozzle.userData.tagName = val;
+      selectedNozzle.userData.nozzleSprite.updateText(val);
+    });
+
+    editDia.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      const diaIndex = e.target.selectedIndex;
+      selectedNozzle.userData.diaIndex = diaIndex;
+      
+      const scaleFactor = 0.3 + (diaIndex * 0.1);
+      selectedNozzle.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      
+      const nsSprite = selectedNozzle.userData.nozzleSprite;
+      nsSprite.scale.set(nsSprite.userData.baseScaleX / scaleFactor, nsSprite.userData.baseScaleY / scaleFactor, 1 / scaleFactor);
+      
+      const pNS = selectedNozzle.userData.plugNS.userData.labelSprite;
+      pNS.scale.set(pNS.userData.baseScaleX / scaleFactor, pNS.userData.baseScaleY / scaleFactor, 1 / scaleFactor);
+      
+      const pFS = selectedNozzle.userData.plugFS.userData.labelSprite;
+      pFS.scale.set(pFS.userData.baseScaleX / scaleFactor, pFS.userData.baseScaleY / scaleFactor, 1 / scaleFactor);
+    });
+
+    editRating.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      selectedNozzle.userData.rating = e.target.value;
+    });
+
+    editBody.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      const newBody = e.target.value;
+      selectedNozzle.userData.bodyPart = newBody;
+      
+      const bounds = BODY_BOUNDS[newBody];
+      editX.min = bounds.min;
+      editX.max = bounds.max;
+      editX.value = bounds.center; 
+      selectedNozzle.userData.valX = bounds.center;
+      updateTransform();
+    });
+
+    const updateTransform = () => {
+      if(!selectedNozzle) return;
+      const pos = editPos.value;
+      const vx = parseFloat(editX.value);
+      selectedNozzle.userData.pos = pos;
+      selectedNozzle.userData.valX = vx;
+
+      if (pos === 'superior') {
+        selectedNozzle.position.set(vx, NOZZLE_Y, 0);
+        selectedNozzle.rotation.z = 0;
+      } else {
+        selectedNozzle.position.set(vx, -NOZZLE_Y, 0);
+        selectedNozzle.rotation.z = Math.PI;
+      }
+    };
+    
+    editPos.addEventListener('change', updateTransform);
+    editX.addEventListener('input', updateTransform);
+
+    editNsCheck.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      const isChecked = e.target.checked;
+      selectedNozzle.userData.hasNS = isChecked;
+      selectedNozzle.userData.plugNS.visible = isChecked;
+      editNsName.disabled = !isChecked;
+    });
+    editNsName.addEventListener('input', (e) => {
+      if(!selectedNozzle) return;
+      const val = e.target.value;
+      selectedNozzle.userData.tagNS = val;
+      selectedNozzle.userData.plugNS.userData.labelSprite.updateText(val);
+    });
+
+    editFsCheck.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      const isChecked = e.target.checked;
+      selectedNozzle.userData.hasFS = isChecked;
+      selectedNozzle.userData.plugFS.visible = isChecked;
+      editFsName.disabled = !isChecked;
+    });
+    editFsName.addEventListener('input', (e) => {
+      if(!selectedNozzle) return;
+      const val = e.target.value;
+      selectedNozzle.userData.tagFS = val;
+      selectedNozzle.userData.plugFS.userData.labelSprite.updateText(val);
+    });
+
+    // -- AGREGAR BOQUILLA NUEVA --
+    document.getElementById('btn-add-nz').addEventListener('click', () => {
+      customNozzleCount++;
+      const diaSelect = document.getElementById('new-nz-dia');
+      const diaIndex = diaSelect.selectedIndex; 
+      const rating = document.getElementById('new-nz-rating').value;
+      const bodyPart = document.getElementById('new-nz-body').value;
+      const internalName = `Custom_Nozzle_${customNozzleCount}`;
+      const startX = BODY_BOUNDS[bodyPart].center;
+
+      const newNz = buildNozzle(internalName, "", diaIndex, rating, bodyPart, "superior", startX, false, "", false, "");
+      nozzlesList.push(newNz);
+      selectNozzle(newNz);
+    });
+
+    // -- PLACA DE IDENTIFICACIÓN (NAMEPLATE) --
+    const nameCanvas = document.createElement('canvas');
+    nameCanvas.width = 512;
+    nameCanvas.height = 170; 
+    const ctx = nameCanvas.getContext('2d');
+    let plateTexture = new THREE.CanvasTexture(nameCanvas);
+
+    function updateNameplateText(text) {
+      ctx.clearRect(0, 0, nameCanvas.width, nameCanvas.height);
+      if(!text || text.trim() === "") {
+        plateTexture.needsUpdate = true;
+        return; 
+      }
+
+      ctx.fillStyle = '#b0b5b9';
+      ctx.fillRect(0, 0, nameCanvas.width, nameCanvas.height);
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 12;
+      ctx.strokeRect(0, 0, nameCanvas.width, nameCanvas.height);
+      
+      ctx.fillStyle = '#333';
+      ctx.beginPath(); ctx.arc(25, 25, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(nameCanvas.width-25, 25, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(25, nameCanvas.height-25, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(nameCanvas.width-25, nameCanvas.height-25, 7, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 50px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, nameCanvas.width / 2, nameCanvas.height / 2);
+      
+      plateTexture.needsUpdate = true;
+    }
+
+    const plateMat = new THREE.MeshStandardMaterial({ map: plateTexture, metalness: 0.6, roughness: 0.4, transparent: true });
+    const nameplate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.02), plateMat);
+    nameplate.position.set(0, 0, R + 0.02); 
+    heatExchanger.add(nameplate);
+
+    document.getElementById('name-input').addEventListener('input', (e) => updateNameplateText(e.target.value));
+    document.getElementById('vent-input').addEventListener('input', (e) => ventPlug.userData.labelSprite.updateText(e.target.value));
+    document.getElementById('drain-input').addEventListener('input', (e) => drainPlug.userData.labelSprite.updateText(e.target.value));
+
+    // -- RENDER LOOP --
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
