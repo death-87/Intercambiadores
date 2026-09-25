@@ -70,8 +70,9 @@ datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equip
 if tag_input:
     datos_actuales["nameplate"] = tag_input
 
-if "current_editor_data" not in st.session_state:
+if "current_editor_data" not in st.session_state or st.session_state.get("last_selected") != equipo_seleccionado:
     st.session_state.current_editor_data = datos_actuales
+    st.session_state.last_selected = equipo_seleccionado
 
 st.markdown("---")
 col_guardar, _ = st.columns([2, 4])
