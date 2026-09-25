@@ -3,6 +3,7 @@ import json
 import os
 import requests
 import random
+import time
 import pandas as pd
 import urllib.parse
 import streamlit.components.v1 as components
@@ -24,10 +25,9 @@ HTML_FILE = os.path.join(parent_dir, "visor_3d", "index.html")
 
 @st.cache_data(ttl=0)
 def cargar_db():
-    """Lee la pestaña Diseño3D de Google Sheets forzando datos frescos sin caché de Google."""
+    """Lee la pestaña Diseño3D de Google Sheets forzando datos frescos."""
     try:
         hoja_encoded = urllib.parse.quote(HOJA_3D)
-        # Añadimos un número aleatorio para obligar a Google Sheets a entregar datos frescos al instante
         rand_id = random.randint(1, 9999999)
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja_encoded}&nc={rand_id}"
         
@@ -59,7 +59,6 @@ def guardar_db(tag, datos):
         st.error(f"Error de conexión con Google Sheets: {e}")
         return False
 
-# Limpiamos caché de Streamlit al iniciar para forzar lectura limpia
 st.cache_data.clear()
 db = cargar_db()
 
@@ -109,7 +108,7 @@ with col2:
     nombre_default = datos_actuales.get("nameplate", "") if equipo_seleccionado != "-- NUEVO EQUIPO (En blanco) --" else ""
     tag_input_streamlit = st.text_input("TAG / Nameplate del Equipo:", value=nombre_default, key="input_nameplate")
 
-# Forzar actualización completa de la memoria de trabajo al cambiar de equipo en el selectbox
+# Sincronización estricta de la memoria de trabajo
 if "current_loaded_team" not in st.session_state or st.session_state.current_loaded_team != equipo_seleccionado:
     st.session_state.current_loaded_team = equipo_seleccionado
     st.session_state.working_data = json.loads(json.dumps(datos_actuales))
@@ -131,7 +130,6 @@ if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    # Sincronizamos el nameplate con el estado actual
     st.session_state.working_data["nameplate"] = tag_input_streamlit if tag_input_streamlit else equipo_seleccionado
     
     json_data_str = json.dumps(st.session_state.working_data)
@@ -140,7 +138,11 @@ if os.path.exists(HTML_FILE):
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    component_value = components.html(js_listener + html_injectado, height=720, scrolling=False)
+    # 🔑 TRUCO MAESTRO: Agregamos un comentario HTML dinámico con la hora exacta y el equipo.
+    # Esto obliga a Streamlit a destruir el iframe viejo y crear uno nuevo en cada cambio.
+    html_forzado = html_injectado + f"\n<!-- Creado para {equipo_seleccionado} a las {time.time()} -->"
+    
+    component_value = components.html(js_listener + html_forzado, height=720, scrolling=False)
     
     if component_value:
         try:
