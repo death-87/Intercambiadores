@@ -506,7 +506,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
 
         config_equipo = obtener_config_equipo(val_equipo_clean)
 
-        # TABLA NOZZLE SCHEDULE RESTAURADA
+        # TABLA NOZZLE SCHEDULE
         st.markdown(f"#### 📋 NOZZLE SCHEDULE - {val_equipo_clean}")
         
         table_rows = []
@@ -662,7 +662,7 @@ if (registro_seleccionado is not None) or (len(df_filtrado) == 1):
                 st.markdown(mapa_html, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# SECCIÓN INFERIOR: VISTA PREVIA 3D LIMPIA (SOLO LECTURA)
+# SECCIÓN INFERIOR: VISTA PREVIA 3D LIMPIA (SOLO EQUIPOS CREADOS)
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.subheader("🔍 Vista Previa 3D de Equipos Registrados (Modo Presentación)")
@@ -683,12 +683,13 @@ def cargar_db_visor():
 db_equipos = cargar_db_visor()
 
 if not db_equipos:
-    st.info("💡 Consejo: Guarda configuraciones desde la página de diseño para poder visualizarlas interactivamente aquí en 3D.")
+    st.info("💡 No hay equipos creados todavía. Guarda configuraciones desde la página de diseño para poder visualizarlas aquí.")
 else:
+    # Solo mostrar los tags que están explícitamente registrados en la base de datos de diseños
     tags_disponibles = list(db_equipos.keys())
-    tag_visualizar = st.selectbox("Selecciona un equipo para inspeccionar en 3D:", tags_disponibles, key="preview_3d_select")
+    tag_visualizar = st.selectbox("Selecciona un equipo creado para inspeccionar en 3D:", tags_disponibles, key="preview_3d_select")
 
-    if tag_visualizar and os.path.exists(HTML_FILE):
+    if tag_visualizar and tag_visualizar in db_equipos and os.path.exists(HTML_FILE):
         datos_equipo = db_equipos[tag_visualizar]
         
         with open(HTML_FILE, "r", encoding="utf-8") as f:
