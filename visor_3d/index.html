@@ -169,6 +169,27 @@
       }
     });
 
+    function syncStateToParent() {
+      const exportData = {
+        nameplate: document.getElementById('name-input').value || "EQUIPO_SIN_NOMBRE",
+        vent: document.getElementById('vent-input').value,
+        drain: document.getElementById('drain-input').value,
+        nozzles: nozzlesList.map(nz => ({
+          tagName: nz.userData.tagName,
+          diaIndex: nz.userData.diaIndex,
+          rating: nz.userData.rating,
+          bodyPart: nz.userData.bodyPart,
+          pos: nz.userData.pos,
+          valX: nz.userData.valX,
+          hasNS: nz.userData.hasNS,
+          tagNS: nz.userData.tagNS,
+          hasFS: nz.userData.hasFS,
+          tagFS: nz.userData.tagFS
+        }))
+      };
+      window.parent.postMessage({ type: 'UPDATE_EXCHANGER_DATA', payload: exportData }, '*');
+    }
+
     let nozzlesList = [];
     let customNozzleCount = 0;
 
@@ -441,6 +462,7 @@
         });
       }
       deselectNozzle();
+      syncStateToParent();
     }
 
     const raycaster = new THREE.Raycaster();
@@ -526,6 +548,7 @@
       const val = e.target.value;
       selectedNozzle.userData.tagName = val;
       selectedNozzle.userData.nozzleSprite.updateText(val);
+      syncStateToParent();
     });
 
     editDia.addEventListener('change', (e) => {
@@ -534,11 +557,13 @@
       selectedNozzle.userData.diaIndex = diaIndex;
       const scaleFactor = 0.3 + (diaIndex * 0.1);
       selectedNozzle.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      syncStateToParent();
     });
 
     editRating.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.rating = e.target.value;
+      syncStateToParent();
     });
 
     editBody.addEventListener('change', (e) => {
@@ -551,6 +576,7 @@
       editX.value = bounds.center; 
       selectedNozzle.userData.valX = bounds.center;
       updateTransform();
+      syncStateToParent();
     });
 
     const updateTransform = () => {
@@ -567,6 +593,7 @@
         selectedNozzle.position.set(vx, -NOZZLE_Y, 0);
         selectedNozzle.rotation.z = Math.PI;
       }
+      syncStateToParent();
     };
     
     editPos.addEventListener('change', updateTransform);
@@ -578,10 +605,12 @@
       selectedNozzle.userData.hasNS = isChecked;
       selectedNozzle.userData.plugNS.visible = isChecked;
       editNsName.disabled = !isChecked;
+      syncStateToParent();
     });
     editNsName.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.tagNS = e.target.value;
+      syncStateToParent();
     });
 
     editFsCheck.addEventListener('change', (e) => {
@@ -590,10 +619,12 @@
       selectedNozzle.userData.hasFS = isChecked;
       selectedNozzle.userData.plugFS.visible = isChecked;
       editFsName.disabled = !isChecked;
+      syncStateToParent();
     });
     editFsName.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.tagFS = e.target.value;
+      syncStateToParent();
     });
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
@@ -608,9 +639,9 @@
       const newNz = buildNozzle(internalName, "", diaIndex, rating, bodyPart, "superior", startX, false, "", false, "");
       nozzlesList.push(newNz);
       selectNozzle(newNz);
+      syncStateToParent();
     });
 
-    // --- PLACA DE IDENTIFICACIÓN (NAMEPLATE) ---
     const nameCanvas = document.createElement('canvas');
     nameCanvas.width = 1024;
     nameCanvas.height = 340; 
@@ -650,7 +681,12 @@
     nameplate.position.set(0, 0, R + 0.02); 
     heatExchanger.add(nameplate);
 
-    document.getElementById('name-input').addEventListener('input', (e) => updateNameplateText(e.target.value));
+    document.getElementById('name-input').addEventListener('input', (e) => {
+      updateNameplateText(e.target.value);
+      syncStateToParent();
+    });
+    document.getElementById('vent-input').addEventListener('input', () => syncStateToParent());
+    document.getElementById('drain-input').addEventListener('input', () => syncStateToParent());
 
     function animate() {
       requestAnimationFrame(animate);
