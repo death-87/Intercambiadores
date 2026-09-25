@@ -5,7 +5,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Editor 3D de Equipos", layout="wide")
 
-# Rutas de carpetas y base de datos
 current_dir = os.path.dirname(__file__)
 parent_dir = os.path.dirname(current_dir)
 DB_FILE = os.path.join(parent_dir, "equipos.json")
@@ -26,7 +25,6 @@ def guardar_db(db):
 
 db = cargar_db()
 
-# Leer parámetros de URL (ej. ?equipo=C702)
 params = st.query_params
 equipo_url = params.get("equipo", None)
 
@@ -51,13 +49,12 @@ elif equipo_seleccionado == "-- NUEVO EQUIPO (En blanco) --" and "equipo" in par
 nombre_default = "" if "NUEVO" in equipo_seleccionado else equipo_seleccionado
 
 with col2:
-    tag_guardar = st.text_input("TAG del Equipo (Ej: C702):", value=nombre_default)
+    tag_guardar = st.text_input("TAG del Equipo para Guardar (Ej: C702):", value=nombre_default)
 
 with col3:
     st.write("")
-    st.info("💡 Haz clic en el botón verde dentro del visor 3D para guardar.")
+    st.info("💡 Haz clic en el botón verde **💾 GUARDAR EQUIPO** dentro del visor 3D.")
 
-# Plantilla base en blanco
 plantilla_blanco = {
     "nameplate": "",
     "vent": "",
@@ -72,22 +69,28 @@ plantilla_blanco = {
 
 datos_actuales = plantilla_blanco if "NUEVO" in equipo_seleccionado or not equipo_seleccionado else db.get(equipo_seleccionado, plantilla_blanco)
 
-# Leer y renderizar el HTML inyectando los datos de manera directa
 if os.path.exists(HTML_FILE):
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html_content = f.read()
     
-    # Inyectar los datos JSON directamente en una variable global de JavaScript dentro del HTML
     json_data_str = json.dumps(datos_actuales)
     html_injectado = html_content.replace(
         "/*__INJECT_DATA_HERE__*/", 
         f"window.initialExchangerData = {json_data_str};"
     )
     
-    # Renderizar el componente web limpio
+    # Captura el resultado cuando se presiona el botón en el 3D
     resultado_guardar = components.html(html_injectado, height=820, scrolling=False)
+    
+    if resultado_guardar is not None:
+        tag_limpio = tag_guardar.strip()
+        if not tag_limpio:
+            st.error("⚠️ Error: Debes ingresar un TAG válido (Ej: C702) en la casilla superior antes de hacer clic en guardar.")
+        else:
+            db[tag_limpio] = resultado_guardar
+            guardar_db(db)
+            st.success(f"✅ ¡Equipo '{tag_limpio}' guardado exitosamente en la base de datos!")
+            st.query_params["equipo"] = tag_limpio
+            st.rerun()
 else:
     st.error(f"No se encontró el archivo HTML en: {HTML_FILE}")
-
-# Lógica para recibir el guardado mediante query param de retorno o control interno de sesión
-# Nota: Como usamos components.html directo, manejaremos el guardado con un input de control o mediante un mecanismo alternativo si es necesario.
