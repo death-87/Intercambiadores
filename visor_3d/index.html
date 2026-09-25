@@ -10,13 +10,21 @@
     #info { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.65); padding: 8px 12px; border-radius: 6px; border: 1px solid #444; text-align: right; pointer-events: none; color: #fff;}
     
     #ui-container { 
-      position: absolute; top: 10px; left: 10px; z-index: 10; 
+      position: absolute; top: 52px; left: 10px; z-index: 10; 
       background: rgba(15, 23, 42, 0.9); padding: 10px; border-radius: 6px; 
-      border: 1px solid #475569; width: 240px; max-height: 92vh; overflow-y: auto; 
+      border: 1px solid #475569; width: 240px; max-height: calc(100vh - 84px); overflow-y: auto; 
       box-shadow: 0 4px 6px rgba(0,0,0,0.3); color: #f8fafc;
     }
     #ui-container::-webkit-scrollbar { width: 4px; }
     #ui-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+    #toggle-equipment-panel {
+      position: absolute; top: 10px; left: 10px; z-index: 20;
+      padding: 9px 12px; border: 1px solid #475569; border-radius: 6px;
+      background: #0f172a; color: #f8fafc; font-size: 12px;
+      font-weight: bold; cursor: pointer;
+    }
+    #toggle-equipment-panel:hover { background: #1e293b; border-color: #38bdf8; }
+    #toggle-equipment-panel:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
     
     .panel-title { font-size: 12px; font-weight: bold; margin-top: 0; margin-bottom: 8px; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 3px; }
     .input-group { margin-bottom: 6px; }
@@ -51,6 +59,7 @@
     <p style="margin:0; font-size:10px; color:#38bdf8;">Scroll Click: Desplazar | Clic Izq: Rotar</p>
   </div>
 
+  <button id="toggle-equipment-panel" type="button" aria-controls="ui-container" aria-expanded="true" hidden>Ocultar datos equipo</button>
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
@@ -164,10 +173,28 @@
     // La conexión con Streamlit no depende de Three.js ni de WebGL.
     (() => {
       const status = document.getElementById('save-status');
+      const panel = document.getElementById('ui-container');
+      const panelToggle = document.getElementById('toggle-equipment-panel');
+      let panelCollapsed = false;
+      let panelReadOnly = false;
+      function updatePanel() {
+        panel.style.display = panelReadOnly || panelCollapsed ? 'none' : '';
+        panelToggle.hidden = panelReadOnly;
+        panelToggle.setAttribute('aria-expanded', String(!panelReadOnly && !panelCollapsed));
+        panelToggle.textContent = panelCollapsed ? 'Mostrar datos equipo' : 'Ocultar datos equipo';
+      }
+      panelToggle.addEventListener('click', () => {
+        panelCollapsed = !panelCollapsed;
+        updatePanel();
+      });
       status.textContent = 'Conectando visor 3D...';
       const bridge = window.exchangerBridge = {
         args: null,
         render: null,
+        setReadOnly(value) {
+          panelReadOnly = Boolean(value);
+          updatePanel();
+        },
         send(type, fields) {
           window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, '*');
         },
@@ -189,7 +216,7 @@
       window.addEventListener('message', event => {
         if (event.source !== window.parent || event.data?.type !== 'streamlit:render') return;
         bridge.args = event.data.args;
-        if (bridge.args.readonly) document.getElementById('ui-container').style.display = 'none';
+        bridge.setReadOnly(bridge.args.readonly);
         if (bridge.render) {
           try { bridge.render(bridge.args); } catch (error) { bridge.fail(error); }
         }
@@ -636,7 +663,7 @@
 
     window.addEventListener('pointerdown', (event) => {
       if (readOnly || saving) return;
-      if (event.target.closest('#ui-container')) return;
+      if (event.target.closest('#ui-container, #toggle-equipment-panel')) return;
 
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -889,7 +916,7 @@
     });
     window.exchangerBridge.attach(args => {
       readOnly = Boolean(args.readonly);
-      document.getElementById('ui-container').style.display = readOnly ? 'none' : '';
+      window.exchangerBridge.setReadOnly(readOnly);
       if (!initialized) {
         loading = true;
         loadExchangerData(args.initial_data);
