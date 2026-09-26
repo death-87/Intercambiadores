@@ -1,3 +1,4 @@
+"""Página Streamlit para editar y guardar el modelo 3D."""
 from pathlib import Path
 from copy import deepcopy
 from io import StringIO
