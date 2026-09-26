@@ -1,6 +1,6 @@
-"""Página principal. Ejecutar: streamlit run app.py (Python 3.10 o posterior)."""
+"""Página principal. Ejecutar: streamlit run Intercambiadores.py (Python 3.10 o posterior)."""
 from pathlib import Path
-from io import StringIO
+from io import BytesIO, StringIO
 from datetime import datetime
 import hashlib
 import json
@@ -15,7 +15,12 @@ import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
-from fpdf import FPDF
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from visor_3d import declarar_visor
 
 st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
@@ -112,6 +117,12 @@ def informado(valor):
     return normalizar(valor) not in {"", "NAN", "NONE", "NULL", "SIN INFORMACION", "N/A"}
 
 
+def es_columna_conn(nombre):
+    """Oculta columnas auxiliares Conn, Conn1, Conn2... sin ocultar CONEXIONES ROSCADAS."""
+    compacto = re.sub(r"[\s_.-]+", "", normalizar(nombre))
+    return re.fullmatch(r"CONN\d*", compacto) is not None
+
+
 def buscar_columna(columnas, exactas, fragmentos=()):
     for nombre in exactas:
         for col in columnas:
@@ -153,6 +164,23 @@ def cargar_datos():
 def validar_diseno(data):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
+    if data.get("model", "A") not in ("A", "B"):
+        raise ValueError("modelo desconocido")
+    dimensions = data.get("dimensions", {})
+    if not isinstance(dimensions, dict):
+        raise ValueError("dimensions debe ser un objeto")
+    limits = {
+        "shellLength": (3.0, 7.0), "reducerLength": (0.4, 1.8),
+        "channelLength": (0.35, 1.5), "bonnetLength": (0.25, 0.9),
+    }
+    for field, value in dimensions.items():
+        if field not in limits:
+            continue
+        if type(value) not in (int, float) or not math.isfinite(value):
+            raise ValueError(f"{field} debe ser numérico")
+        low, high = limits[field]
+        if not low <= value <= high:
+            raise ValueError(f"{field} fuera de rango")
     for field in ("nameplate", "vent", "drain"):
         if field in data and not isinstance(data[field], str):
             raise ValueError(f"{field} debe ser texto")
@@ -205,16 +233,13 @@ def cargar_disenos():
 def filas_boquillas(config):
     filas = []
     for n in config.get("nozzles", []):
-        auxiliares = []
-        for side in ("NS", "FS"):
-            if n.get("has" + side, False):
-                auxiliares.append(f"{n.get('tag' + side) or 'Medida no registrada'} {side}")
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
             "DIÁMETRO": DIAMETROS[n["diaIndex"]],
             "RATING": n.get("rating") or "Sin información",
             "CUERPO": n["bodyPart"].upper(), "POSICIÓN": n["pos"],
-            "AUXILIARES": " | ".join(auxiliares) or "Sin auxiliares",
+            "NS": n.get("tagNS") or "Sin medida" if n.get("hasNS", False) else "—",
+            "FS": n.get("tagFS") or "Sin medida" if n.get("hasFS", False) else "—",
         })
     return filas
 
@@ -269,59 +294,156 @@ def ir_editor(tag):
     st.error("No se encontró la página del editor dentro de pages/.")
 
 
-def texto_pdf(texto):
-    return str(texto).encode("latin-1", "replace").decode("latin-1")
-
-
-class PDFCustom(FPDF):
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("Helvetica", "", 8)
-        self.set_text_color(100, 100, 100)
-        self.cell(0, 5, f"Página {self.page_no()}", align="C")
-
-
 def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
-    pdf = PDFCustom()
-    pdf.set_margins(15, 15, 15)
-    pdf.set_auto_page_break(auto=True, margin=22)
-    pdf.add_page()
+    salida = BytesIO()
+    doc = SimpleDocTemplate(
+        salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=14 * mm, bottomMargin=17 * mm,
+        title=f"Ficha de conexiones roscadas - {tag}", author="Control de Intercambiadores",
+    )
+    navy, teal, pale, line, ink, muted = (
+        colors.HexColor("#173247"), colors.HexColor("#0F9385"), colors.HexColor("#E8F4F2"),
+        colors.HexColor("#C9D5DE"), colors.HexColor("#1F2D38"), colors.HexColor("#647585"),
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("hx_title", parent=styles["Title"], fontName="Helvetica-Bold",
+                                 fontSize=17, leading=20, textColor=colors.white, alignment=TA_LEFT)
+    eyebrow = ParagraphStyle("hx_eye", parent=styles["Normal"], fontName="Helvetica-Bold",
+                              fontSize=7, leading=9, textColor=colors.HexColor("#7FE0D1"), spaceAfter=3)
+    section_style = ParagraphStyle("hx_section", parent=styles["Heading2"], fontName="Helvetica-Bold",
+                                   fontSize=10, leading=13, textColor=navy, spaceBefore=4, spaceAfter=6)
+    body = ParagraphStyle("hx_body", parent=styles["BodyText"], fontName="Helvetica",
+                          fontSize=8, leading=10, textColor=ink)
+    small = ParagraphStyle("hx_small", parent=body, fontSize=7, leading=9, textColor=muted)
+    cell = ParagraphStyle("hx_cell", parent=body, fontSize=7, leading=8.5)
+    cell_center = ParagraphStyle("hx_cell_center", parent=cell, alignment=TA_CENTER)
+    cell_header = ParagraphStyle("hx_cell_header", parent=cell_center, fontName="Helvetica-Bold",
+                                 textColor=colors.white)
+    status_text = ParagraphStyle("hx_status", parent=body, fontName="Helvetica-Bold",
+                                 textColor=colors.white)
 
-    def linea(texto, bold=False, size=9):
-        pdf.set_font("Helvetica", "B" if bold else "", size)
-        # API compartida por PyFPDF y fpdf2: restablecer X explícitamente.
-        pdf.set_x(pdf.l_margin)
-        pdf.multi_cell(0, 5.5, texto_pdf(texto), align="L")
-        pdf.set_x(pdf.l_margin)
+    def p(valor, estilo=cell):
+        return Paragraph(escape(str(valor)), estilo)
 
-    linea(f"Ficha técnica - {tag}", True, 16)
-    linea(f"Generado: {datetime.now():%Y-%m-%d %H:%M} (hora del servidor)")
-    pdf.ln(3)
-    for k, v in registro.items():
-        if informado(v):
-            linea(f"{k}: {v}")
-    pdf.ln(4)
-    linea("Conexiones roscadas", True, 12)
-    linea(f"Total: {cantidad if cantidad is not None else 'No disponible'}. {origen}.")
-    pdf.ln(4)
-    linea("NOZZLE SCHEDULE", True, 12)
-    if config is None:
-        linea(estado_diseno)
+    def pie(canvas, documento):
+        canvas.saveState()
+        canvas.setStrokeColor(line)
+        canvas.line(15 * mm, 12 * mm, 195 * mm, 12 * mm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(muted)
+        canvas.drawString(15 * mm, 7.5 * mm, "CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
+        canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {documento.page}")
+        canvas.restoreState()
+
+    elementos = []
+    cabecera = Table([
+        [Paragraph("REGISTRO DE INSPECCIÓN", eyebrow)],
+        [Paragraph(f"Conexiones roscadas · {escape(str(tag))}", title_style)],
+        [p(f"Emitido {datetime.now():%d-%m-%Y %H:%M} · hora del servidor", small)],
+    ], colWidths=[180 * mm])
+    cabecera.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), navy), ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 1), ("TOPPADDING", (0, 1), (-1, 1), 1),
+        ("BOTTOMPADDING", (0, 1), (-1, 1), 2), ("TOPPADDING", (0, 2), (-1, 2), 1),
+        ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
+    ]))
+    elementos += [cabecera, Spacer(1, 7 * mm)]
+
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    col_unidad = buscar_columna(columnas, ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
+    col_estado = buscar_columna(columnas, ("STATUS", "ESTATUS", "ESTADO"), ("STATUS", "ESTATUS"))
+    unidad = registro[col_unidad] if col_unidad and informado(registro[col_unidad]) else "Sin información"
+    estado = registro[col_estado] if col_estado and informado(registro[col_estado]) else "Sin información"
+    modelo = config.get("model", "A") if config else "Sin diseño"
+    datos = [
+        [p("EQUIPO", small), p("UNIDAD / ÁREA", small), p("ESTADO", small), p("MODELO 3D", small)],
+        [p(tag, body), p(unidad, body), p(estado, body), p(modelo, body)],
+    ]
+    tabla_datos = Table(datos, colWidths=[45 * mm] * 4)
+    tabla_datos.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EFF3F6")),
+        ("GRID", (0, 0), (-1, -1), .45, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elementos += [tabla_datos, Spacer(1, 6 * mm)]
+
+    filas = filas_boquillas(config) if config else []
+    conexiones = []
+    if config:
+        for n in config.get("nozzles", []):
+            for lado in ("NS", "FS"):
+                if n.get("has" + lado, False):
+                    conexiones.append([
+                        n.get("tagName") or "Sin TAG", lado, n.get("tag" + lado) or "Sin medida",
+                        n.get("bodyPart", "").upper(), n.get("pos", ""),
+                    ])
+        for servicio, campo in (("VENT", "vent"), ("DRAIN", "drain")):
+            if informado(config.get(campo, "")):
+                conexiones.append(["BONETE", servicio, config.get(campo), "BONNET", "—"])
+    detectadas = len(conexiones)
+    if cantidad is None:
+        verificacion, estado_color = "SIN TOTAL DECLARADO", colors.HexColor("#A26918")
+    elif cantidad == detectadas:
+        verificacion, estado_color = "COINCIDENTE", teal
     else:
-        filas = filas_boquillas(config)
-        if not filas:
-            linea("Sin boquillas registradas.")
-        for fila in filas:
-            pdf.ln(2)
-            linea(f"{fila['MK']} | Cantidad: 1 | {fila['DIÁMETRO']} | {fila['RATING']}", True)
-            linea(f"Cuerpo: {fila['CUERPO']} | Posición: {fila['POSICIÓN']}")
-            linea(f"Auxiliares: {fila['AUXILIARES']}")
-        pdf.ln(3)
-        linea(f"Venteo bonete: {config.get('vent') or 'Sin medida registrada'}")
-        linea(f"Drenaje bonete: {config.get('drain') or 'Sin medida registrada'}")
-    salida = pdf.output(dest="S")
-    # PyFPDF devuelve str con bytes latin-1; fpdf2 devuelve bytearray.
-    return salida.encode("latin-1") if isinstance(salida, str) else bytes(salida)
+        verificacion, estado_color = f"REVISAR · DIFERENCIA {cantidad - detectadas:+d}", colors.HexColor("#B54A4A")
+    resumen = Table([
+        [p("TOTAL DECLARADO", small), p("IDENTIFICADAS EN 3D", small), p("VERIFICACIÓN", small)],
+        [p(cantidad if cantidad is not None else "—", body), p(detectadas, body), p(verificacion, status_text)],
+        [p(origen, small), p("NS + FS + venteo/drenaje informados", small), p(estado_diseno, small)],
+    ], colWidths=[60 * mm] * 3)
+    resumen.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), pale), ("BOX", (0, 0), (-1, -1), .8, teal),
+        ("INNERGRID", (0, 0), (-1, -1), .35, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (2, 1), (2, 1), estado_color), ("TEXTCOLOR", (2, 1), (2, 1), colors.white),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elementos += [Paragraph("CONTROL DE CONEXIONES ROSCADAS", section_style), resumen, Spacer(1, 6 * mm)]
+
+    elementos.append(Paragraph("NOZZLE SCHEDULE", section_style))
+    if filas:
+        encabezado = ["MK", "QT", "DIÁMETRO", "RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
+        datos_nozzle = [[p(x, cell_header) for x in encabezado]] + [
+            [p(fila[k], cell_center if k in {"QT", "DIÁMETRO", "NS", "FS"} else cell) for k in encabezado]
+            for fila in filas
+        ]
+        tabla_nozzle = Table(datos_nozzle, repeatRows=1,
+                             colWidths=[19*mm, 10*mm, 22*mm, 24*mm, 27*mm, 25*mm, 26.5*mm, 26.5*mm])
+        tabla_nozzle.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), navy), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F8FA")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elementos.append(tabla_nozzle)
+    else:
+        elementos.append(p("No hay boquillas registradas en el diseño.", body))
+    elementos += [Spacer(1, 6 * mm), Paragraph("REGISTRO DE ROSCAS", section_style)]
+    if conexiones:
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "CUERPO", "POSICIÓN"]
+        datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
+            [p(x, cell_center if i in (1, 2) else cell) for i, x in enumerate(fila)] for fila in conexiones
+        ]
+        tabla_roscas = Table(datos_roscas, repeatRows=1, colWidths=[42*mm, 25*mm, 38*mm, 38*mm, 37*mm])
+        tabla_roscas.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), teal), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elementos.append(tabla_roscas)
+    else:
+        elementos.append(p("No hay conexiones roscadas identificadas en el diseño 3D.", body))
+    elementos += [Spacer(1, 5 * mm), p(
+        "Criterio: se listan las conexiones NS y FS activas, además del venteo y drenaje del bonete cuando tienen medida informada. "
+        "Las dimensiones longitudinales de los componentes se excluyen de esta ficha.", small)]
+    doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
+    return salida.getvalue()
 
 
 def main():
@@ -429,13 +551,18 @@ def main():
     ])
     if df[col_equipo].map(normalizar).duplicated().any():
         st.warning("Hay TAG repetidos en Hoja 1. Los gráficos y totales cuentan filas; revisa duplicados si cada equipo debe ocupar una sola fila.")
+    columnas_inventario = [c for c in df.columns if not es_columna_conn(c)]
     tabla, stats = st.tabs(["Inventario de equipos", "Análisis de inspección"])
     registro = None
     with tabla:
         seccion("Inventario de equipos", "Selecciona un registro para consultar su ficha técnica y documentación.", f"{len(filtrado)} registros")
-        defaults = list(dict.fromkeys(c for c in (col_equipo, col_unidad, col_status, col_roscadas) if c))
+        defaults = list(dict.fromkeys(
+            c for c in (col_equipo, col_unidad, col_status, col_roscadas)
+            if c and c in columnas_inventario
+        ))
         with st.expander("Personalizar columnas"):
-            visibles = st.multiselect("Campos de la planilla", list(df.columns), default=defaults)
+            visibles = st.multiselect("Campos de la planilla", columnas_inventario, default=defaults)
+            st.caption("Las columnas auxiliares Conn, Conn1, Conn2, etc. se ocultan del inventario.")
         mostrar = filtrado[visibles].copy()
         mostrar.insert(0, "Diseño 3D", filtrado[col_equipo].map(estado))
         firma = hashlib.sha256(json.dumps([selecciones, visibles, filtrado.index.tolist(), filtrado[col_equipo].tolist()], ensure_ascii=False).encode()).hexdigest()[:16]
@@ -489,11 +616,21 @@ def main():
             resumen = {c: registro[c] for c in (col_equipo, col_unidad, col_status, col_comentario) if c}
             st.table(pd.DataFrame(resumen.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             with st.expander("Todos los datos técnicos de la planilla"):
-                st.table(pd.DataFrame(registro.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
+                datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_conn(k)]
+                st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             seccion("Conexiones y boquillas", "Nozzle schedule del diseño guardado.")
             if config is None:
                 st.info(estado(tag) + ": no hay una configuración válida disponible para mostrar boquillas.")
             else:
+                st.caption(f"Modelo del intercambiador: {config.get('model', 'A')}")
+                if config.get("model") == "B":
+                    dims = config.get("dimensions", {})
+                    st.caption("Largos: " + " · ".join([
+                        f"Shell {dims.get('shellLength', 4.5):.2f} m",
+                        f"Transición {dims.get('reducerLength', 0.9):.2f} m",
+                        f"Channel {dims.get('channelLength', 0.65):.2f} m",
+                        f"Bonete {dims.get('bonnetLength', 0.40):.2f} m",
+                    ]))
                 boquillas = filas_boquillas(config)
                 if boquillas:
                     st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
