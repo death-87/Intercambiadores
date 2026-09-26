@@ -571,8 +571,6 @@ def main():
         filas = evento.selection.rows
         if filas and 0 <= filas[0] < len(filtrado):
             registro = filtrado.iloc[filas[0]]
-        elif len(filtrado) == 1:
-            registro = filtrado.iloc[0]
     with stats:
         seccion("Estado de la inspección", "Distribución de los registros según los filtros actuales.")
         if filtrado.empty:
@@ -671,29 +669,25 @@ def main():
                 st.link_button("Abrir ubicación en Google Maps", f"https://www.google.com/maps/search/?api=1&query={lat},{lon}")
                 st.map(pd.DataFrame([{"lat": lat, "lon": lon}]), zoom=15)
 
-    st.divider()
-    seccion("Modelo del intercambiador", "Explora la geometría y las conexiones del diseño guardado.", "VISTA 3D · SOLO LECTURA")
-    if not disenos_disponibles:
-        st.warning("Vista previa no disponible hasta recuperar la lectura de Diseño3D.")
-    elif not db:
-        st.info("No hay diseños válidos disponibles." if errores else "Todavía no hay diseños guardados.")
-    elif not (ROOT / "visor_3d" / "index.html").is_file():
-        st.error("Falta visor_3d/index.html en el repositorio.")
-    else:
-        claves = sorted(db, key=lambda k: db[k]["tag"])
-        preferido = normalizar(registro[col_equipo]) if registro is not None else None
-        ss = st.session_state
-        if ss.get("preview_3d_select") not in claves:
-            ss["preview_3d_select"] = preferido if preferido in db else claves[0]
-        if preferido != ss.get("preview_ficha_anterior"):
-            ss["preview_ficha_anterior"] = preferido
-            if preferido in db:
-                ss["preview_3d_select"] = preferido
-        clave = st.selectbox("Equipo guardado", claves, format_func=lambda k: db[k]["tag"], key="preview_3d_select")
-        cfg = db[clave]["data"]
-        digest = hashlib.sha256(json.dumps([clave, cfg], sort_keys=True).encode()).hexdigest()[:20]
-        declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
-                         key="preview_" + digest, default=None)
+    # La vista 3D solo se crea después de una selección explícita en la tabla.
+    if registro is not None:
+        st.divider()
+        seccion("Modelo del intercambiador", "Explora la geometría y las conexiones del equipo seleccionado.",
+                "VISTA 3D · SOLO LECTURA")
+        clave = normalizar(registro[col_equipo])
+        if not disenos_disponibles:
+            st.warning("Vista previa no disponible hasta recuperar la lectura de Diseño3D.")
+        elif clave in errores:
+            st.warning(errores[clave])
+        elif clave not in db:
+            st.info("El equipo seleccionado todavía no tiene un diseño 3D guardado.")
+        elif not (ROOT / "visor_3d" / "index.html").is_file():
+            st.error("Falta visor_3d/index.html en el repositorio.")
+        else:
+            cfg = db[clave]["data"]
+            digest = hashlib.sha256(json.dumps([clave, cfg], sort_keys=True).encode()).hexdigest()[:20]
+            declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
+                             key="preview_" + digest, default=None)
 
 
 if __name__ == "__main__":
