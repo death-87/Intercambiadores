@@ -15,7 +15,29 @@ st.set_page_config(page_title="Editor 3D de Equipos", layout="wide")
 WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec'
 SHEET_ID = '1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4'
 HOJA_3D = 'Diseño3D'
-plantilla_blanco = {'nameplate': '', 'vent': '3/4"', 'drain': '3/4"', 'nozzles': [{'tagName': 'S1', 'diaIndex': 6, 'rating': '300#', 'bodyPart': 'shell', 'pos': 'superior', 'valX': -1.5, 'hasNS': True, 'tagNS': '3/4"', 'hasFS': True, 'tagFS': '1"'}, {'tagName': 'S2', 'diaIndex': 6, 'rating': '300#', 'bodyPart': 'shell', 'pos': 'inferior', 'valX': 1.5, 'hasNS': True, 'tagNS': '3/4"', 'hasFS': True, 'tagFS': '1"'}, {'tagName': 'T1', 'diaIndex': 8, 'rating': '300#', 'bodyPart': 'channel', 'pos': 'superior', 'valX': -2.9775, 'hasNS': True, 'tagNS': '1"', 'hasFS': True, 'tagFS': '1"'}, {'tagName': 'T2', 'diaIndex': 8, 'rating': '300#', 'bodyPart': 'channel', 'pos': 'inferior', 'valX': -2.9775, 'hasNS': True, 'tagNS': '1"', 'hasFS': True, 'tagFS': '1"'}]}
+plantilla_blanco = {
+    "model": "A",
+    "dimensions": {
+        "shellLength": 4.5, "reducerLength": 0.9, "channelLength": 0.65,
+        "bonnetLength": 0.40, "shellDiameter": 1.098,
+        "channelDiameter": 1.098, "bonnetDiameter": 1.098,
+    },
+    "nameplate": "", "vent": '3/4"', "drain": '3/4"',
+    "nozzles": [
+        {"tagName": "S1", "diaIndex": 6, "rating": "300#", "bodyPart": "shell",
+         "pos": "superior", "valX": -1.5, "hasNS": True, "sizeNS": '3/4"',
+         "tagNS": "", "hasFS": True, "sizeFS": '1"', "tagFS": ""},
+        {"tagName": "S2", "diaIndex": 6, "rating": "300#", "bodyPart": "shell",
+         "pos": "inferior", "valX": 1.5, "hasNS": True, "sizeNS": '3/4"',
+         "tagNS": "", "hasFS": True, "sizeFS": '1"', "tagFS": ""},
+        {"tagName": "T1", "diaIndex": 8, "rating": "300#", "bodyPart": "channel",
+         "pos": "superior", "valX": -2.9775, "hasNS": True, "sizeNS": '1"',
+         "tagNS": "", "hasFS": True, "sizeFS": '1"', "tagFS": ""},
+        {"tagName": "T2", "diaIndex": 8, "rating": "300#", "bodyPart": "channel",
+         "pos": "inferior", "valX": -2.9775, "hasNS": True, "sizeNS": '1"',
+         "tagNS": "", "hasFS": True, "sizeFS": '1"', "tagFS": ""},
+    ],
+}
 NEW = "-- NUEVO EQUIPO (En blanco) --"
 ss = st.session_state
 
