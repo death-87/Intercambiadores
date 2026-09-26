@@ -64,12 +64,19 @@
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete elíptico</option><option value="B">Modelo B · Transición excéntrica</option></select></div>
-<div id="model-b-dimensions" style="display:none;background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
-  <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS MODELO B</strong>
-  <div class="input-group"><label>Shell: <output id="shell-length-value">4.50</output> m</label><input type="range" id="shell-length" min="3" max="7" step="0.10" value="4.50"></div>
-  <div class="input-group"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.40" max="1.80" step="0.05" value="0.90"></div>
-  <div class="input-group"><label>Channel: <output id="channel-length-value">0.65</output> m</label><input type="range" id="channel-length" min="0.35" max="1.50" step="0.05" value="0.65"></div>
-  <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.40</output> m</label><input type="range" id="bonnet-length" min="0.25" max="0.90" step="0.05" value="0.40"></div>
+<div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
+  <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
+  <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.70" max="2.50" step="0.02" value="1.10"></div>
+  <div class="input-group"><label>Channel: <output id="channel-diameter-value">1.10</output> m</label><input type="range" id="channel-diameter" min="0.40" max="2.00" step="0.02" value="1.10"></div>
+  <div class="input-group"><label>Bonete: <output id="bonnet-diameter-value">1.10</output> m</label><input type="range" id="bonnet-diameter" min="0.70" max="2.50" step="0.02" value="1.10"></div>
+  <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin-bottom:7px">La transición une automáticamente los diámetros del shell y channel.</small>
+  <div id="model-b-lengths" style="display:none;border-top:1px solid #334155;padding-top:7px">
+    <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS MODELO B</strong>
+    <div class="input-group"><label>Shell: <output id="shell-length-value">4.50</output> m</label><input type="range" id="shell-length" min="3" max="7" step="0.10" value="4.50"></div>
+    <div class="input-group"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.40" max="1.80" step="0.05" value="0.90"></div>
+    <div class="input-group"><label>Channel: <output id="channel-length-value">0.65</output> m</label><input type="range" id="channel-length" min="0.35" max="1.50" step="0.05" value="0.65"></div>
+    <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.40</output> m</label><input type="range" id="bonnet-length" min="0.25" max="0.90" step="0.05" value="0.40"></div>
+  </div>
 </div>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
@@ -134,15 +141,17 @@
         <input type="range" id="edit-nz-x" step="0.05">
       </div>
       
-      <div class="plug-edit-row">
+      <div class="plug-edit-row" style="flex-wrap:wrap">
         <input type="checkbox" id="edit-ns-check">
-        <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS:</label>
-        <input type="text" id="edit-ns-name" placeholder="Medida NS" disabled>
+        <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS</label>
+        <input type="text" id="edit-ns-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
+        <input type="text" id="edit-ns-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
-      <div class="plug-edit-row">
+      <div class="plug-edit-row" style="flex-wrap:wrap">
         <input type="checkbox" id="edit-fs-check">
-        <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS:</label>
-        <input type="text" id="edit-fs-name" placeholder="Medida FS" disabled>
+        <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS</label>
+        <input type="text" id="edit-fs-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
+        <input type="text" id="edit-fs-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
 
       <!-- BOTÓN ELIMINAR -->
@@ -270,8 +279,10 @@
           pos: nz.userData.pos || "superior",
           valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
           hasNS: !!nz.userData.hasNS,
+          sizeNS: nz.userData.sizeNS || "",
           tagNS: nz.userData.tagNS || "",
           hasFS: !!nz.userData.hasFS,
+          sizeFS: nz.userData.sizeFS || "",
           tagFS: nz.userData.tagFS || ""
         }))
       };
@@ -569,19 +580,24 @@
     heatExchanger.add(channelGroup);
 
     const modelAParts = [...heatExchanger.children];
+    const modelAShellParts = modelAParts.filter(part => part !== rearBonnetGroup && part !== channelGroup);
     const modelB = new THREE.Group();
     modelB.name = 'Modelo B: transición cónica y cabezal reducido';
     heatExchanger.add(modelB);
     modelB.visible = false;
-    const RB = 0.72;
-    const R_CHANNEL_B = 0.36;
     let currentDimensions = {
       shellLength: 4.5,
       reducerLength: 0.9,
       channelLength: 0.65,
-      bonnetLength: 0.40
+      bonnetLength: 0.40,
+      shellDiameter: 1.098,
+      channelDiameter: 1.098,
+      bonnetDiameter: 1.098
     };
     function modelBLayout() {
+      const shellRadius = currentDimensions.shellDiameter / 2;
+      const channelRadius = currentDimensions.channelDiameter / 2;
+      const bonnetRadius = currentDimensions.bonnetDiameter / 2;
       const shellLeft = -currentDimensions.shellLength / 2;
       const shellRight = currentDimensions.shellLength / 2;
       const reducerSmall = shellLeft - currentDimensions.reducerLength;
@@ -589,7 +605,7 @@
       const channelBodyLeft = channelBodyRight - currentDimensions.channelLength;
       return {shellLeft, shellRight, reducerSmall, channelBodyRight, channelBodyLeft,
         bonnetTip: shellRight + currentDimensions.bonnetLength,
-        channelY: -RB + R_CHANNEL_B};
+        channelY: -shellRadius + channelRadius, shellRadius, channelRadius, bonnetRadius};
     }
     // Reductor excéntrico: la generatriz inferior queda recta y la superior
     // forma la diagonal hacia el cabezal de menor diámetro.
@@ -620,18 +636,18 @@
     function buildModelB() {
       clearModelB();
       const p = modelBLayout();
-      cylinderX(modelB, 0, RB, currentDimensions.shellLength, shellMat);
-      ringX(modelB, p.shellLeft, RB, 0.007, weldMat);
-      ringX(modelB, p.shellRight, RB, 0.007, weldMat);
+      cylinderX(modelB, 0, p.shellRadius, currentDimensions.shellLength, shellMat);
+      ringX(modelB, p.shellLeft, p.shellRadius, 0.007, weldMat);
+      ringX(modelB, p.shellRight, p.shellRadius, 0.007, weldMat);
 
       // Reductor excéntrico: fondo recto y parte superior diagonal.
-      modelB.add(eccentricReducer(p.reducerSmall, p.shellLeft, R_CHANNEL_B, RB));
+      modelB.add(eccentricReducer(p.reducerSmall, p.shellLeft, p.channelRadius, p.shellRadius));
 
       // Bonete mayor soldado: fondo elíptico integrado y sin brida.
       const bonnet = new THREE.Mesh(
-        new THREE.SphereGeometry(RB, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
+        new THREE.SphereGeometry(p.bonnetRadius, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
       bonnet.rotation.z = -Math.PI / 2;
-      bonnet.scale.y = currentDimensions.bonnetLength / RB;
+      bonnet.scale.y = currentDimensions.bonnetLength / p.bonnetRadius;
       bonnet.position.x = p.shellRight;
       modelB.add(bonnet);
 
@@ -641,36 +657,42 @@
       channel.position.y = p.channelY;
       modelB.add(channel);
       cylinderX(channel, (p.channelBodyLeft + p.channelBodyRight) / 2,
-        R_CHANNEL_B, currentDimensions.channelLength, shellMat);
+        p.channelRadius, currentDimensions.channelLength, shellMat);
 
       // Unión reductor-channel.
-      cylinderX(channel, p.reducerSmall - T_FLANGE / 2, 0.45, T_FLANGE, flangeMatBase);
-      cylinderX(channel, p.reducerSmall - 1.5 * T_FLANGE - GASKET_T, 0.45, T_FLANGE, flangeMatBase);
+      const channelFlangeRadius = p.channelRadius * 1.25;
+      const channelPitchRadius = p.channelRadius * 1.133;
+      cylinderX(channel, p.reducerSmall - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
+      cylinderX(channel, p.reducerSmall - 1.5 * T_FLANGE - GASKET_T, channelFlangeRadius, T_FLANGE, flangeMatBase);
       const innerGasket = new THREE.Group();
-      innerGasket.scale.set(1, 0.67, 0.67);
+      const gasketScale = p.channelRadius / R;
+      innerGasket.scale.set(1, gasketScale, gasketScale);
       channel.add(innerGasket);
       spiralGasket(innerGasket, p.reducerSmall - T_FLANGE - GASKET_T / 2);
       studCircle(channel, p.reducerSmall - 2 * T_FLANGE - GASKET_T,
-        p.reducerSmall, 16, 0.408);
+        p.reducerSmall, 16, channelPitchRadius);
 
       // Tapa plana: brida exterior + junta + placa circular.
       const coverJoint = p.channelBodyLeft;
-      cylinderX(channel, coverJoint - T_FLANGE / 2, 0.45, T_FLANGE, flangeMatBase);
+      cylinderX(channel, coverJoint - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
       const outerGasket = new THREE.Group();
-      outerGasket.scale.set(1, 0.67, 0.67);
+      outerGasket.scale.set(1, gasketScale, gasketScale);
       channel.add(outerGasket);
       spiralGasket(outerGasket, coverJoint - T_FLANGE - GASKET_T / 2);
       const coverThickness = 0.10;
       cylinderX(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness / 2,
-        0.45, coverThickness, flangeMatBase);
+        channelFlangeRadius, coverThickness, flangeMatBase);
       studCircle(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness,
-        coverJoint, 16, 0.408);
+        coverJoint, 16, channelPitchRadius);
     }
     const dimensionControls = {
       shellLength: ['shell-length', 'shell-length-value'],
       reducerLength: ['reducer-length', 'reducer-length-value'],
       channelLength: ['channel-length', 'channel-length-value'],
-      bonnetLength: ['bonnet-length', 'bonnet-length-value']
+      bonnetLength: ['bonnet-length', 'bonnet-length-value'],
+      shellDiameter: ['shell-diameter', 'shell-diameter-value'],
+      channelDiameter: ['channel-diameter', 'channel-diameter-value'],
+      bonnetDiameter: ['bonnet-diameter', 'bonnet-diameter-value']
     };
     function updateDimensionControls() {
       for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
@@ -678,7 +700,13 @@
         document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
       }
     }
-    function loadDimensions(dimensions = {}) {
+    function loadDimensions(dimensions = {}, model = 'A') {
+      const defaults = model === 'B'
+        ? {shellLength: 4.5, reducerLength: 0.9, channelLength: 0.65, bonnetLength: 0.40,
+           shellDiameter: 1.44, channelDiameter: 0.72, bonnetDiameter: 1.44}
+        : {shellLength: 4.5, reducerLength: 0.9, channelLength: 0.65, bonnetLength: 0.40,
+           shellDiameter: 1.098, channelDiameter: 1.098, bonnetDiameter: 1.098};
+      currentDimensions = {...defaults};
       for (const [field, [inputId]] of Object.entries(dimensionControls)) {
         const input = document.getElementById(inputId);
         const proposed = Number(dimensions[field]);
@@ -691,28 +719,49 @@
     }
     buildModelB();
     updateDimensionControls();
-    function surfaceY(x, pos = 'superior') {
-      if (currentModel === 'A') return (pos === 'superior' ? 1 : -1) * NOZZLE_Y;
-      const p = modelBLayout();
-      if (x < p.reducerSmall) return pos === 'superior' ? p.channelY + R_CHANNEL_B - 0.01 : -RB + 0.01;
-      if (x < p.shellLeft) {
-        const radius = R_CHANNEL_B + (x - p.reducerSmall) /
-          currentDimensions.reducerLength * (RB - R_CHANNEL_B);
-        return pos === 'superior' ? -RB + 2 * radius - 0.01 : -RB + 0.01;
+    function applyModelADiameters() {
+      const shellScale = currentDimensions.shellDiameter / (2 * R);
+      const channelScale = currentDimensions.channelDiameter / (2 * R);
+      const bonnetScale = currentDimensions.bonnetDiameter / (2 * R);
+      modelAShellParts.forEach(part => part.scale.set(part.scale.x, shellScale, shellScale));
+      channelGroup.scale.set(channelGroup.scale.x, channelScale, channelScale);
+      rearBonnetGroup.scale.set(rearBonnetGroup.scale.x, bonnetScale, bonnetScale);
+    }
+    function componentRadius(bodyPart) {
+      if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
+      if (bodyPart === 'bonnet') return currentDimensions.bonnetDiameter / 2;
+      return currentDimensions.shellDiameter / 2;
+    }
+    function surfaceY(x, pos = 'superior', bodyPart = 'shell') {
+      if (currentModel === 'A') {
+        const radius = componentRadius(bodyPart);
+        return (pos === 'superior' ? 1 : -1) * Math.max(0.05, radius - 0.01);
       }
-      if (x > p.shellRight) {
-        const y = RB * Math.sqrt(Math.max(0.05,
+      const p = modelBLayout();
+      if (bodyPart === 'channel' || x < p.reducerSmall) {
+        return pos === 'superior'
+          ? p.channelY + p.channelRadius - 0.01
+          : p.channelY - p.channelRadius + 0.01;
+      }
+      if (x < p.shellLeft) {
+        const radius = p.channelRadius + (x - p.reducerSmall) /
+          currentDimensions.reducerLength * (p.shellRadius - p.channelRadius);
+        return pos === 'superior' ? -p.shellRadius + 2 * radius - 0.01 : -p.shellRadius + 0.01;
+      }
+      if (bodyPart === 'bonnet' || x > p.shellRight) {
+        const y = p.bonnetRadius * Math.sqrt(Math.max(0.05,
           1 - ((x - p.shellRight) / currentDimensions.bonnetLength) ** 2)) - 0.01;
         return pos === 'superior' ? y : -y;
       }
-      return pos === 'superior' ? RB - 0.01 : -RB + 0.01;
+      return pos === 'superior' ? p.shellRadius - 0.01 : -p.shellRadius + 0.01;
     }
     function applyModel(model, reposition = false) {
       currentModel = model === 'B' ? 'B' : 'A';
       document.getElementById('equipment-model').value = currentModel;
       modelAParts.forEach(part => part.visible = currentModel === 'A');
       modelB.visible = currentModel === 'B';
-      document.getElementById('model-b-dimensions').style.display = currentModel === 'B' ? '' : 'none';
+      document.getElementById('model-b-lengths').style.display = currentModel === 'B' ? '' : 'none';
+      applyModelADiameters();
       const p = modelBLayout();
       BODY_BOUNDS.shell = currentModel === 'B'
         ? {min: p.shellLeft + 0.15, max: p.shellRight - 0.15, center: 0}
@@ -730,9 +779,9 @@
         const bounds = BODY_BOUNDS[data.bodyPart];
         if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
         nozzle.position.x = data.valX;
-        nozzle.position.y = surfaceY(data.valX, data.pos);
+        nozzle.position.y = surfaceY(data.valX, data.pos, data.bodyPart);
       });
-      nameplate.position.z = (currentModel === 'B' ? RB : R) + 0.02;
+      nameplate.position.z = currentDimensions.shellDiameter / 2 + 0.02;
       if (reposition && selectedNozzle) {
         const activeNozzle = selectedNozzle;
         deselectNozzle();
@@ -754,7 +803,8 @@
       return plugGroup;
     }
 
-    function buildNozzle(internalName, tagText, diaIndex, rating, bodyPart, pos, posX, hasNS, tagNS, hasFS, tagFS) {
+    function buildNozzle(internalName, tagText, diaIndex, rating, bodyPart, pos, posX,
+      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS) {
       const group = new THREE.Group();
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
       
@@ -762,7 +812,8 @@
         isNozzle: true, idName: internalName, tagName: tagText,
         diaIndex: dIndex, rating: rating, bodyPart: bodyPart, pos: pos,      
         valX: posX, valY: NOZZLE_Y, 
-        hasNS: hasNS, tagNS: tagNS, hasFS: hasFS, tagFS: tagFS
+        hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
+        hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS
       };
 
       const nzMat = nozzleMatBase.clone();
@@ -841,10 +892,10 @@
       group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       if(pos === 'superior') {
-        group.position.set(posX, surfaceY(posX, 'superior'), 0);
+        group.position.set(posX, surfaceY(posX, 'superior', bodyPart), 0);
         group.rotation.z = 0;
       } else {
-        group.position.set(posX, surfaceY(posX, 'inferior'), 0);
+        group.position.set(posX, surfaceY(posX, 'inferior', bodyPart), 0);
         group.rotation.z = Math.PI;
       }
 
@@ -853,7 +904,7 @@
     }
 
     function loadExchangerData(data) {
-      loadDimensions(data.dimensions);
+      loadDimensions(data.dimensions, data.model);
       applyModel(data.model);
       currentNameplate = data.nameplate || "";
       document.getElementById("nameplate-input").value = currentNameplate;
@@ -870,7 +921,14 @@
         data.nozzles.forEach(n => {
           customNozzleCount++;
           const internalName = `Nozzle_${customNozzleCount}`;
-          const newNz = buildNozzle(internalName, n.tagName, n.diaIndex, n.rating, n.bodyPart, n.pos, n.valX, n.hasNS, n.tagNS, n.hasFS, n.tagFS);
+          // Compatibilidad: en diseños antiguos tagNS/tagFS guardaban la medida.
+          const legacyNS = n.sizeNS === undefined;
+          const legacyFS = n.sizeFS === undefined;
+          const newNz = buildNozzle(
+            internalName, n.tagName, n.diaIndex, n.rating, n.bodyPart, n.pos, n.valX,
+            n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
+            n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || "")
+          );
           nozzlesList.push(newNz);
         });
       }
@@ -930,11 +988,15 @@
       
       document.getElementById('edit-nz-pos').value = data.pos;
       document.getElementById('edit-ns-check').checked = data.hasNS;
-      document.getElementById('edit-ns-name').value = data.tagNS;
-      document.getElementById('edit-ns-name').disabled = !data.hasNS;
+      document.getElementById('edit-ns-size').value = data.sizeNS || "";
+      document.getElementById('edit-ns-tag').value = data.tagNS || "";
+      document.getElementById('edit-ns-size').disabled = !data.hasNS;
+      document.getElementById('edit-ns-tag').disabled = !data.hasNS;
       document.getElementById('edit-fs-check').checked = data.hasFS;
-      document.getElementById('edit-fs-name').value = data.tagFS;
-      document.getElementById('edit-fs-name').disabled = !data.hasFS;
+      document.getElementById('edit-fs-size').value = data.sizeFS || "";
+      document.getElementById('edit-fs-tag').value = data.tagFS || "";
+      document.getElementById('edit-fs-size').disabled = !data.hasFS;
+      document.getElementById('edit-fs-tag').disabled = !data.hasFS;
     }
 
     function deselectNozzle() {
@@ -953,9 +1015,11 @@
     const editX = document.getElementById('edit-nz-x');
     
     const editNsCheck = document.getElementById('edit-ns-check');
-    const editNsName = document.getElementById('edit-ns-name');
+    const editNsSize = document.getElementById('edit-ns-size');
+    const editNsTag = document.getElementById('edit-ns-tag');
     const editFsCheck = document.getElementById('edit-fs-check');
-    const editFsName = document.getElementById('edit-fs-name');
+    const editFsSize = document.getElementById('edit-fs-size');
+    const editFsTag = document.getElementById('edit-fs-tag');
 
     editName.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
@@ -1001,10 +1065,10 @@
       selectedNozzle.userData.valX = vx;
 
       if (pos === 'superior') {
-        selectedNozzle.position.set(vx, surfaceY(vx, 'superior'), 0);
+        selectedNozzle.position.set(vx, surfaceY(vx, 'superior', selectedNozzle.userData.bodyPart), 0);
         selectedNozzle.rotation.z = 0;
       } else {
-        selectedNozzle.position.set(vx, surfaceY(vx, 'inferior'), 0);
+        selectedNozzle.position.set(vx, surfaceY(vx, 'inferior', selectedNozzle.userData.bodyPart), 0);
         selectedNozzle.rotation.z = Math.PI;
       }
       syncStateToParent();
@@ -1018,10 +1082,16 @@
       const isChecked = e.target.checked;
       selectedNozzle.userData.hasNS = isChecked;
       selectedNozzle.userData.plugNS.visible = isChecked;
-      editNsName.disabled = !isChecked;
+      editNsSize.disabled = !isChecked;
+      editNsTag.disabled = !isChecked;
       syncStateToParent();
     });
-    editNsName.addEventListener('input', (e) => {
+    editNsSize.addEventListener('input', (e) => {
+      if(!selectedNozzle) return;
+      selectedNozzle.userData.sizeNS = e.target.value;
+      syncStateToParent();
+    });
+    editNsTag.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.tagNS = e.target.value;
       syncStateToParent();
@@ -1032,10 +1102,16 @@
       const isChecked = e.target.checked;
       selectedNozzle.userData.hasFS = isChecked;
       selectedNozzle.userData.plugFS.visible = isChecked;
-      editFsName.disabled = !isChecked;
+      editFsSize.disabled = !isChecked;
+      editFsTag.disabled = !isChecked;
       syncStateToParent();
     });
-    editFsName.addEventListener('input', (e) => {
+    editFsSize.addEventListener('input', (e) => {
+      if(!selectedNozzle) return;
+      selectedNozzle.userData.sizeFS = e.target.value;
+      syncStateToParent();
+    });
+    editFsTag.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.tagFS = e.target.value;
       syncStateToParent();
@@ -1058,7 +1134,8 @@
       const internalName = `Custom_Nozzle_${customNozzleCount}`;
       const startX = BODY_BOUNDS[bodyPart].center;
 
-      const newNz = buildNozzle(internalName, "", diaIndex, rating, bodyPart, "superior", startX, false, "", false, "");
+      const newNz = buildNozzle(internalName, "", diaIndex, rating, bodyPart, "superior", startX,
+        false, "", "", false, "", "");
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
@@ -1125,7 +1202,7 @@
         currentDimensions[field] = Number(event.target.value);
         document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
         buildModelB();
-        applyModel('B', true);
+        applyModel(currentModel, true);
         syncStateToParent();
       });
     }
