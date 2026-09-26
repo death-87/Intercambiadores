@@ -172,6 +172,8 @@ def validar_diseno(data):
     limits = {
         "shellLength": (3.0, 7.0), "reducerLength": (0.4, 1.8),
         "channelLength": (0.35, 1.5), "bonnetLength": (0.25, 0.9),
+        "shellDiameter": (0.7, 2.5), "channelDiameter": (0.4, 2.0),
+        "bonnetDiameter": (0.7, 2.5),
     }
     for field, value in dimensions.items():
         if field not in limits:
@@ -200,7 +202,7 @@ def validar_diseno(data):
         for field in ("hasNS", "hasFS"):
             if field in n and not isinstance(n[field], bool):
                 raise ValueError(f"{field} debe ser booleano")
-        for field in ("tagName", "rating", "tagNS", "tagFS"):
+        for field in ("tagName", "rating", "sizeNS", "tagNS", "sizeFS", "tagFS"):
             if field in n and not isinstance(n[field], str):
                 raise ValueError(f"{field} debe ser texto")
     return data
@@ -233,13 +235,21 @@ def cargar_disenos():
 def filas_boquillas(config):
     filas = []
     for n in config.get("nozzles", []):
+        legacy_ns = "sizeNS" not in n
+        legacy_fs = "sizeFS" not in n
+        medida_ns = (n.get("tagNS") if legacy_ns else n.get("sizeNS")) or "Sin medida"
+        medida_fs = (n.get("tagFS") if legacy_fs else n.get("sizeFS")) or "Sin medida"
+        tag_ns = "" if legacy_ns else (n.get("tagNS") or "")
+        tag_fs = "" if legacy_fs else (n.get("tagFS") or "")
+        detalle_ns = medida_ns + (f" · TAG {tag_ns}" if tag_ns else "")
+        detalle_fs = medida_fs + (f" · TAG {tag_fs}" if tag_fs else "")
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
             "DIÁMETRO": DIAMETROS[n["diaIndex"]],
             "RATING": n.get("rating") or "Sin información",
             "CUERPO": n["bodyPart"].upper(), "POSICIÓN": n["pos"],
-            "NS": n.get("tagNS") or "Sin medida" if n.get("hasNS", False) else "—",
-            "FS": n.get("tagFS") or "Sin medida" if n.get("hasFS", False) else "—",
+            "NS": detalle_ns if n.get("hasNS", False) else "—",
+            "FS": detalle_fs if n.get("hasFS", False) else "—",
         })
     return filas
 
@@ -375,13 +385,16 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         for n in config.get("nozzles", []):
             for lado in ("NS", "FS"):
                 if n.get("has" + lado, False):
+                    legacy = ("size" + lado) not in n
+                    medida = (n.get("tag" + lado) if legacy else n.get("size" + lado)) or "Sin medida"
+                    tag_plug = "" if legacy else (n.get("tag" + lado) or "")
                     conexiones.append([
-                        n.get("tagName") or "Sin TAG", lado, n.get("tag" + lado) or "Sin medida",
+                        n.get("tagName") or "Sin TAG", lado, medida, tag_plug or "—",
                         n.get("bodyPart", "").upper(), n.get("pos", ""),
                     ])
         for servicio, campo in (("VENT", "vent"), ("DRAIN", "drain")):
             if informado(config.get(campo, "")):
-                conexiones.append(["BONETE", servicio, config.get(campo), "BONNET", "—"])
+                conexiones.append(["BONETE", servicio, config.get(campo), "—", "BONNET", "—"])
     detectadas = len(conexiones)
     if cantidad is None:
         verificacion, estado_color = "SIN TOTAL DECLARADO", colors.HexColor("#A26918")
@@ -424,11 +437,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         elementos.append(p("No hay boquillas registradas en el diseño.", body))
     elementos += [Spacer(1, 6 * mm), Paragraph("REGISTRO DE ROSCAS", section_style)]
     if conexiones:
-        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "CUERPO", "POSICIÓN"]
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TAG PLUG", "CUERPO", "POSICIÓN"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
-            [p(x, cell_center if i in (1, 2) else cell) for i, x in enumerate(fila)] for fila in conexiones
+            [p(x, cell_center if i in (1, 2, 3) else cell) for i, x in enumerate(fila)] for fila in conexiones
         ]
-        tabla_roscas = Table(datos_roscas, repeatRows=1, colWidths=[42*mm, 25*mm, 38*mm, 38*mm, 37*mm])
+        tabla_roscas = Table(datos_roscas, repeatRows=1,
+                             colWidths=[35*mm, 18*mm, 31*mm, 30*mm, 34*mm, 32*mm])
         tabla_roscas.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), teal), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
