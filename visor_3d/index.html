@@ -63,6 +63,7 @@
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete elíptico</option><option value="B">Modelo B · Cuerpo con transición cónica</option></select></div>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
     
@@ -244,10 +245,12 @@
       window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, '*');
     }
     let currentNameplate = "";
+    let currentModel = 'A';
 
     function syncStateToParent(action = "change") {
       if (loading || !initialized || readOnly) return;
       const exportData = {
+        model: currentModel,
         nameplate: currentNameplate,
         vent: document.getElementById('vent-input').value || "",
         drain: document.getElementById('drain-input').value || "",
@@ -281,8 +284,9 @@
     
     const FLANGE_SHELL_R_X = 2.1975;
     const FLANGE_SHELL_L_X = -2.1975;
-    const BONNET_GRP_X = 2.2575;
-    const CHANNEL_GRP_X = -2.2575;
+    const GASKET_T = 0.012; // Separación visual para distinguir la junta comprimida.
+    const BONNET_GRP_X = 2.2575 + GASKET_T;
+    const CHANNEL_GRP_X = -2.2575 - GASKET_T;
     const NOZZLE_Y = R - 0.01; 
 
     const BODY_BOUNDS = {
@@ -335,7 +339,8 @@
     const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x8a9ba7, roughness: 0.34, metalness: 0.55 });
     const studMat = new THREE.MeshStandardMaterial({color: 0x343c46, roughness: 0.38, metalness: 0.7});
     const nutMat = new THREE.MeshStandardMaterial({color: 0xa6adb5, roughness: 0.26, metalness: 0.7});
-    const gasketMat = new THREE.MeshStandardMaterial({color: 0x222932, roughness: 0.9, metalness: 0.1});
+    const gasketMat = new THREE.MeshStandardMaterial({color: 0x158447, roughness: 0.48, metalness: 0.25});
+    const gasketSteelMat = new THREE.MeshStandardMaterial({color: 0xc0c8ce, roughness: 0.3, metalness: 0.75});
     const weldMat = new THREE.MeshStandardMaterial({color: 0x7c8790, roughness: 0.55, metalness: 0.5});
     const partitionMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.5, metalness: 0.6 });
     const plugMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.25, metalness: 0.85 }); 
@@ -358,6 +363,35 @@
       mesh.position.x = x;
       parent.add(mesh);
       return mesh;
+    }
+    function spiralGasket(parent, x) {
+      const gasket = new THREE.Group();
+      gasket.name = 'Junta espirometalica: aro verde y espiral inoxidable';
+      function annulus(inner, outer, thickness, material) {
+        const points = [[inner, -thickness / 2], [outer, -thickness / 2],
+          [outer, thickness / 2], [inner, thickness / 2], [inner, -thickness / 2]]
+          .map(([r, axial]) => new THREE.Vector2(r, axial));
+        const mesh = new THREE.Mesh(new THREE.LatheGeometry(points, 96), material);
+        mesh.rotation.z = -Math.PI / 2;
+        gasket.add(mesh);
+      }
+      annulus(0.518, 0.533, GASKET_T * 0.75, gasketSteelMat);
+      annulus(0.533, 0.562, GASKET_T, gasketSteelMat);
+      annulus(0.562, 0.583, GASKET_T * 0.65, gasketMat);
+      // Espiral visible en ambas caras del anillo de sellado.
+      for (const side of [-1, 1]) {
+        const points = [];
+        for (let i = 0; i <= 600; i++) {
+          const fraction = i / 600;
+          const angle = fraction * Math.PI * 2 * 8;
+          const r = 0.534 + fraction * 0.026;
+          points.push(new THREE.Vector3(side * (GASKET_T / 2 + 0.0001), r * Math.cos(angle), r * Math.sin(angle)));
+        }
+        gasket.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
+          new THREE.LineBasicMaterial({color: 0x576873})));
+      }
+      gasket.position.x = x;
+      parent.add(gasket);
     }
     function studCircle(parent, leftFace, rightFace, count = 20, pitchRadius = 0.603) {
       const shaftRadius = 0.014, nutHeight = 0.026;
@@ -446,27 +480,32 @@
     }
 
     const rearBonnetGroup = new THREE.Group();
-    const bonnetSkirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.8, 96), shellMat);
-    bonnetSkirt.rotation.z = Math.PI / 2;
-    bonnetSkirt.position.x = 0.4;
-    rearBonnetGroup.add(bonnetSkirt);
-
-    const bonnetHeadGeo = new THREE.SphereGeometry(R, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
-    const bonnetHead = new THREE.Mesh(bonnetHeadGeo, shellMat);
-    bonnetHead.rotation.z = -Math.PI / 2;
-    bonnetHead.scale.y = 0.65;
-    bonnetHead.position.x = 0.926;
-    rearBonnetGroup.add(bonnetHead);
-    // Bonete con tapa abombada desmontable y dos bridas enfrentadas.
-    cylinderX(rearBonnetGroup, 0.74, R_FLANGE, 0.12, flangeMatBase);
-    cylinderX(rearBonnetGroup, 0.803, R_FLANGE - 0.008, 0.006, gasketMat);
-    cylinderX(rearBonnetGroup, 0.866, R_FLANGE, 0.12, flangeMatBase);
-    studCircle(rearBonnetGroup, 0.68, 0.926);
-    ringX(rearBonnetGroup, 0.67, R, 0.009, weldMat);
-    ringX(rearBonnetGroup, 0.933, R, 0.007, weldMat);
-    cylinderX(rearBonnetGroup, 0.06, R_FLANGE, 0.12, flangeMatBase);
-    ringX(rearBonnetGroup, 0, R_FLANGE - 0.005, 0.004, gasketMat);
-    studCircle(rearBonnetGroup, -0.12, 0.12);
+    // Bonete completo: brida de base solidaria al cuerpo y fondo elíptico.
+    // La cara x=0 se aperna a la brida del shell. No hay tapa desmontable.
+    // Perfil elíptico ilustrativo 2:1; ajustar con dimensiones reales si se dispone de plano.
+    const bonnetHeadDepth = R / 2;
+    const bonnetProfile = [
+      new THREE.Vector2(0, 0),
+      new THREE.Vector2(R, 0),
+      new THREE.Vector2(R, 0.8)
+    ];
+    for (let i = 1; i <= 32; i++) {
+      const angle = i * Math.PI / 64;
+      bonnetProfile.push(new THREE.Vector2(
+        i === 32 ? 0 : R * Math.cos(angle),
+        0.8 + bonnetHeadDepth * Math.sin(angle)
+      ));
+    }
+    const bonnetBody = new THREE.Mesh(new THREE.LatheGeometry(bonnetProfile, 96), shellMat);
+    bonnetBody.rotation.z = -Math.PI / 2;
+    rearBonnetGroup.add(bonnetBody);
+    const bonnetFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
+    bonnetFlange.rotation.z = Math.PI / 2;
+    bonnetFlange.position.x = T_FLANGE / 2;
+    rearBonnetGroup.add(bonnetFlange);
+    for (const x of [0.007, T_FLANGE - 0.007]) ringX(rearBonnetGroup, x, R_FLANGE, 0.003, nutMat);
+    spiralGasket(rearBonnetGroup, -GASKET_T / 2);
+    studCircle(rearBonnetGroup, -T_FLANGE - GASKET_T, T_FLANGE);
 
     function createBonnetPlug(yPos, rotZ) {
       const plugGroup = new THREE.Group();
@@ -506,20 +545,109 @@
     channelGroup.add(channelOuterFlange);
     const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
     coverPlate.rotation.z = Math.PI / 2;
-    coverPlate.position.x = -1.496;
+    coverPlate.position.x = -1.49 - GASKET_T;
     channelGroup.add(coverPlate);
-    cylinderX(channelGroup, -1.443, R_FLANGE - 0.008, 0.006, gasketMat);
-    studCircle(channelGroup, -1.546, -1.32);
-    studCircle(channelGroup, -0.12, 0.12);
-    ringX(channelGroup, 0, R_FLANGE - 0.005, 0.004, gasketMat);
+    spiralGasket(channelGroup, -1.44 - GASKET_T / 2);
+    studCircle(channelGroup, -1.54 - GASKET_T, -1.32);
+    studCircle(channelGroup, -T_FLANGE, T_FLANGE + GASKET_T);
+    spiralGasket(channelGroup, GASKET_T / 2);
     ringX(channelGroup, -1.31, R, 0.009, weldMat);
     ringX(channelGroup, -0.13, R, 0.009, weldMat);
-    ringX(channelGroup, -1.548, R_FLANGE - 0.02, 0.003, nutMat);
+    ringX(channelGroup, -1.542 - GASKET_T, R_FLANGE - 0.02, 0.003, nutMat);
     const partitionPlate = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 1.09), partitionMat);
     partitionPlate.position.x = -0.72;
     channelGroup.add(partitionPlate);
     channelGroup.position.x = CHANNEL_GRP_X; 
     heatExchanger.add(channelGroup);
+
+    const modelAParts = [...heatExchanger.children];
+    const modelB = new THREE.Group();
+    modelB.name = 'Modelo B: transición cónica y cabezal reducido';
+    heatExchanger.add(modelB);
+    modelB.visible = false;
+    const RB = 0.72;
+    cylinderX(modelB, 0, RB, 4.5, shellMat);
+    // Reductor concéntrico: extremo menor a la izquierda.
+    const coneProfile = [[0, -3.15], [0.36, -3.15], [RB, -2.25], [0, -2.25]]
+      .map(([r, x]) => new THREE.Vector2(r, x));
+    const cone = new THREE.Mesh(new THREE.LatheGeometry(coneProfile, 96), shellMat);
+    cone.rotation.z = -Math.PI / 2;
+    modelB.add(cone);
+    ringX(modelB, -2.25, RB, 0.007, weldMat);
+    cylinderX(modelB, -3.21, 0.45, 0.12, flangeMatBase);
+    cylinderX(modelB, -3.342, 0.45, 0.12, flangeMatBase);
+    const smallJoint = new THREE.Group();
+    smallJoint.scale.set(1, 0.67, 0.67);
+    modelB.add(smallJoint);
+    spiralGasket(smallJoint, -3.276);
+    studCircle(modelB, -3.402, -3.15, 16, 0.408);
+    cylinderX(modelB, -3.50, 0.36, 0.46, shellMat);
+    const smallHead = new THREE.Mesh(new THREE.SphereGeometry(0.36, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
+    smallHead.rotation.z = Math.PI / 2;
+    smallHead.scale.y = 0.6;
+    smallHead.position.x = -3.73;
+    modelB.add(smallHead);
+    cylinderX(modelB, 2.25, 0.82, 0.12, flangeMatBase);
+    cylinderX(modelB, 2.382, 0.82, 0.12, flangeMatBase);
+    const largeJoint = new THREE.Group();
+    largeJoint.scale.set(1, 1.29, 1.29);
+    modelB.add(largeJoint);
+    spiralGasket(largeJoint, 2.316);
+    studCircle(modelB, 2.19, 2.442, 24, 0.773);
+    const bigHead = new THREE.Mesh(new THREE.SphereGeometry(RB, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
+    bigHead.rotation.z = -Math.PI / 2;
+    bigHead.scale.y = 0.5;
+    bigHead.position.x = 2.442;
+    modelB.add(bigHead);
+    for (const x of [-1.2, 1.1]) {
+      const saddle = new THREE.Group();
+      const cradle = new THREE.Mesh(new THREE.TorusGeometry(RB + 0.018, 0.045, 8, 48, Math.PI), flangeMatBase);
+      cradle.rotation.set(0, Math.PI / 2, Math.PI);
+      // Soportes laterales y placa de anclaje bajo el cuerpo.
+      for (const z of [-0.45, 0.45]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.43, 0.09), flangeMatBase);
+        leg.position.set(0, -0.76, z);
+        saddle.add(leg);
+      }
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.055, 1.12), flangeMatBase);
+      base.position.y = -0.99;
+      saddle.add(base);
+      saddle.add(cradle);
+      saddle.position.x = x;
+      modelB.add(saddle);
+    }
+    function surfaceY(x) {
+      if (currentModel === 'A') return NOZZLE_Y;
+      if (x < -3.15) return 0.35;
+      if (x < -2.25) return 0.36 + (x + 3.15) / 0.9 * 0.36 - 0.01;
+      if (x > 2.442) return RB * Math.sqrt(Math.max(0.05, 1 - ((x - 2.442) / 0.36) ** 2)) - 0.01;
+      return RB - 0.01;
+    }
+    function applyModel(model, reposition = false) {
+      currentModel = model === 'B' ? 'B' : 'A';
+      document.getElementById('equipment-model').value = currentModel;
+      modelAParts.forEach(part => part.visible = currentModel === 'A');
+      modelB.visible = currentModel === 'B';
+      BODY_BOUNDS.channel = currentModel === 'B'
+        ? {min: -3.65, max: -3.42, center: -3.5}
+        : {min: -3.3, max: -2.4, center: -2.9775};
+      BODY_BOUNDS.bonnet = currentModel === 'B'
+        ? {min: 2.46, max: 2.7, center: 2.57}
+        : {min: 2.35, max: 2.95, center: 2.6575};
+      nozzlesList.forEach(nozzle => {
+        const data = nozzle.userData;
+        const bounds = BODY_BOUNDS[data.bodyPart];
+        if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
+        nozzle.position.x = data.valX;
+        nozzle.position.y = surfaceY(data.valX) * (data.pos === 'superior' ? 1 : -1);
+      });
+      nameplate.position.z = (currentModel === 'B' ? RB : R) + 0.02;
+      if (reposition && selectedNozzle) {
+        const activeNozzle = selectedNozzle;
+        deselectNozzle();
+        selectNozzle(activeNozzle);
+      }
+    }
 
     function createNozzlePlug(colorMat) {
       const plugGroup = new THREE.Group();
@@ -622,10 +750,10 @@
       group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       if(pos === 'superior') {
-        group.position.set(posX, NOZZLE_Y, 0);
+        group.position.set(posX, surfaceY(posX), 0);
         group.rotation.z = 0;
       } else {
-        group.position.set(posX, -NOZZLE_Y, 0);
+        group.position.set(posX, -surfaceY(posX), 0);
         group.rotation.z = Math.PI;
       }
 
@@ -634,6 +762,7 @@
     }
 
     function loadExchangerData(data) {
+      applyModel(data.model);
       currentNameplate = data.nameplate || "";
       document.getElementById("nameplate-input").value = currentNameplate;
       updateNameplateText(currentNameplate);
@@ -780,10 +909,10 @@
       selectedNozzle.userData.valX = vx;
 
       if (pos === 'superior') {
-        selectedNozzle.position.set(vx, NOZZLE_Y, 0);
+        selectedNozzle.position.set(vx, surfaceY(vx), 0);
         selectedNozzle.rotation.z = 0;
       } else {
-        selectedNozzle.position.set(vx, -NOZZLE_Y, 0);
+        selectedNozzle.position.set(vx, -surfaceY(vx), 0);
         selectedNozzle.rotation.z = Math.PI;
       }
       syncStateToParent();
@@ -895,6 +1024,10 @@
       renderer.render(scene, camera);
     }
     animate();
+    document.getElementById('equipment-model').addEventListener('change', event => {
+      applyModel(event.target.value, true);
+      syncStateToParent();
+    });
     document.getElementById('nameplate-input').addEventListener('input', event => {
       currentNameplate = event.target.value;
       updateNameplateText(currentNameplate);
