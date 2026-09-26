@@ -63,7 +63,14 @@
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete elíptico</option><option value="B">Modelo B · Cuerpo con transición cónica</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete elíptico</option><option value="B">Modelo B · Transición excéntrica</option></select></div>
+<div id="model-b-dimensions" style="display:none;background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
+  <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS MODELO B</strong>
+  <div class="input-group"><label>Shell: <output id="shell-length-value">4.50</output> m</label><input type="range" id="shell-length" min="3" max="7" step="0.10" value="4.50"></div>
+  <div class="input-group"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.40" max="1.80" step="0.05" value="0.90"></div>
+  <div class="input-group"><label>Channel: <output id="channel-length-value">0.65</output> m</label><input type="range" id="channel-length" min="0.35" max="1.50" step="0.05" value="0.65"></div>
+  <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.40</output> m</label><input type="range" id="bonnet-length" min="0.25" max="0.90" step="0.05" value="0.40"></div>
+</div>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
     
@@ -251,6 +258,7 @@
       if (loading || !initialized || readOnly) return;
       const exportData = {
         model: currentModel,
+        dimensions: {...currentDimensions},
         nameplate: currentNameplate,
         vent: document.getElementById('vent-input').value || "",
         drain: document.getElementById('drain-input').value || "",
@@ -566,80 +574,163 @@
     heatExchanger.add(modelB);
     modelB.visible = false;
     const RB = 0.72;
-    cylinderX(modelB, 0, RB, 4.5, shellMat);
-    // Reductor concéntrico: extremo menor a la izquierda.
-    const coneProfile = [[0, -3.15], [0.36, -3.15], [RB, -2.25], [0, -2.25]]
-      .map(([r, x]) => new THREE.Vector2(r, x));
-    const cone = new THREE.Mesh(new THREE.LatheGeometry(coneProfile, 96), shellMat);
-    cone.rotation.z = -Math.PI / 2;
-    modelB.add(cone);
-    ringX(modelB, -2.25, RB, 0.007, weldMat);
-    cylinderX(modelB, -3.21, 0.45, 0.12, flangeMatBase);
-    cylinderX(modelB, -3.342, 0.45, 0.12, flangeMatBase);
-    const smallJoint = new THREE.Group();
-    smallJoint.scale.set(1, 0.67, 0.67);
-    modelB.add(smallJoint);
-    spiralGasket(smallJoint, -3.276);
-    studCircle(modelB, -3.402, -3.15, 16, 0.408);
-    cylinderX(modelB, -3.50, 0.36, 0.46, shellMat);
-    const smallHead = new THREE.Mesh(new THREE.SphereGeometry(0.36, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
-    smallHead.rotation.z = Math.PI / 2;
-    smallHead.scale.y = 0.6;
-    smallHead.position.x = -3.73;
-    modelB.add(smallHead);
-    cylinderX(modelB, 2.25, 0.82, 0.12, flangeMatBase);
-    cylinderX(modelB, 2.382, 0.82, 0.12, flangeMatBase);
-    const largeJoint = new THREE.Group();
-    largeJoint.scale.set(1, 1.29, 1.29);
-    modelB.add(largeJoint);
-    spiralGasket(largeJoint, 2.316);
-    studCircle(modelB, 2.19, 2.442, 24, 0.773);
-    const bigHead = new THREE.Mesh(new THREE.SphereGeometry(RB, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
-    bigHead.rotation.z = -Math.PI / 2;
-    bigHead.scale.y = 0.5;
-    bigHead.position.x = 2.442;
-    modelB.add(bigHead);
-    for (const x of [-1.2, 1.1]) {
-      const saddle = new THREE.Group();
-      const cradle = new THREE.Mesh(new THREE.TorusGeometry(RB + 0.018, 0.045, 8, 48, Math.PI), flangeMatBase);
-      cradle.rotation.set(0, Math.PI / 2, Math.PI);
-      // Soportes laterales y placa de anclaje bajo el cuerpo.
-      for (const z of [-0.45, 0.45]) {
-        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.43, 0.09), flangeMatBase);
-        leg.position.set(0, -0.76, z);
-        saddle.add(leg);
-      }
-      const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.055, 1.12), flangeMatBase);
-      base.position.y = -0.99;
-      saddle.add(base);
-      saddle.add(cradle);
-      saddle.position.x = x;
-      modelB.add(saddle);
+    const R_CHANNEL_B = 0.36;
+    let currentDimensions = {
+      shellLength: 4.5,
+      reducerLength: 0.9,
+      channelLength: 0.65,
+      bonnetLength: 0.40
+    };
+    function modelBLayout() {
+      const shellLeft = -currentDimensions.shellLength / 2;
+      const shellRight = currentDimensions.shellLength / 2;
+      const reducerSmall = shellLeft - currentDimensions.reducerLength;
+      const channelBodyRight = reducerSmall - (2 * T_FLANGE + GASKET_T);
+      const channelBodyLeft = channelBodyRight - currentDimensions.channelLength;
+      return {shellLeft, shellRight, reducerSmall, channelBodyRight, channelBodyLeft,
+        bonnetTip: shellRight + currentDimensions.bonnetLength,
+        channelY: -RB + R_CHANNEL_B};
     }
-    function surfaceY(x) {
-      if (currentModel === 'A') return NOZZLE_Y;
-      if (x < -3.15) return 0.35;
-      if (x < -2.25) return 0.36 + (x + 3.15) / 0.9 * 0.36 - 0.01;
-      if (x > 2.442) return RB * Math.sqrt(Math.max(0.05, 1 - ((x - 2.442) / 0.36) ** 2)) - 0.01;
-      return RB - 0.01;
+    // Reductor excéntrico: la generatriz inferior queda recta y la superior
+    // forma la diagonal hacia el cabezal de menor diámetro.
+    function eccentricReducer(xSmall, xLarge, rSmall, rLarge, segments = 96) {
+      const positions = [], indices = [];
+      for (const [x, radius] of [[xSmall, rSmall], [xLarge, rLarge]]) {
+        const centerY = -rLarge + radius; // Mantiene y inferior = -rLarge.
+        for (let i = 0; i <= segments; i++) {
+          const angle = i / segments * Math.PI * 2;
+          positions.push(x, centerY + radius * Math.cos(angle), radius * Math.sin(angle));
+        }
+      }
+      const stride = segments + 1;
+      for (let i = 0; i < segments; i++) {
+        const a = i, b = i + 1, c = stride + i, d = stride + i + 1;
+        indices.push(a, c, b, b, c, d);
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      return new THREE.Mesh(geometry, shellMat);
+    }
+    function clearModelB() {
+      modelB.traverse(object => { if (object.geometry) object.geometry.dispose(); });
+      modelB.clear();
+    }
+    function buildModelB() {
+      clearModelB();
+      const p = modelBLayout();
+      cylinderX(modelB, 0, RB, currentDimensions.shellLength, shellMat);
+      ringX(modelB, p.shellLeft, RB, 0.007, weldMat);
+      ringX(modelB, p.shellRight, RB, 0.007, weldMat);
+
+      // Reductor excéntrico: fondo recto y parte superior diagonal.
+      modelB.add(eccentricReducer(p.reducerSmall, p.shellLeft, R_CHANNEL_B, RB));
+
+      // Bonete mayor soldado: fondo elíptico integrado y sin brida.
+      const bonnet = new THREE.Mesh(
+        new THREE.SphereGeometry(RB, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
+      bonnet.rotation.z = -Math.PI / 2;
+      bonnet.scale.y = currentDimensions.bonnetLength / RB;
+      bonnet.position.x = p.shellRight;
+      modelB.add(bonnet);
+
+      // Channel menor, unido al reductor y cerrado por una tapa plana apernada.
+      const channel = new THREE.Group();
+      channel.name = 'Channel con tapa plana';
+      channel.position.y = p.channelY;
+      modelB.add(channel);
+      cylinderX(channel, (p.channelBodyLeft + p.channelBodyRight) / 2,
+        R_CHANNEL_B, currentDimensions.channelLength, shellMat);
+
+      // Unión reductor-channel.
+      cylinderX(channel, p.reducerSmall - T_FLANGE / 2, 0.45, T_FLANGE, flangeMatBase);
+      cylinderX(channel, p.reducerSmall - 1.5 * T_FLANGE - GASKET_T, 0.45, T_FLANGE, flangeMatBase);
+      const innerGasket = new THREE.Group();
+      innerGasket.scale.set(1, 0.67, 0.67);
+      channel.add(innerGasket);
+      spiralGasket(innerGasket, p.reducerSmall - T_FLANGE - GASKET_T / 2);
+      studCircle(channel, p.reducerSmall - 2 * T_FLANGE - GASKET_T,
+        p.reducerSmall, 16, 0.408);
+
+      // Tapa plana: brida exterior + junta + placa circular.
+      const coverJoint = p.channelBodyLeft;
+      cylinderX(channel, coverJoint - T_FLANGE / 2, 0.45, T_FLANGE, flangeMatBase);
+      const outerGasket = new THREE.Group();
+      outerGasket.scale.set(1, 0.67, 0.67);
+      channel.add(outerGasket);
+      spiralGasket(outerGasket, coverJoint - T_FLANGE - GASKET_T / 2);
+      const coverThickness = 0.10;
+      cylinderX(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness / 2,
+        0.45, coverThickness, flangeMatBase);
+      studCircle(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness,
+        coverJoint, 16, 0.408);
+    }
+    const dimensionControls = {
+      shellLength: ['shell-length', 'shell-length-value'],
+      reducerLength: ['reducer-length', 'reducer-length-value'],
+      channelLength: ['channel-length', 'channel-length-value'],
+      bonnetLength: ['bonnet-length', 'bonnet-length-value']
+    };
+    function updateDimensionControls() {
+      for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
+        document.getElementById(inputId).value = currentDimensions[field];
+        document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
+      }
+    }
+    function loadDimensions(dimensions = {}) {
+      for (const [field, [inputId]] of Object.entries(dimensionControls)) {
+        const input = document.getElementById(inputId);
+        const proposed = Number(dimensions[field]);
+        if (Number.isFinite(proposed)) {
+          currentDimensions[field] = Math.min(Number(input.max), Math.max(Number(input.min), proposed));
+        }
+      }
+      updateDimensionControls();
+      buildModelB();
+    }
+    buildModelB();
+    updateDimensionControls();
+    function surfaceY(x, pos = 'superior') {
+      if (currentModel === 'A') return (pos === 'superior' ? 1 : -1) * NOZZLE_Y;
+      const p = modelBLayout();
+      if (x < p.reducerSmall) return pos === 'superior' ? p.channelY + R_CHANNEL_B - 0.01 : -RB + 0.01;
+      if (x < p.shellLeft) {
+        const radius = R_CHANNEL_B + (x - p.reducerSmall) /
+          currentDimensions.reducerLength * (RB - R_CHANNEL_B);
+        return pos === 'superior' ? -RB + 2 * radius - 0.01 : -RB + 0.01;
+      }
+      if (x > p.shellRight) {
+        const y = RB * Math.sqrt(Math.max(0.05,
+          1 - ((x - p.shellRight) / currentDimensions.bonnetLength) ** 2)) - 0.01;
+        return pos === 'superior' ? y : -y;
+      }
+      return pos === 'superior' ? RB - 0.01 : -RB + 0.01;
     }
     function applyModel(model, reposition = false) {
       currentModel = model === 'B' ? 'B' : 'A';
       document.getElementById('equipment-model').value = currentModel;
       modelAParts.forEach(part => part.visible = currentModel === 'A');
       modelB.visible = currentModel === 'B';
+      document.getElementById('model-b-dimensions').style.display = currentModel === 'B' ? '' : 'none';
+      const p = modelBLayout();
+      BODY_BOUNDS.shell = currentModel === 'B'
+        ? {min: p.shellLeft + 0.15, max: p.shellRight - 0.15, center: 0}
+        : {min: -2.0, max: 2.0, center: 0};
       BODY_BOUNDS.channel = currentModel === 'B'
-        ? {min: -3.65, max: -3.42, center: -3.5}
+        ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
+          center: (p.channelBodyLeft + p.channelBodyRight) / 2}
         : {min: -3.3, max: -2.4, center: -2.9775};
       BODY_BOUNDS.bonnet = currentModel === 'B'
-        ? {min: 2.46, max: 2.7, center: 2.57}
+        ? {min: p.shellRight + 0.05, max: p.bonnetTip - 0.05,
+          center: p.shellRight + currentDimensions.bonnetLength * 0.45}
         : {min: 2.35, max: 2.95, center: 2.6575};
       nozzlesList.forEach(nozzle => {
         const data = nozzle.userData;
         const bounds = BODY_BOUNDS[data.bodyPart];
         if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
         nozzle.position.x = data.valX;
-        nozzle.position.y = surfaceY(data.valX) * (data.pos === 'superior' ? 1 : -1);
+        nozzle.position.y = surfaceY(data.valX, data.pos);
       });
       nameplate.position.z = (currentModel === 'B' ? RB : R) + 0.02;
       if (reposition && selectedNozzle) {
@@ -750,10 +841,10 @@
       group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       if(pos === 'superior') {
-        group.position.set(posX, surfaceY(posX), 0);
+        group.position.set(posX, surfaceY(posX, 'superior'), 0);
         group.rotation.z = 0;
       } else {
-        group.position.set(posX, -surfaceY(posX), 0);
+        group.position.set(posX, surfaceY(posX, 'inferior'), 0);
         group.rotation.z = Math.PI;
       }
 
@@ -762,6 +853,7 @@
     }
 
     function loadExchangerData(data) {
+      loadDimensions(data.dimensions);
       applyModel(data.model);
       currentNameplate = data.nameplate || "";
       document.getElementById("nameplate-input").value = currentNameplate;
@@ -909,10 +1001,10 @@
       selectedNozzle.userData.valX = vx;
 
       if (pos === 'superior') {
-        selectedNozzle.position.set(vx, surfaceY(vx), 0);
+        selectedNozzle.position.set(vx, surfaceY(vx, 'superior'), 0);
         selectedNozzle.rotation.z = 0;
       } else {
-        selectedNozzle.position.set(vx, -surfaceY(vx), 0);
+        selectedNozzle.position.set(vx, surfaceY(vx, 'inferior'), 0);
         selectedNozzle.rotation.z = Math.PI;
       }
       syncStateToParent();
@@ -1028,6 +1120,15 @@
       applyModel(event.target.value, true);
       syncStateToParent();
     });
+    for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
+      document.getElementById(inputId).addEventListener('input', event => {
+        currentDimensions[field] = Number(event.target.value);
+        document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
+        buildModelB();
+        applyModel('B', true);
+        syncStateToParent();
+      });
+    }
     document.getElementById('nameplate-input').addEventListener('input', event => {
       currentNameplate = event.target.value;
       updateNameplateText(currentNameplate);
@@ -1050,12 +1151,13 @@
     window.exchangerBridge.attach(args => {
       readOnly = Boolean(args.readonly);
       window.exchangerBridge.setReadOnly(readOnly);
+      document.getElementById('save-equipment').style.display = args.demo ? 'none' : '';
       if (!initialized) {
         loading = true;
         loadExchangerData(args.initial_data);
         loading = false;
         initialized = true;
-        document.getElementById('save-equipment').disabled = readOnly;
+        document.getElementById('save-equipment').disabled = readOnly || Boolean(args.demo);
         clearTimeout(window.exchangerBridge.timer);
         document.getElementById('save-status').textContent = 'Visor listo.';
       }
