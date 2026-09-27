@@ -81,24 +81,20 @@
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
     
-    <div style="background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px; border: 1px solid #334155; margin-bottom: 8px;">
-      <strong style="display:block; font-size:10px; color:#38bdf8; margin-bottom:4px;">Plugs Bonete</strong>
-      <div class="input-group">
-        <label>Venteo:</label>
-        <input type="text" id="vent-input" value="" placeholder='3/4"'>
-      </div>
-      <div class="input-group" style="margin-bottom:0;">
-        <label>Drenaje:</label>
-        <input type="text" id="drain-input" value="" placeholder='3/4"'>
-      </div>
-    </div>
-
     <!-- EDITOR BOQUILLA -->
     <div id="editor-panel">
       <div id="editor-title">✏️ Editando Boquilla</div>
       <div class="input-group">
         <label>Tag Boquilla:</label>
         <input type="text" id="edit-nz-name" value="" placeholder="Ej: N1">
+      </div>
+      <div class="input-group">
+        <label>Servicio:</label>
+        <select id="edit-nz-service">
+          <option value="process">Proceso</option>
+          <option value="vent">Venteo</option>
+          <option value="drain">Drenaje</option>
+        </select>
       </div>
       <div class="input-group">
         <label>Tipo de conexión:</label>
@@ -114,11 +110,13 @@
           <select id="edit-nz-dia"></select>
         </div>
         <div class="input-group" id="edit-rating-group" style="flex:1;">
-          <label>Rating:</label>
-          <select id="edit-nz-rating">
-            <option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option>
-          </select>
+          <label>Clase:</label>
+          <select id="edit-nz-rating"></select>
         </div>
+      </div>
+      <div id="edit-flange-details" style="display:flex;gap:4px">
+        <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
+        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
       </div>
 
       <div class="input-group">
@@ -167,6 +165,14 @@
 
     <div class="panel-title" style="margin-top: 8px;">➕ Nueva Conexión</div>
     <div class="input-group">
+      <label>Servicio:</label>
+      <select id="new-nz-service">
+        <option value="process">Proceso</option>
+        <option value="vent">Venteo</option>
+        <option value="drain">Drenaje</option>
+      </select>
+    </div>
+    <div class="input-group">
       <label>Tipo:</label>
       <select id="new-nz-type">
         <option value="flanged">Boquilla bridada</option>
@@ -179,11 +185,13 @@
         <select id="new-nz-dia"></select>
       </div>
       <div class="input-group" id="new-rating-group" style="flex:1;">
-        <label>Rating:</label>
-        <select id="new-nz-rating">
-          <option value="150#">150#</option><option value="300#">300#</option>
-        </select>
+        <label>Clase:</label>
+        <select id="new-nz-rating"></select>
       </div>
+    </div>
+    <div id="new-flange-details" style="display:flex;gap:4px">
+      <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
+      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
     </div>
     
     <div class="input-group">
@@ -192,6 +200,13 @@
         <option value="transition" disabled>Transición</option>
         <option value="channel">Channel</option>
         <option value="bonnet">Bonnet</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label>Posición inicial:</label>
+      <select id="new-nz-pos">
+        <option value="superior">Arriba</option><option value="inferior">Abajo</option>
+        <option value="front">Frente</option><option value="rear">Posterior</option>
       </select>
     </div>
 
@@ -303,13 +318,16 @@
         model: currentModel,
         dimensions: {...currentDimensions, modelALengthsEnabled: true},
         nameplate: currentNameplate,
-        vent: document.getElementById('vent-input').value || "",
-        drain: document.getElementById('drain-input').value || "",
+        vent: "",
+        drain: "",
         nozzles: nozzlesList.map(nz => ({
           tagName: nz.userData.tagName || "",
+          service: nz.userData.service || "process",
           connectionType: nz.userData.connectionType || "flanged",
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
-          rating: nz.userData.rating || "150#",
+          rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
+          flangeType: "WN",
+          face: nz.userData.face || "RF",
           bodyPart: nz.userData.bodyPart || "shell",
           pos: nz.userData.pos || "superior",
           valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
@@ -573,26 +591,6 @@
     spiralGasket(rearBonnetGroup, -GASKET_T / 2);
     studCircle(rearBonnetGroup, -T_FLANGE - GASKET_T, T_FLANGE);
 
-    function createBonnetPlug(yPos, rotZ) {
-      const plugGroup = new THREE.Group();
-      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 24), flangeMatBase);
-      plugGroup.add(coupling);
-      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.04, 24), plugMat);
-      threadedBody.position.y = 0.07; 
-      plugGroup.add(threadedBody);
-      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 24), plugMat);
-      elongatedHead.position.y = 0.15; 
-      plugGroup.add(elongatedHead);
-
-      plugGroup.position.set(0.4, yPos, 0); 
-      plugGroup.rotation.z = rotZ;
-      return plugGroup;
-    }
-
-    const ventPlug = createBonnetPlug(NOZZLE_Y, 0);             
-    const drainPlug = createBonnetPlug(-NOZZLE_Y, Math.PI);       
-    rearBonnetGroup.add(ventPlug);
-    rearBonnetGroup.add(drainPlug);
     rearBonnetGroup.position.x = BONNET_GRP_X;
     heatExchanger.add(rearBonnetGroup);
 
@@ -642,9 +640,6 @@
     weldedBonnetBody.rotation.z = -Math.PI / 2;
     weldedBonnetGroup.add(weldedBonnetBody);
     ringX(weldedBonnetGroup, 0.012, R, 0.014, weldMat);
-    const weldedVentPlug = createBonnetPlug(NOZZLE_Y, 0);
-    const weldedDrainPlug = createBonnetPlug(-NOZZLE_Y, Math.PI);
-    weldedBonnetGroup.add(weldedVentPlug, weldedDrainPlug);
     heatExchanger.add(weldedBonnetGroup);
     weldedBonnetGroup.visible = false;
 
@@ -852,8 +847,6 @@
       weldedBonnetGroup.position.x = currentDimensions.shellLength / 2;
       weldedBonnetBody.scale.y = bonnetLengthScale;
       weldedBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
-      weldedVentPlug.position.x = currentDimensions.bonnetLength * 0.45;
-      weldedDrainPlug.position.x = currentDimensions.bonnetLength * 0.45;
     }
     function componentRadius(bodyPart) {
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
@@ -965,14 +958,18 @@
     }
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
-      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS) {
+      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF') {
       const group = new THREE.Group();
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
       const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
+      const normalizedRating = type === 'threaded'
+        ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
+        : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
       
       group.userData = {
         isNozzle: true, idName: internalName, tagName: tagText,
-        diaIndex: dIndex, connectionType: type, rating: rating, bodyPart: bodyPart, pos: pos,
+        diaIndex: dIndex, connectionType: type, rating: normalizedRating, service: service,
+        flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart, pos: pos,
         valX: posX, valY: NOZZLE_Y, 
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS
@@ -1037,7 +1034,10 @@
         const faceProfile = [[pInner, totalH], [0.145, totalH],
           [0.145, totalH + 0.008], [pInner, totalH + 0.008], [pInner, totalH]]
           .map(([x, y]) => new THREE.Vector2(x, y));
-        group.add(new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat));
+        const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat);
+        faceMesh.visible = group.userData.face === 'RF';
+        group.add(faceMesh);
+        group.userData.faceMesh = faceMesh;
         const hole = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
         hole.rotation.x = -Math.PI / 2;
         hole.position.y = 0.003;
@@ -1084,15 +1084,28 @@
       document.getElementById("nameplate-input").value = currentNameplate;
       updateNameplateText(currentNameplate);
       
-      document.getElementById('vent-input').value = data.vent || "";
-      document.getElementById('drain-input').value = data.drain || "";
-
       nozzlesList.forEach(nz => heatExchanger.remove(nz));
       nozzlesList = [];
       customNozzleCount = 0;
 
-      if(data.nozzles) {
-        data.nozzles.forEach(n => {
+      const sourceNozzles = Array.isArray(data.nozzles) ? data.nozzles.map(n => ({...n})) : [];
+      // Los diseños anteriores guardaban venteo y drenaje fuera de la lista.
+      for (const [service, legacySize, pos, defaultTag] of [
+        ['vent', data.vent, 'superior', 'VENT'], ['drain', data.drain, 'inferior', 'DRAIN']
+      ]) {
+        if (legacySize && !sourceNozzles.some(n => n.service === service)) {
+          const diaIndex = DIAMETERS.indexOf(legacySize);
+          sourceNozzles.push({
+            tagName: defaultTag, service, diaIndex: diaIndex >= 0 ? diaIndex : 1,
+            connectionType: 'threaded', rating: '3000#', bodyPart: 'bonnet', pos,
+            valX: BODY_BOUNDS.bonnet.center, hasNS: false, sizeNS: '', tagNS: '',
+            hasFS: false, sizeFS: '', tagFS: '', face: 'RF'
+          });
+        }
+      }
+
+      if(sourceNozzles.length) {
+        sourceNozzles.forEach(n => {
           customNozzleCount++;
           const internalName = `Nozzle_${customNozzleCount}`;
           // Compatibilidad: en diseños antiguos tagNS/tagFS guardaban la medida.
@@ -1102,7 +1115,8 @@
             internalName, n.tagName, n.diaIndex, n.connectionType || 'flanged',
             n.rating, n.bodyPart, n.pos, n.valX,
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
-            n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || "")
+            n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
+            n.service || 'process', n.face || 'RF'
           );
           nozzlesList.push(newNz);
         });
@@ -1151,11 +1165,12 @@
       const data = selectedNozzle.userData;
       document.getElementById('editor-panel').style.display = 'block';
       document.getElementById('edit-nz-name').value = data.tagName;
+      document.getElementById('edit-nz-service').value = data.service || 'process';
       document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
       populateDiameterSelect(document.getElementById('edit-nz-dia'), data.connectionType, data.diaIndex);
-      document.getElementById('edit-nz-rating').value = data.rating;
       document.getElementById('edit-nz-body').value = data.bodyPart;
-      updateConnectionTypeUI(data.connectionType || 'flanged');
+      updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
+      document.getElementById('edit-nz-face').value = data.face || 'RF';
       
       const bounds = BODY_BOUNDS[data.bodyPart];
       const editX = document.getElementById('edit-nz-x');
@@ -1185,9 +1200,11 @@
     }
 
     const editName = document.getElementById('edit-nz-name');
+    const editService = document.getElementById('edit-nz-service');
     const editType = document.getElementById('edit-nz-type');
     const editDia = document.getElementById('edit-nz-dia');
     const editRating = document.getElementById('edit-nz-rating');
+    const editFace = document.getElementById('edit-nz-face');
     const editBody = document.getElementById('edit-nz-body');
     const editPos = document.getElementById('edit-nz-pos');
     const editX = document.getElementById('edit-nz-x');
@@ -1199,9 +1216,21 @@
     const editFsSize = document.getElementById('edit-fs-size');
     const editFsTag = document.getElementById('edit-fs-tag');
 
-    function updateConnectionTypeUI(type) {
+    function populateRatingSelect(select, type, preferred) {
+      const allowed = type === 'threaded' ? ['3000#', '6000#'] : ['150#', '300#', '600#'];
+      select.replaceChildren(...allowed.map(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        return option;
+      }));
+      select.value = allowed.includes(preferred) ? preferred : allowed[0];
+    }
+
+    function updateConnectionTypeUI(type, preferredRating) {
       const threaded = type === 'threaded';
-      document.getElementById('edit-rating-group').style.display = threaded ? 'none' : '';
+      populateRatingSelect(editRating, type, preferredRating);
+      document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
     }
 
@@ -1213,6 +1242,18 @@
       syncStateToParent();
     });
 
+    editService.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      selectedNozzle.userData.service = e.target.value;
+      if ((e.target.value === 'vent' || e.target.value === 'drain') &&
+          selectedNozzle.userData.connectionType !== 'threaded') {
+        editType.value = 'threaded';
+        editType.dispatchEvent(new Event('change'));
+        return;
+      }
+      syncStateToParent();
+    });
+
     editType.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
       const old = selectedNozzle;
@@ -1221,10 +1262,13 @@
       const allowed = type === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
       const diaIndex = allowed.includes(data.diaIndex) ? data.diaIndex : (type === 'threaded' ? 0 : 6);
       const replacement = buildNozzle(
-        data.idName, data.tagName, diaIndex, type, type === 'threaded' ? 'NPT' : (data.rating || '150#'),
+        data.idName, data.tagName, diaIndex, type,
+        type === 'threaded' ? (['3000#', '6000#'].includes(data.rating) ? data.rating : '3000#')
+          : (['150#', '300#', '600#'].includes(data.rating) ? data.rating : '150#'),
         data.bodyPart, data.pos, data.valX,
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
-        type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS
+        type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
+        data.service || 'process', data.face || 'RF'
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1249,6 +1293,13 @@
     editRating.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.rating = e.target.value;
+      syncStateToParent();
+    });
+
+    editFace.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      selectedNozzle.userData.face = e.target.value;
+      if (selectedNozzle.userData.faceMesh) selectedNozzle.userData.faceMesh.visible = e.target.value === 'RF';
       syncStateToParent();
     });
 
@@ -1332,22 +1383,34 @@
     function updateNewConnectionUI(preferred) {
       const type = newType.value;
       populateDiameterSelect(newDia, type, preferred);
-      document.getElementById('new-rating-group').style.display = type === 'threaded' ? 'none' : '';
+      populateRatingSelect(document.getElementById('new-nz-rating'), type,
+        type === 'threaded' ? '3000#' : '150#');
+      document.getElementById('new-flange-details').style.display = type === 'threaded' ? 'none' : 'flex';
     }
     newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
+    document.getElementById('new-nz-service').addEventListener('change', (event) => {
+      if (event.target.value === 'vent' || event.target.value === 'drain') {
+        newType.value = 'threaded';
+        updateNewConnectionUI(1);
+      }
+    });
     updateNewConnectionUI(6);
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
       customNozzleCount++;
       const connectionType = newType.value === 'threaded' ? 'threaded' : 'flanged';
       const diaIndex = Number(newDia.value);
-      const rating = connectionType === 'threaded' ? 'NPT' : document.getElementById('new-nz-rating').value;
+      const rating = document.getElementById('new-nz-rating').value;
       const bodyPart = document.getElementById('new-nz-body').value;
+      const service = document.getElementById('new-nz-service').value;
+      const face = document.getElementById('new-nz-face').value;
+      const pos = document.getElementById('new-nz-pos').value;
       const internalName = `Custom_Nozzle_${customNozzleCount}`;
       const startX = BODY_BOUNDS[bodyPart].center;
 
-      const newNz = buildNozzle(internalName, "", diaIndex, connectionType, rating, bodyPart, "superior", startX,
-        false, "", "", false, "", "");
+      const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
+      const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
+        false, "", "", false, "", "", service, face);
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
@@ -1396,8 +1459,6 @@
     nameplate.position.set(0, 0, R + 0.02); 
     heatExchanger.add(nameplate);
 
-    document.getElementById('vent-input').addEventListener('input', () => syncStateToParent());
-    document.getElementById('drain-input').addEventListener('input', () => syncStateToParent());
 
     function animate() {
       requestAnimationFrame(animate);
