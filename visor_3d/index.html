@@ -119,6 +119,10 @@
         <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
       </div>
       <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
+      <div class="input-group" id="edit-neck-control">
+        <label>Largo niple visual: <output id="edit-neck-length-value">0.30</output> m</label>
+        <input type="range" id="edit-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
+      </div>
 
       <div class="input-group">
         <label>Cuerpo:</label>
@@ -195,6 +199,10 @@
       <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
     </div>
     <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
+    <div class="input-group" id="new-neck-control">
+      <label>Largo niple visual: <output id="new-neck-length-value">0.30</output> m</label>
+      <input type="range" id="new-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
+    </div>
     
     <div class="input-group">
       <select id="new-nz-body">
@@ -346,6 +354,19 @@
         K:K*INCH, L:L*INCH, bolts};
     }
 
+    function defaultNozzleNeckLength(diaIndex) {
+      const pipeOD = flangeDimensions(Number(diaIndex), '150#').OD;
+      const raw = Math.min(1.10, Math.max(0.20, 0.20 + pipeOD * 1.10));
+      return Math.round(raw / 0.05) * 0.05;
+    }
+
+    function sideConnectionScale(size) {
+      const text = String(size || '').replace(/NPT/gi, '').trim();
+      const index = DIAMETERS.findIndex(value => text.startsWith(value));
+      const pipeOD = flangeDimensions(index >= 0 ? index : 1, '150#').OD;
+      return Math.max(0.45, Math.min(1.25, pipeOD * 25));
+    }
+
     function updateAsmeInfo(elementId, diaIndex, rating, type) {
       const element = document.getElementById(elementId);
       if (type === 'threaded') {
@@ -354,7 +375,7 @@
       }
       const dim = flangeDimensions(Number(diaIndex), rating);
       const mm = value => Math.round(value * 1000);
-      element.textContent = `ASME B16.5 · Ø brida ${mm(dim.D)} mm · BCD ${mm(dim.K)} mm · ${dim.bolts} pernos · espesor ${mm(dim.B)} mm`;
+      element.textContent = `ASME B16.5 · Ø brida ${mm(dim.D)} mm · BCD ${mm(dim.K)} mm · ${dim.bolts} agujeros Ø ${mm(dim.L)} mm · espesor ${mm(dim.B)} mm`;
       element.style.display = 'block';
     }
 
@@ -387,6 +408,7 @@
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           flangeType: "WN",
           face: nz.userData.face || "RF",
+          neckLength: nz.userData.neckLength || undefined,
           bodyPart: nz.userData.bodyPart || "shell",
           pos: nz.userData.pos || "superior",
           valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
@@ -1017,7 +1039,7 @@
     }
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
-      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF') {
+      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null) {
       const group = new THREE.Group();
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
       const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
@@ -1025,11 +1047,13 @@
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
       
+      const visualNeckLength = type === 'flanged'
+        ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
         isNozzle: true, idName: internalName, tagName: tagText,
         diaIndex: dIndex, connectionType: type, rating: normalizedRating, service: service,
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart, pos: pos,
-        valX: posX, valY: NOZZLE_Y, 
+        valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS
       };
@@ -1078,9 +1102,13 @@
         const fOuter = dim.D / 2;
         const rfHeight = group.userData.face === 'RF' ? (normalizedRating === '600#' ? 0.00635 : 0.0016) : 0;
         const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
+        const nippleLength = visualNeckLength;
+        const nipple = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, nippleLength, 48), nzMat);
+        nipple.position.y = nippleLength / 2;
+        group.add(nipple);
         const tubeProfile = [
-          [pInner, 0], [pipeR, 0], [hubR, hubHeight],
-          [pInner, hubHeight], [pInner, 0]
+          [pInner, nippleLength], [pipeR, nippleLength], [hubR, nippleLength + hubHeight],
+          [pInner, nippleLength + hubHeight], [pInner, nippleLength]
         ].map(([x, y]) => new THREE.Vector2(x, y));
         group.add(new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat));
         const flangeShape = new THREE.Shape();
@@ -1100,9 +1128,9 @@
           bevelSize: Math.min(0.0015, dim.B * 0.06), bevelSegments: 1, steps: 1, curveSegments: 48
         }), flMat);
         flange.rotation.x = -Math.PI / 2;
-        flange.position.y = hubHeight;
+        flange.position.y = nippleLength + hubHeight;
         group.add(flange);
-        totalH = dim.H;
+        totalH = nippleLength + dim.H;
         const faceOuter = Math.min(fOuter * 0.78, Math.max(hubR * 1.12, pipeR * 1.28));
         const faceProfile = [[pInner, totalH - rfHeight], [faceOuter, totalH - rfHeight],
           [faceOuter, totalH], [pInner, totalH], [pInner, totalH - rfHeight]]
@@ -1119,32 +1147,21 @@
         baseWeld.rotation.x = Math.PI / 2;
         baseWeld.position.y = 0.002;
         group.add(baseWeld);
-        const studR = dim.L * 0.37;
-        const nutH = Math.max(0.004, studR * 0.85);
-        for (let i = 0; i < dim.bolts; i++) {
-          const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
-          const bx = Math.cos(angle) * dim.K / 2;
-          const bz = Math.sin(angle) * dim.K / 2;
-          const stud = new THREE.Mesh(new THREE.CylinderGeometry(studR, studR, dim.B + rfHeight + nutH * 2, 12), studMat);
-          stud.position.set(bx, hubHeight + dim.B / 2, bz);
-          group.add(stud);
-          for (const by of [hubHeight - nutH * 0.35, hubHeight + dim.B + rfHeight + nutH * 0.35]) {
-            const nut = new THREE.Mesh(new THREE.CylinderGeometry(studR * 1.65, studR * 1.65, nutH, 6), nutMat);
-            nut.position.set(bx, by, bz);
-            group.add(nut);
-          }
-        }
-        const plugScale = Math.max(0.18, Math.min(1.0, dim.OD * 2.4));
+        const neckWeld = new THREE.Mesh(new THREE.TorusGeometry(pipeR * 1.015,
+          Math.max(0.0010, dim.OD * 0.018), 8, 48), weldMat);
+        neckWeld.rotation.x = Math.PI / 2;
+        neckWeld.position.y = nippleLength;
+        group.add(neckWeld);
         plugNS = createNozzlePlug(flMat);
-        plugNS.scale.setScalar(plugScale);
+        plugNS.scale.setScalar(sideConnectionScale(sizeNS));
         plugNS.rotation.x = Math.PI / 2;
-        plugNS.position.set(0, hubHeight * 0.48, hubR + 0.008);
+        plugNS.position.set(0, nippleLength * 0.55, pipeR + 0.008);
         plugNS.visible = hasNS;
         group.add(plugNS);
         plugFS = createNozzlePlug(flMat);
-        plugFS.scale.setScalar(plugScale);
+        plugFS.scale.setScalar(sideConnectionScale(sizeFS));
         plugFS.rotation.x = -Math.PI / 2;
-        plugFS.position.set(0, hubHeight * 0.48, -hubR - 0.008);
+        plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
         plugFS.visible = hasFS;
         group.add(plugFS);
       }
@@ -1202,7 +1219,7 @@
             n.rating, n.bodyPart, n.pos, n.valX,
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
-            n.service || 'process', n.face || 'RF'
+            n.service || 'process', n.face || 'RF', n.neckLength
           );
           nozzlesList.push(newNz);
         });
@@ -1258,6 +1275,9 @@
       updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
       document.getElementById('edit-nz-face').value = data.face || 'RF';
       updateAsmeInfo('edit-asme-info', data.diaIndex, data.rating, data.connectionType);
+      const editNeckLength = document.getElementById('edit-neck-length');
+      editNeckLength.value = data.neckLength || defaultNozzleNeckLength(data.diaIndex);
+      document.getElementById('edit-neck-length-value').value = Number(editNeckLength.value).toFixed(2);
       
       const bounds = BODY_BOUNDS[data.bodyPart];
       const editX = document.getElementById('edit-nz-x');
@@ -1292,6 +1312,7 @@
     const editDia = document.getElementById('edit-nz-dia');
     const editRating = document.getElementById('edit-nz-rating');
     const editFace = document.getElementById('edit-nz-face');
+    const editNeckLength = document.getElementById('edit-neck-length');
     const editBody = document.getElementById('edit-nz-body');
     const editPos = document.getElementById('edit-nz-pos');
     const editX = document.getElementById('edit-nz-x');
@@ -1319,6 +1340,7 @@
       populateRatingSelect(editRating, type, preferredRating);
       document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
       document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
+      document.getElementById('edit-neck-control').style.display = threaded ? 'none' : '';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
     }
 
@@ -1354,7 +1376,7 @@
         data.bodyPart, data.pos, data.valX,
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
-        data.service || 'process', data.face || 'RF'
+        data.service || 'process', data.face || 'RF', data.neckLength
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1387,6 +1409,14 @@
     editFace.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
       rebuildSelectedNozzle({face: e.target.value});
+    });
+
+    editNeckLength.addEventListener('input', (e) => {
+      document.getElementById('edit-neck-length-value').value = Number(e.target.value).toFixed(2);
+    });
+    editNeckLength.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      rebuildSelectedNozzle({neckLength: Number(e.target.value)});
     });
 
     editBody.addEventListener('change', (e) => {
@@ -1472,11 +1502,23 @@
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
         type === 'threaded' ? '3000#' : '150#');
       document.getElementById('new-flange-details').style.display = type === 'threaded' ? 'none' : 'flex';
+      document.getElementById('new-neck-control').style.display = type === 'threaded' ? 'none' : '';
+      if (type === 'flanged') {
+        const neck = defaultNozzleNeckLength(newDia.value);
+        document.getElementById('new-neck-length').value = neck;
+        document.getElementById('new-neck-length-value').value = neck.toFixed(2);
+      }
       updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, type);
     }
     newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
-    newDia.addEventListener('change', () => updateAsmeInfo('new-asme-info', newDia.value,
-      document.getElementById('new-nz-rating').value, newType.value));
+    newDia.addEventListener('change', () => {
+      if (newType.value === 'flanged') {
+        const neck = defaultNozzleNeckLength(newDia.value);
+        document.getElementById('new-neck-length').value = neck;
+        document.getElementById('new-neck-length-value').value = neck.toFixed(2);
+      }
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, newType.value);
+    });
     document.getElementById('new-nz-rating').addEventListener('change', () =>
       updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, newType.value));
     document.getElementById('new-nz-service').addEventListener('change', (event) => {
@@ -1484,6 +1526,9 @@
         newType.value = 'threaded';
         updateNewConnectionUI(1);
       }
+    });
+    document.getElementById('new-neck-length').addEventListener('input', event => {
+      document.getElementById('new-neck-length-value').value = Number(event.target.value).toFixed(2);
     });
     updateNewConnectionUI(6);
 
@@ -1495,13 +1540,14 @@
       const bodyPart = document.getElementById('new-nz-body').value;
       const service = document.getElementById('new-nz-service').value;
       const face = document.getElementById('new-nz-face').value;
+      const neckLength = Number(document.getElementById('new-neck-length').value);
       const pos = document.getElementById('new-nz-pos').value;
       const internalName = `Custom_Nozzle_${customNozzleCount}`;
       const startX = BODY_BOUNDS[bodyPart].center;
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face);
+        false, "", "", false, "", "", service, face, neckLength);
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
