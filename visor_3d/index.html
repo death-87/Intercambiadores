@@ -1242,8 +1242,10 @@
         saving = false;
         pendingSave = null;
         document.querySelectorAll('#ui-container input, #ui-container select, #ui-container button').forEach(el => el.disabled = false);
-        editNsName.disabled = !editNsCheck.checked;
-        editFsName.disabled = !editFsCheck.checked;
+        editNsSize.disabled = !editNsCheck.checked;
+        editNsTag.disabled = !editNsCheck.checked;
+        editFsSize.disabled = !editFsCheck.checked;
+        editFsTag.disabled = !editFsCheck.checked;
         document.getElementById('save-status').textContent = args.ack.message;
       }
       send('streamlit:setFrameHeight', {height: args.height || 720});
