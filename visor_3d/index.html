@@ -494,10 +494,21 @@
     flangeLeft.rotation.z = Math.PI / 2;
     flangeLeft.position.x = FLANGE_SHELL_L_X;
     heatExchanger.add(flangeLeft);
-    for (const x of [-2.13, 2.13, -0.7, 0.7]) ringX(heatExchanger, x, R, 0.006, weldMat);
+    const shellWeldRings = [];
+    for (const x of [-2.13, 2.13, -0.7, 0.7]) {
+      const ring = ringX(heatExchanger, x, R, 0.006, weldMat);
+      ring.userData.modelABaseX = x;
+      shellWeldRings.push(ring);
+    }
+    const shellFlangeRings = [];
     for (const x of [FLANGE_SHELL_R_X, FLANGE_SHELL_L_X]) {
-      ringX(heatExchanger, x - 0.053, R_FLANGE, 0.003, nutMat);
-      ringX(heatExchanger, x + 0.053, R_FLANGE, 0.003, nutMat);
+      const side = Math.sign(x);
+      for (const offset of [-0.053, 0.053]) {
+        const ring = ringX(heatExchanger, x + offset, R_FLANGE, 0.003, nutMat);
+        ring.userData.modelASide = side;
+        ring.userData.modelAOffset = offset;
+        shellFlangeRings.push(ring);
+      }
     }
 
     function createTextSprite(initialText, color = 'white', fontSize = 32) {
@@ -623,17 +634,16 @@
       .forEach(part => modelAShellGroup.add(part));
     heatExchanger.add(modelAShellGroup);
     const modelAParts = [modelAShellGroup, rearBonnetGroup, channelGroup];
-    const MODEL_A_CHANNEL_LENGTH = 1.20;
     const MODEL_A_BONNET_LENGTH = 0.80;
     const modelB = new THREE.Group();
     modelB.name = 'Modelo B: transición cónica y cabezal reducido';
     heatExchanger.add(modelB);
     modelB.visible = false;
     let currentDimensions = {
-      shellLength: 4.5,
+      shellLength: 4.275,
       reducerLength: 0.9,
-      channelLength: 0.65,
-      bonnetLength: 0.40,
+      channelLength: 1.20,
+      bonnetLength: 0.80,
       shellDiameter: 1.098,
       channelDiameter: 1.098,
       bonnetDiameter: 1.098
@@ -765,19 +775,67 @@
     }
     buildModelB();
     updateDimensionControls();
+    function rebuildModelAChannel() {
+      channelGroup.traverse(object => {
+        if (object.geometry && object.geometry !== flangeGeo) object.geometry.dispose();
+      });
+      channelGroup.clear();
+      const length = currentDimensions.channelLength;
+      const bodyRight = -0.12;
+      const bodyLeft = bodyRight - length;
+      const bodyCenter = (bodyLeft + bodyRight) / 2;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, length, 96), shellMat);
+      body.rotation.z = Math.PI / 2;
+      body.position.x = bodyCenter;
+      channelGroup.add(body);
+      const innerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
+      innerFlange.rotation.z = Math.PI / 2;
+      innerFlange.position.x = -0.06;
+      channelGroup.add(innerFlange);
+      const outerFlangeX = -(length + 0.18);
+      const outerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
+      outerFlange.rotation.z = Math.PI / 2;
+      outerFlange.position.x = outerFlangeX;
+      channelGroup.add(outerFlange);
+      const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
+      coverPlate.rotation.z = Math.PI / 2;
+      coverPlate.position.x = -(length + 0.29 + GASKET_T);
+      channelGroup.add(coverPlate);
+      spiralGasket(channelGroup, -(length + 0.24 + GASKET_T / 2));
+      studCircle(channelGroup, -(length + 0.34 + GASKET_T), -(length + 0.12));
+      studCircle(channelGroup, -T_FLANGE, T_FLANGE + GASKET_T);
+      spiralGasket(channelGroup, GASKET_T / 2);
+      ringX(channelGroup, -(length + 0.11), R, 0.009, weldMat);
+      ringX(channelGroup, -0.13, R, 0.009, weldMat);
+      ringX(channelGroup, -(length + 0.342 + GASKET_T), R_FLANGE - 0.02, 0.003, nutMat);
+      const partition = new THREE.Mesh(new THREE.BoxGeometry(length, 0.02, 1.09), partitionMat);
+      partition.position.x = bodyCenter;
+      channelGroup.add(partition);
+    }
     function applyModelADimensions() {
       const shellScale = currentDimensions.shellDiameter / (2 * R);
       const channelScale = currentDimensions.channelDiameter / (2 * R);
       const bonnetScale = currentDimensions.bonnetDiameter / (2 * R);
       const shellLengthScale = currentDimensions.shellLength / L_SHELL;
-      const channelLengthScale = currentDimensions.channelLength / MODEL_A_CHANNEL_LENGTH;
       const bonnetLengthScale = currentDimensions.bonnetLength / MODEL_A_BONNET_LENGTH;
-      modelAShellGroup.scale.set(shellLengthScale, shellScale, shellScale);
+      modelAShellGroup.scale.set(1, shellScale, shellScale);
+      shell.scale.y = shellLengthScale;
+      flangeRight.position.x = currentDimensions.shellLength / 2 + T_FLANGE / 2;
+      flangeLeft.position.x = -currentDimensions.shellLength / 2 - T_FLANGE / 2;
+      shellWeldRings.forEach(ring => {
+        ring.position.x = ring.userData.modelABaseX * shellLengthScale;
+      });
+      shellFlangeRings.forEach(ring => {
+        ring.position.x = ring.userData.modelASide *
+          (currentDimensions.shellLength / 2 + T_FLANGE / 2) + ring.userData.modelAOffset;
+      });
       const jointOffset = 0.132;
       channelGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
       rearBonnetGroup.position.x = currentDimensions.shellLength / 2 + jointOffset;
-      channelGroup.scale.set(channelLengthScale, channelScale, channelScale);
-      rearBonnetGroup.scale.set(bonnetLengthScale, bonnetScale, bonnetScale);
+      rebuildModelAChannel();
+      channelGroup.scale.set(1, channelScale, channelScale);
+      bonnetBody.scale.y = bonnetLengthScale;
+      rearBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
     }
     function componentRadius(bodyPart) {
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
@@ -841,15 +899,15 @@
       BODY_BOUNDS.channel = currentModel === 'B'
         ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
           center: (p.channelBodyLeft + p.channelBodyRight) / 2}
-        : {min: channelGroup.position.x - 1.0305 * channelGroup.scale.x,
-          max: channelGroup.position.x - 0.1305 * channelGroup.scale.x,
-          center: channelGroup.position.x - 0.708 * channelGroup.scale.x};
+        : {min: channelGroup.position.x - currentDimensions.channelLength - 0.04,
+          max: channelGroup.position.x - 0.20,
+          center: channelGroup.position.x - 0.12 - currentDimensions.channelLength / 2};
       BODY_BOUNDS.bonnet = currentModel === 'B'
         ? {min: p.shellRight + 0.05, max: p.bonnetTip - 0.05,
           center: p.shellRight + currentDimensions.bonnetLength * 0.45}
-        : {min: rearBonnetGroup.position.x + 0.0805 * rearBonnetGroup.scale.x,
-          max: rearBonnetGroup.position.x + 0.6805 * rearBonnetGroup.scale.x,
-          center: rearBonnetGroup.position.x + 0.388 * rearBonnetGroup.scale.x};
+        : {min: rearBonnetGroup.position.x + 0.05,
+          max: rearBonnetGroup.position.x + Math.max(0.10, currentDimensions.bonnetLength - 0.05),
+          center: rearBonnetGroup.position.x + currentDimensions.bonnetLength * 0.45};
       document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
         .forEach(option => { option.disabled = currentModel !== 'B'; });
       nozzlesList.forEach(nozzle => {
