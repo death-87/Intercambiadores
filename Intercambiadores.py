@@ -198,6 +198,10 @@ def validar_diseno(data):
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
             raise ValueError("tipo de conexión inválido")
+        if n.get("service", "process") not in {"process", "vent", "drain"}:
+            raise ValueError("servicio de conexión inválido")
+        if n.get("face", "RF") not in {"RF", "FF"}:
+            raise ValueError("cara de brida inválida")
         if n.get("pos") not in {"superior", "inferior", "front", "rear"}:
             raise ValueError("posición de boquilla inválida")
         x = n.get("valX")
@@ -206,7 +210,8 @@ def validar_diseno(data):
         for field in ("hasNS", "hasFS"):
             if field in n and not isinstance(n[field], bool):
                 raise ValueError(f"{field} debe ser booleano")
-        for field in ("tagName", "rating", "sizeNS", "tagNS", "sizeFS", "tagFS"):
+        for field in ("tagName", "rating", "flangeType", "face", "service",
+                      "sizeNS", "tagNS", "sizeFS", "tagFS"):
             if field in n and not isinstance(n[field], str):
                 raise ValueError(f"{field} debe ser texto")
     return data
@@ -247,13 +252,17 @@ def filas_boquillas(config):
         tag_fs = "" if legacy_fs else (n.get("tagFS") or "")
         detalle_ns = medida_ns + (f" · TAG {tag_ns}" if tag_ns else "")
         detalle_fs = medida_fs + (f" · TAG {tag_fs}" if tag_fs else "")
-        tipo = "ROSCADA" if n.get("connectionType", "flanged") == "threaded" else "BRIDADA"
+        roscada = n.get("connectionType", "flanged") == "threaded"
+        tipo = "ROSCADA" if roscada else f"WN-{n.get('face', 'RF')}"
+        servicio = {"process": "PROCESO", "vent": "VENTEO", "drain": "DRENAJE"}.get(
+            n.get("service", "process"), "PROCESO")
         posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
                     "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
+            "SERVICIO": servicio,
             "DIÁMETRO": DIAMETROS[n["diaIndex"]],
-            "RATING": "NPT" if tipo == "ROSCADA" else (n.get("rating") or "Sin información"),
+            "RATING": n.get("rating") or ("3000#" if roscada else "Sin información"),
             "TIPO": tipo,
             "CUERPO": n["bodyPart"].upper(), "POSICIÓN": posicion,
             "NS": detalle_ns if n.get("hasNS", False) else "—",
@@ -284,9 +293,11 @@ def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
         for noz in config.get("nozzles", [])
     )
     if incluir_bonete:
-        # En este esquema, una medida informada representa una conexión presente.
-        n += int(informado(config.get("vent", ""))) + int(informado(config.get("drain", "")))
-    return n, "Calculado del diseño: NS/FS" + (" + venteo/drenaje" if incluir_bonete else "")
+        servicios = {noz.get("service") for noz in config.get("nozzles", [])}
+        # Compatibilidad con diseños antiguos que aún no migraron ambos plugs a nozzles.
+        n += int("vent" not in servicios and informado(config.get("vent", "")))
+        n += int("drain" not in servicios and informado(config.get("drain", "")))
+    return n, "Calculado del diseño: conexiones de la lista + NS/FS"
 
 
 def extraer_coordenadas(valor):
@@ -397,9 +408,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
             posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
                         "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
             if n.get("connectionType", "flanged") == "threaded":
+                servicio = {"process": "DIRECTA", "vent": "VENTEO", "drain": "DRENAJE"}.get(
+                    n.get("service", "process"), "DIRECTA")
                 conexiones.append([
-                    n.get("bodyPart", "").upper(), "DIRECTA", DIAMETROS[n["diaIndex"]],
-                    n.get("tagName") or "—", n.get("bodyPart", "").upper(), posicion,
+                    n.get("tagName") or "Sin TAG", servicio,
+                    f"{DIAMETROS[n['diaIndex']]} · {n.get('rating') or '3000#'}",
+                    "—", n.get("bodyPart", "").upper(), posicion,
                 ])
                 continue
             for lado in ("NS", "FS"):
@@ -411,9 +425,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
                         n.get("tagName") or "Sin TAG", lado, medida, tag_plug or "—",
                         n.get("bodyPart", "").upper(), posicion,
                     ])
-        for servicio, campo in (("VENT", "vent"), ("DRAIN", "drain")):
-            if informado(config.get(campo, "")):
-                conexiones.append(["BONETE", servicio, config.get(campo), "—", "BONNET", "—"])
+        servicios = {n.get("service") for n in config.get("nozzles", [])}
+        for servicio, campo in (("VENTEO", "vent"), ("DRENAJE", "drain")):
+            if campo not in servicios and informado(config.get(campo, "")):
+                conexiones.append(["LEGACY", servicio, config.get(campo), "—", "BONNET", "—"])
     detectadas = len(conexiones)
     if cantidad is None:
         verificacion, estado_color = "SIN TOTAL DECLARADO", colors.HexColor("#A26918")
@@ -424,7 +439,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     resumen = Table([
         [p("TOTAL DECLARADO", small), p("IDENTIFICADAS EN 3D", small), p("VERIFICACIÓN", small)],
         [p(cantidad if cantidad is not None else "—", body), p(detectadas, body), p(verificacion, status_text)],
-        [p(origen, small), p("NS + FS + venteo/drenaje informados", small), p(estado_diseno, small)],
+        [p(origen, small), p("Lista 3D + conexiones NS/FS", small), p(estado_diseno, small)],
     ], colWidths=[60 * mm] * 3)
     resumen.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), pale), ("BOX", (0, 0), (-1, -1), .8, teal),
@@ -437,16 +452,16 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
 
     elementos.append(Paragraph("NOZZLE SCHEDULE", section_style))
     if filas:
-        encabezado = ["MK", "QT", "DIÁMETRO", "TIPO / RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
+        encabezado = ["MK", "SERVICIO", "QT", "DIÁMETRO", "TIPO / RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
         datos_nozzle = [[p(x, cell_header) for x in encabezado]] + [
             [p(
                 f"{fila['TIPO']} · {fila['RATING']}" if k == "TIPO / RATING" else fila[k],
-                cell_center if k in {"QT", "DIÁMETRO", "TIPO / RATING", "NS", "FS"} else cell,
+                cell_center if k in {"SERVICIO", "QT", "DIÁMETRO", "TIPO / RATING", "NS", "FS"} else cell,
             ) for k in encabezado]
             for fila in filas
         ]
         tabla_nozzle = Table(datos_nozzle, repeatRows=1,
-                             colWidths=[19*mm, 10*mm, 22*mm, 24*mm, 27*mm, 25*mm, 26.5*mm, 26.5*mm])
+                             colWidths=[17*mm, 20*mm, 8*mm, 18*mm, 25*mm, 20*mm, 22*mm, 25*mm, 25*mm])
         tabla_nozzle.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), navy), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F8FA")]),
@@ -476,7 +491,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     else:
         elementos.append(p("No hay conexiones roscadas identificadas en el diseño 3D.", body))
     elementos += [Spacer(1, 5 * mm), p(
-        "Criterio: se listan las conexiones NS y FS activas, además del venteo y drenaje del bonete cuando tienen medida informada. "
+        "Criterio: venteo y drenaje forman parte del mismo listado de boquillas y pueden ubicarse en cualquier componente. "
         "Las dimensiones longitudinales de los componentes se excluyen de esta ficha.", small)]
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
@@ -562,8 +577,8 @@ def main():
             if elegido is not None:
                 filtrado = filtrado[filtrado[col] == elegido]
     with st.sidebar.expander("Criterio de conteo"):
-        incluir_bonete = st.checkbox("Incluir venteo y drenaje del bonete", value=True)
-        st.caption("Aplica al cálculo desde el diseño. Un total válido en la planilla tiene prioridad y se usa sin sumarle conexiones.")
+        incluir_bonete = st.checkbox("Incluir venteo y drenaje de diseños antiguos", value=True)
+        st.caption("Los diseños nuevos ya los incluyen en la lista general. Un total válido en la planilla tiene prioridad.")
     cantidades = []
     for _, row in filtrado.iterrows():
         cfg = db.get(normalizar(row[col_equipo]), {}).get("data")
@@ -672,8 +687,6 @@ def main():
                     st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
                 else:
                     st.info("Sin boquillas registradas.")
-                st.write(f"**Venteo bonete:** {config.get('vent') or 'Sin medida registrada'}")
-                st.write(f"**Drenaje bonete:** {config.get('drain') or 'Sin medida registrada'}")
             if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag), use_container_width=True):
                 ir_editor(tag)
         with enlaces:
