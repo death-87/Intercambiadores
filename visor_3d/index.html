@@ -70,12 +70,12 @@
   <div class="input-group"><label>Channel: <output id="channel-diameter-value">1.10</output> m</label><input type="range" id="channel-diameter" min="0.40" max="2.00" step="0.02" value="1.10"></div>
   <div class="input-group"><label>Bonete: <output id="bonnet-diameter-value">1.10</output> m</label><input type="range" id="bonnet-diameter" min="0.70" max="2.50" step="0.02" value="1.10"></div>
   <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin-bottom:7px">La transición une automáticamente los diámetros del shell y channel.</small>
-  <div id="model-b-lengths" style="display:none;border-top:1px solid #334155;padding-top:7px">
-    <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS MODELO B</strong>
-    <div class="input-group"><label>Shell: <output id="shell-length-value">4.50</output> m</label><input type="range" id="shell-length" min="3" max="7" step="0.10" value="4.50"></div>
-    <div class="input-group"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.40" max="1.80" step="0.05" value="0.90"></div>
-    <div class="input-group"><label>Channel: <output id="channel-length-value">0.65</output> m</label><input type="range" id="channel-length" min="0.35" max="1.50" step="0.05" value="0.65"></div>
-    <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.40</output> m</label><input type="range" id="bonnet-length" min="0.25" max="0.90" step="0.05" value="0.40"></div>
+  <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
+    <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
+    <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="3" max="7" step="0.025" value="4.275"></div>
+    <div class="input-group" id="transition-length-control" style="display:none"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.40" max="1.80" step="0.05" value="0.90"></div>
+    <div class="input-group"><label>Channel: <output id="channel-length-value">1.20</output> m</label><input type="range" id="channel-length" min="0.35" max="1.50" step="0.05" value="1.20"></div>
+    <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.80</output> m</label><input type="range" id="bonnet-length" min="0.25" max="0.90" step="0.05" value="0.80"></div>
   </div>
 </div>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
@@ -125,6 +125,7 @@
         <label>Cuerpo:</label>
         <select id="edit-nz-body">
           <option value="shell">Shell</option>
+          <option value="transition" disabled>Transición</option>
           <option value="channel">Channel</option>
           <option value="bonnet">Bonnet</option>
         </select>
@@ -135,6 +136,8 @@
         <select id="edit-nz-pos">
           <option value="superior">Arriba</option>
           <option value="inferior">Abajo</option>
+          <option value="front">Frente</option>
+          <option value="rear">Posterior</option>
         </select>
       </div>
       
@@ -186,6 +189,7 @@
     <div class="input-group">
       <select id="new-nz-body">
         <option value="shell" selected>Shell</option>
+        <option value="transition" disabled>Transición</option>
         <option value="channel">Channel</option>
         <option value="bonnet">Bonnet</option>
       </select>
@@ -297,7 +301,7 @@
       if (loading || !initialized || readOnly) return;
       const exportData = {
         model: currentModel,
-        dimensions: {...currentDimensions},
+        dimensions: {...currentDimensions, modelALengthsEnabled: true},
         nameplate: currentNameplate,
         vent: document.getElementById('vent-input').value || "",
         drain: document.getElementById('drain-input').value || "",
@@ -341,6 +345,7 @@
 
     const BODY_BOUNDS = {
       shell:   { min: -2.0, max: 2.0, center: 0 },
+      transition: { min: -2.0, max: 2.0, center: 0 },
       channel: { min: -3.3, max: -2.4, center: -2.9775 },
       bonnet:  { min: 2.35, max: 2.95, center: 2.6575 }
     };
@@ -610,8 +615,16 @@
     channelGroup.position.x = CHANNEL_GRP_X; 
     heatExchanger.add(channelGroup);
 
-    const modelAParts = [...heatExchanger.children];
-    const modelAShellParts = modelAParts.filter(part => part !== rearBonnetGroup && part !== channelGroup);
+    const originalModelAParts = [...heatExchanger.children];
+    const modelAShellGroup = new THREE.Group();
+    modelAShellGroup.name = 'Modelo A: shell y bridas principales';
+    originalModelAParts
+      .filter(part => part !== rearBonnetGroup && part !== channelGroup)
+      .forEach(part => modelAShellGroup.add(part));
+    heatExchanger.add(modelAShellGroup);
+    const modelAParts = [modelAShellGroup, rearBonnetGroup, channelGroup];
+    const MODEL_A_CHANNEL_LENGTH = 1.20;
+    const MODEL_A_BONNET_LENGTH = 0.80;
     const modelB = new THREE.Group();
     modelB.name = 'Modelo B: transición cónica y cabezal reducido';
     heatExchanger.add(modelB);
@@ -735,10 +748,12 @@
       const defaults = model === 'B'
         ? {shellLength: 4.5, reducerLength: 0.9, channelLength: 0.65, bonnetLength: 0.40,
            shellDiameter: 1.44, channelDiameter: 0.72, bonnetDiameter: 1.44}
-        : {shellLength: 4.5, reducerLength: 0.9, channelLength: 0.65, bonnetLength: 0.40,
+        : {shellLength: 4.275, reducerLength: 0.9, channelLength: 1.20, bonnetLength: 0.80,
            shellDiameter: 1.098, channelDiameter: 1.098, bonnetDiameter: 1.098};
       currentDimensions = {...defaults};
+      const legacyModelA = model !== 'B' && dimensions.modelALengthsEnabled !== true;
       for (const [field, [inputId]] of Object.entries(dimensionControls)) {
+        if (legacyModelA && field.endsWith('Length')) continue;
         const input = document.getElementById(inputId);
         const proposed = Number(dimensions[field]);
         if (Number.isFinite(proposed)) {
@@ -750,67 +765,98 @@
     }
     buildModelB();
     updateDimensionControls();
-    function applyModelADiameters() {
+    function applyModelADimensions() {
       const shellScale = currentDimensions.shellDiameter / (2 * R);
       const channelScale = currentDimensions.channelDiameter / (2 * R);
       const bonnetScale = currentDimensions.bonnetDiameter / (2 * R);
-      modelAShellParts.forEach(part => part.scale.set(part.scale.x, shellScale, shellScale));
-      channelGroup.scale.set(channelGroup.scale.x, channelScale, channelScale);
-      rearBonnetGroup.scale.set(rearBonnetGroup.scale.x, bonnetScale, bonnetScale);
+      const shellLengthScale = currentDimensions.shellLength / L_SHELL;
+      const channelLengthScale = currentDimensions.channelLength / MODEL_A_CHANNEL_LENGTH;
+      const bonnetLengthScale = currentDimensions.bonnetLength / MODEL_A_BONNET_LENGTH;
+      modelAShellGroup.scale.set(shellLengthScale, shellScale, shellScale);
+      const jointOffset = 0.132;
+      channelGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
+      rearBonnetGroup.position.x = currentDimensions.shellLength / 2 + jointOffset;
+      channelGroup.scale.set(channelLengthScale, channelScale, channelScale);
+      rearBonnetGroup.scale.set(bonnetLengthScale, bonnetScale, bonnetScale);
     }
     function componentRadius(bodyPart) {
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
       if (bodyPart === 'bonnet') return currentDimensions.bonnetDiameter / 2;
       return currentDimensions.shellDiameter / 2;
     }
-    function surfaceY(x, pos = 'superior', bodyPart = 'shell') {
+    function sectionAt(x, bodyPart = 'shell') {
       if (currentModel === 'A') {
-        const radius = componentRadius(bodyPart);
-        return (pos === 'superior' ? 1 : -1) * Math.max(0.05, radius - 0.01);
+        return {centerY: 0, radius: componentRadius(bodyPart)};
       }
       const p = modelBLayout();
       if (bodyPart === 'channel' || x < p.reducerSmall) {
-        return pos === 'superior'
-          ? p.channelY + p.channelRadius - 0.01
-          : p.channelY - p.channelRadius + 0.01;
+        return {centerY: p.channelY, radius: p.channelRadius};
       }
-      if (x < p.shellLeft) {
+      if (bodyPart === 'transition' || x < p.shellLeft) {
         const radius = p.channelRadius + (x - p.reducerSmall) /
           currentDimensions.reducerLength * (p.shellRadius - p.channelRadius);
-        return pos === 'superior' ? -p.shellRadius + 2 * radius - 0.01 : -p.shellRadius + 0.01;
+        return {centerY: -p.shellRadius + radius, radius};
       }
       if (bodyPart === 'bonnet' || x > p.shellRight) {
-        const y = p.bonnetRadius * Math.sqrt(Math.max(0.05,
-          1 - ((x - p.shellRight) / currentDimensions.bonnetLength) ** 2)) - 0.01;
-        return pos === 'superior' ? y : -y;
+        const radius = p.bonnetRadius * Math.sqrt(Math.max(0.05,
+          1 - ((x - p.shellRight) / currentDimensions.bonnetLength) ** 2));
+        return {centerY: 0, radius};
       }
-      return pos === 'superior' ? p.shellRadius - 0.01 : -p.shellRadius + 0.01;
+      return {centerY: 0, radius: p.shellRadius};
+    }
+    function placeNozzle(nozzle, x, pos, bodyPart) {
+      const section = sectionAt(x, bodyPart);
+      const radius = Math.max(0.05, section.radius - 0.01);
+      nozzle.position.set(x, section.centerY, 0);
+      nozzle.rotation.set(0, 0, 0);
+      if (pos === 'inferior') {
+        nozzle.position.y -= radius;
+        nozzle.rotation.z = Math.PI;
+      } else if (pos === 'front') {
+        nozzle.position.z = radius;
+        nozzle.rotation.x = Math.PI / 2;
+      } else if (pos === 'rear') {
+        nozzle.position.z = -radius;
+        nozzle.rotation.x = -Math.PI / 2;
+      } else {
+        nozzle.position.y += radius;
+      }
     }
     function applyModel(model, reposition = false) {
       currentModel = model === 'B' ? 'B' : 'A';
       document.getElementById('equipment-model').value = currentModel;
       modelAParts.forEach(part => part.visible = currentModel === 'A');
       modelB.visible = currentModel === 'B';
-      document.getElementById('model-b-lengths').style.display = currentModel === 'B' ? '' : 'none';
-      applyModelADiameters();
+      document.getElementById('transition-length-control').style.display = currentModel === 'B' ? '' : 'none';
+      applyModelADimensions();
       const p = modelBLayout();
       BODY_BOUNDS.shell = currentModel === 'B'
         ? {min: p.shellLeft + 0.15, max: p.shellRight - 0.15, center: 0}
-        : {min: -2.0, max: 2.0, center: 0};
+        : {min: -currentDimensions.shellLength / 2 + 0.15,
+          max: currentDimensions.shellLength / 2 - 0.15, center: 0};
+      BODY_BOUNDS.transition = currentModel === 'B'
+        ? {min: p.reducerSmall + 0.05, max: p.shellLeft - 0.05,
+          center: (p.reducerSmall + p.shellLeft) / 2}
+        : {...BODY_BOUNDS.shell};
       BODY_BOUNDS.channel = currentModel === 'B'
         ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
           center: (p.channelBodyLeft + p.channelBodyRight) / 2}
-        : {min: -3.3, max: -2.4, center: -2.9775};
+        : {min: channelGroup.position.x - 1.0305 * channelGroup.scale.x,
+          max: channelGroup.position.x - 0.1305 * channelGroup.scale.x,
+          center: channelGroup.position.x - 0.708 * channelGroup.scale.x};
       BODY_BOUNDS.bonnet = currentModel === 'B'
         ? {min: p.shellRight + 0.05, max: p.bonnetTip - 0.05,
           center: p.shellRight + currentDimensions.bonnetLength * 0.45}
-        : {min: 2.35, max: 2.95, center: 2.6575};
+        : {min: rearBonnetGroup.position.x + 0.0805 * rearBonnetGroup.scale.x,
+          max: rearBonnetGroup.position.x + 0.6805 * rearBonnetGroup.scale.x,
+          center: rearBonnetGroup.position.x + 0.388 * rearBonnetGroup.scale.x};
+      document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
+        .forEach(option => { option.disabled = currentModel !== 'B'; });
       nozzlesList.forEach(nozzle => {
         const data = nozzle.userData;
         const bounds = BODY_BOUNDS[data.bodyPart];
         if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
-        nozzle.position.x = data.valX;
-        nozzle.position.y = surfaceY(data.valX, data.pos, data.bodyPart);
+        placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
       });
       nameplate.position.z = currentDimensions.shellDiameter / 2 + 0.02;
       if (reposition && selectedNozzle) {
@@ -941,13 +987,7 @@
         : 0.28 + Math.sqrt(inches) * 0.23;
       group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-      if(pos === 'superior') {
-        group.position.set(posX, surfaceY(posX, 'superior', bodyPart), 0);
-        group.rotation.z = 0;
-      } else {
-        group.position.set(posX, surfaceY(posX, 'inferior', bodyPart), 0);
-        group.rotation.z = Math.PI;
-      }
+      placeNozzle(group, posX, pos, bodyPart);
 
       heatExchanger.add(group);
       return group;
@@ -1148,13 +1188,7 @@
       selectedNozzle.userData.pos = pos;
       selectedNozzle.userData.valX = vx;
 
-      if (pos === 'superior') {
-        selectedNozzle.position.set(vx, surfaceY(vx, 'superior', selectedNozzle.userData.bodyPart), 0);
-        selectedNozzle.rotation.z = 0;
-      } else {
-        selectedNozzle.position.set(vx, surfaceY(vx, 'inferior', selectedNozzle.userData.bodyPart), 0);
-        selectedNozzle.rotation.z = Math.PI;
-      }
+      placeNozzle(selectedNozzle, vx, pos, selectedNozzle.userData.bodyPart);
       syncStateToParent();
     };
     
