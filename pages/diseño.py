@@ -18,9 +18,10 @@ HOJA_3D = 'Diseño3D'
 plantilla_blanco = {
     "model": "A",
     "dimensions": {
-        "shellLength": 4.5, "reducerLength": 0.9, "channelLength": 0.65,
-        "bonnetLength": 0.40, "shellDiameter": 1.098,
+        "shellLength": 4.275, "reducerLength": 0.9, "channelLength": 1.20,
+        "bonnetLength": 0.80, "shellDiameter": 1.098,
         "channelDiameter": 1.098, "bonnetDiameter": 1.098,
+        "modelALengthsEnabled": True,
     },
     "nameplate": "", "vent": '3/4"', "drain": '3/4"',
     "nozzles": [
