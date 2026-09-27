@@ -100,18 +100,20 @@
         <label>Tag Boquilla:</label>
         <input type="text" id="edit-nz-name" value="" placeholder="Ej: N1">
       </div>
+      <div class="input-group">
+        <label>Tipo de conexión:</label>
+        <select id="edit-nz-type">
+          <option value="flanged">Bridada</option>
+          <option value="threaded">Roscada (plug)</option>
+        </select>
+      </div>
 
       <div style="display:flex; gap:4px;">
         <div class="input-group" style="flex:1;">
           <label>Diámetro:</label>
-          <select id="edit-nz-dia">
-            <option value='1/2"'>1/2"</option><option value='3/4"'>3/4"</option><option value='1"'>1"</option>
-            <option value='1.5"'>1 1/2"</option><option value='2"'>2"</option><option value='3"'>3"</option>
-            <option value='4"'>4"</option><option value='6"'>6"</option><option value='8"'>8"</option>
-            <option value='10"'>10"</option><option value='12"'>12"</option>
-          </select>
+          <select id="edit-nz-dia"></select>
         </div>
-        <div class="input-group" style="flex:1;">
+        <div class="input-group" id="edit-rating-group" style="flex:1;">
           <label>Rating:</label>
           <select id="edit-nz-rating">
             <option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option>
@@ -141,6 +143,7 @@
         <input type="range" id="edit-nz-x" step="0.05">
       </div>
       
+      <div id="flange-plugs-editor">
       <div class="plug-edit-row" style="flex-wrap:wrap">
         <input type="checkbox" id="edit-ns-check">
         <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS</label>
@@ -153,19 +156,27 @@
         <input type="text" id="edit-fs-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
         <input type="text" id="edit-fs-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
+      </div>
 
       <!-- BOTÓN ELIMINAR -->
       <button id="btn-delete-nz">🗑️ ELIMINAR BOQUILLA</button>
     </div>
 
-    <div class="panel-title" style="margin-top: 8px;">➕ Nueva Boquilla</div>
+    <div class="panel-title" style="margin-top: 8px;">➕ Nueva Conexión</div>
+    <div class="input-group">
+      <label>Tipo:</label>
+      <select id="new-nz-type">
+        <option value="flanged">Boquilla bridada</option>
+        <option value="threaded">Boquilla roscada (plug)</option>
+      </select>
+    </div>
     <div style="display:flex; gap:4px;">
       <div class="input-group" style="flex:1;">
-        <select id="new-nz-dia">
-          <option value='2"'>2"</option><option value='4"' selected>4"</option><option value='6"'>6"</option>
-        </select>
+        <label>Diámetro:</label>
+        <select id="new-nz-dia"></select>
       </div>
-      <div class="input-group" style="flex:1;">
+      <div class="input-group" id="new-rating-group" style="flex:1;">
+        <label>Rating:</label>
         <select id="new-nz-rating">
           <option value="150#">150#</option><option value="300#">300#</option>
         </select>
@@ -180,7 +191,7 @@
       </select>
     </div>
 
-    <button id="btn-add-nz">AGREGAR BOQUILLA</button>
+    <button id="btn-add-nz">AGREGAR CONEXIÓN</button>
   </div>
 
   <div id="canvas-container"></div>
@@ -262,6 +273,25 @@
     }
     let currentNameplate = "";
     let currentModel = 'A';
+    // Los primeros 11 índices conservan exactamente la tabla histórica.
+    const DIAMETERS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"',
+      '6"', '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"'];
+    const DIAMETER_INCHES = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5, 14, 16, 18, 20, 24];
+    const FLANGED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16];
+    const THREADED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11];
+
+    function populateDiameterSelect(select, connectionType, selectedIndex) {
+      const allowed = connectionType === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
+      select.replaceChildren(...allowed.map(index => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = DIAMETERS[index];
+        return option;
+      }));
+      const desired = allowed.includes(Number(selectedIndex)) ? Number(selectedIndex)
+        : (connectionType === 'threaded' ? 0 : 6);
+      select.value = String(desired);
+    }
 
     function syncStateToParent(action = "change") {
       if (loading || !initialized || readOnly) return;
@@ -273,6 +303,7 @@
         drain: document.getElementById('drain-input').value || "",
         nozzles: nozzlesList.map(nz => ({
           tagName: nz.userData.tagName || "",
+          connectionType: nz.userData.connectionType || "flanged",
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
           rating: nz.userData.rating || "150#",
           bodyPart: nz.userData.bodyPart || "shell",
@@ -803,14 +834,15 @@
       return plugGroup;
     }
 
-    function buildNozzle(internalName, tagText, diaIndex, rating, bodyPart, pos, posX,
+    function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS) {
       const group = new THREE.Group();
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
+      const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
       
       group.userData = {
         isNozzle: true, idName: internalName, tagName: tagText,
-        diaIndex: dIndex, rating: rating, bodyPart: bodyPart, pos: pos,      
+        diaIndex: dIndex, connectionType: type, rating: rating, bodyPart: bodyPart, pos: pos,
         valX: posX, valY: NOZZLE_Y, 
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS
@@ -819,68 +851,83 @@
       const nzMat = nozzleMatBase.clone();
       const flMat = flangeMatBase.clone();
       group.userData.materials = [nzMat, flMat]; 
-      
-      const pOuter = 0.12;
-      const pInner = 0.09;
-      const nTop = 0.14;
-      const fOuter = 0.22;
-      const pHeight = 0.15;
-      const nHeight = 0.08;
-      const fThick = 0.03;
-
-      const tubeProfile = [
-        [pInner, 0], [pOuter, 0], [pOuter, pHeight],
-        [nTop, pHeight + nHeight], [pInner, pHeight + nHeight], [pInner, 0]
-      ].map(([x, y]) => new THREE.Vector2(x, y));
-      const pipe = new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat);
-      group.add(pipe);
-
-      const flangeShape = new THREE.Shape();
-      flangeShape.absarc(0, 0, fOuter, 0, Math.PI * 2, false);
-      const bore = new THREE.Path();
-      bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
-      flangeShape.holes.push(bore);
-      for (let i = 0; i < 8; i++) {
-        const angle = (i + 0.5) * Math.PI / 4;
-        const hole = new THREE.Path();
-        hole.absarc(Math.cos(angle) * 0.18, Math.sin(angle) * 0.18, 0.014, 0, Math.PI * 2, true);
-        flangeShape.holes.push(hole);
+      let totalH, plugNS, plugFS;
+      if (type === 'threaded') {
+        // Conexión roscada directa: copla, tramo roscado y cabeza hexagonal.
+        const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.10, 32), nzMat);
+        coupling.position.y = 0.05;
+        group.add(coupling);
+        const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.11, 32), flMat);
+        threadedBody.position.y = 0.145;
+        group.add(threadedBody);
+        for (let y = 0.105; y <= 0.19; y += 0.012) {
+          const thread = new THREE.Mesh(new THREE.TorusGeometry(0.077, 0.003, 5, 32), nutMat);
+          thread.rotation.x = Math.PI / 2;
+          thread.position.y = y;
+          group.add(thread);
+        }
+        const hexHead = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.075, 6), plugMat);
+        hexHead.position.y = 0.235;
+        group.add(hexHead);
+        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.009, 8, 48), weldMat);
+        baseWeld.rotation.x = Math.PI / 2;
+        baseWeld.position.y = 0.008;
+        group.add(baseWeld);
+        totalH = 0.28;
+        plugNS = new THREE.Group();
+        plugFS = new THREE.Group();
+        group.add(plugNS, plugFS);
+      } else {
+        const pOuter = 0.12, pInner = 0.09, nTop = 0.14, fOuter = 0.22;
+        const pHeight = 0.15, nHeight = 0.08, fThick = 0.03;
+        const tubeProfile = [
+          [pInner, 0], [pOuter, 0], [pOuter, pHeight],
+          [nTop, pHeight + nHeight], [pInner, pHeight + nHeight], [pInner, 0]
+        ].map(([x, y]) => new THREE.Vector2(x, y));
+        group.add(new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat));
+        const flangeShape = new THREE.Shape();
+        flangeShape.absarc(0, 0, fOuter, 0, Math.PI * 2, false);
+        const bore = new THREE.Path();
+        bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
+        flangeShape.holes.push(bore);
+        for (let i = 0; i < 8; i++) {
+          const angle = (i + 0.5) * Math.PI / 4;
+          const boltHole = new THREE.Path();
+          boltHole.absarc(Math.cos(angle) * 0.18, Math.sin(angle) * 0.18, 0.014, 0, Math.PI * 2, true);
+          flangeShape.holes.push(boltHole);
+        }
+        const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
+          depth: fThick, bevelEnabled: true, bevelThickness: 0.0015,
+          bevelSize: 0.0015, bevelSegments: 1, steps: 1, curveSegments: 32
+        }), flMat);
+        flange.rotation.x = -Math.PI / 2;
+        flange.position.y = pHeight + nHeight;
+        group.add(flange);
+        totalH = pHeight + nHeight + fThick;
+        const faceProfile = [[pInner, totalH], [0.145, totalH],
+          [0.145, totalH + 0.008], [pInner, totalH + 0.008], [pInner, totalH]]
+          .map(([x, y]) => new THREE.Vector2(x, y));
+        group.add(new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat));
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
+        hole.rotation.x = -Math.PI / 2;
+        hole.position.y = 0.003;
+        group.add(hole);
+        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pOuter, 0.008, 8, 48), weldMat);
+        baseWeld.rotation.x = Math.PI / 2;
+        baseWeld.position.y = 0.007;
+        group.add(baseWeld);
+        plugNS = createNozzlePlug(flMat);
+        plugNS.rotation.x = Math.PI / 2;
+        plugNS.position.set(0, pHeight / 2, pOuter);
+        plugNS.visible = hasNS;
+        group.add(plugNS);
+        plugFS = createNozzlePlug(flMat);
+        plugFS.rotation.x = -Math.PI / 2;
+        plugFS.position.set(0, pHeight / 2, -pOuter);
+        plugFS.visible = hasFS;
+        group.add(plugFS);
       }
-      const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
-        depth: fThick, bevelEnabled: true, bevelThickness: 0.0015,
-        bevelSize: 0.0015, bevelSegments: 1, steps: 1, curveSegments: 32
-      }), flMat);
-      flange.rotation.x = -Math.PI / 2;
-      flange.position.y = pHeight + nHeight;
-      group.add(flange);
-
-      const totalH = pHeight + nHeight + fThick;
-      const faceProfile = [[pInner, totalH], [0.145, totalH],
-        [0.145, totalH + 0.008], [pInner, totalH + 0.008], [pInner, totalH]]
-        .map(([x, y]) => new THREE.Vector2(x, y));
-      group.add(new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat));
-      // Fondo oscuro dentro del conducto, sin tapar la boca de la brida.
-      const hole = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
-      hole.rotation.x = -Math.PI / 2;
-      hole.position.y = 0.003;
-      group.add(hole);
-      const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pOuter, 0.008, 8, 48), weldMat);
-      baseWeld.rotation.x = Math.PI / 2;
-      baseWeld.position.y = 0.007;
-      group.add(baseWeld);
-
-      const plugNS = createNozzlePlug(flMat);
-      plugNS.rotation.x = Math.PI / 2; 
-      plugNS.position.set(0, pHeight / 2, pOuter);  
-      plugNS.visible = hasNS;
-      group.add(plugNS);
       group.userData.plugNS = plugNS;
-
-      const plugFS = createNozzlePlug(flMat);
-      plugFS.rotation.x = -Math.PI / 2; 
-      plugFS.position.set(0, pHeight / 2, -pOuter);  
-      plugFS.visible = hasFS;
-      group.add(plugFS);
       group.userData.plugFS = plugFS;
 
       const nozzleSprite = createTextSprite(tagText, 'white', 40);
@@ -888,7 +935,10 @@
       group.add(nozzleSprite);
       group.userData.nozzleSprite = nozzleSprite;
 
-      const scaleFactor = 0.3 + (dIndex * 0.1);
+      const inches = DIAMETER_INCHES[dIndex] || 2;
+      const scaleFactor = type === 'threaded'
+        ? 0.48 + Math.sqrt(inches) * 0.14
+        : 0.28 + Math.sqrt(inches) * 0.23;
       group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       if(pos === 'superior') {
@@ -925,7 +975,8 @@
           const legacyNS = n.sizeNS === undefined;
           const legacyFS = n.sizeFS === undefined;
           const newNz = buildNozzle(
-            internalName, n.tagName, n.diaIndex, n.rating, n.bodyPart, n.pos, n.valX,
+            internalName, n.tagName, n.diaIndex, n.connectionType || 'flanged',
+            n.rating, n.bodyPart, n.pos, n.valX,
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || "")
           );
@@ -976,9 +1027,11 @@
       const data = selectedNozzle.userData;
       document.getElementById('editor-panel').style.display = 'block';
       document.getElementById('edit-nz-name').value = data.tagName;
-      document.getElementById('edit-nz-dia').selectedIndex = data.diaIndex;
+      document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
+      populateDiameterSelect(document.getElementById('edit-nz-dia'), data.connectionType, data.diaIndex);
       document.getElementById('edit-nz-rating').value = data.rating;
       document.getElementById('edit-nz-body').value = data.bodyPart;
+      updateConnectionTypeUI(data.connectionType || 'flanged');
       
       const bounds = BODY_BOUNDS[data.bodyPart];
       const editX = document.getElementById('edit-nz-x');
@@ -1008,6 +1061,7 @@
     }
 
     const editName = document.getElementById('edit-nz-name');
+    const editType = document.getElementById('edit-nz-type');
     const editDia = document.getElementById('edit-nz-dia');
     const editRating = document.getElementById('edit-nz-rating');
     const editBody = document.getElementById('edit-nz-body');
@@ -1021,6 +1075,12 @@
     const editFsSize = document.getElementById('edit-fs-size');
     const editFsTag = document.getElementById('edit-fs-tag');
 
+    function updateConnectionTypeUI(type) {
+      const threaded = type === 'threaded';
+      document.getElementById('edit-rating-group').style.display = threaded ? 'none' : '';
+      document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
+    }
+
     editName.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       const val = e.target.value;
@@ -1029,11 +1089,35 @@
       syncStateToParent();
     });
 
+    editType.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      const old = selectedNozzle;
+      const data = old.userData;
+      const type = e.target.value === 'threaded' ? 'threaded' : 'flanged';
+      const allowed = type === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
+      const diaIndex = allowed.includes(data.diaIndex) ? data.diaIndex : (type === 'threaded' ? 0 : 6);
+      const replacement = buildNozzle(
+        data.idName, data.tagName, diaIndex, type, type === 'threaded' ? 'NPT' : (data.rating || '150#'),
+        data.bodyPart, data.pos, data.valX,
+        type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
+        type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS
+      );
+      const index = nozzlesList.indexOf(old);
+      if (index >= 0) nozzlesList[index] = replacement;
+      heatExchanger.remove(old);
+      selectedNozzle = null;
+      selectNozzle(replacement);
+      syncStateToParent();
+    });
+
     editDia.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
-      const diaIndex = e.target.selectedIndex;
+      const diaIndex = Number(e.target.value);
       selectedNozzle.userData.diaIndex = diaIndex;
-      const scaleFactor = 0.3 + (diaIndex * 0.1);
+      const inches = DIAMETER_INCHES[diaIndex] || 2;
+      const scaleFactor = selectedNozzle.userData.connectionType === 'threaded'
+        ? 0.48 + Math.sqrt(inches) * 0.14
+        : 0.28 + Math.sqrt(inches) * 0.23;
       selectedNozzle.scale.set(scaleFactor, scaleFactor, scaleFactor);
       syncStateToParent();
     });
@@ -1125,16 +1209,26 @@
       syncStateToParent();
     });
 
+    const newType = document.getElementById('new-nz-type');
+    const newDia = document.getElementById('new-nz-dia');
+    function updateNewConnectionUI(preferred) {
+      const type = newType.value;
+      populateDiameterSelect(newDia, type, preferred);
+      document.getElementById('new-rating-group').style.display = type === 'threaded' ? 'none' : '';
+    }
+    newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
+    updateNewConnectionUI(6);
+
     document.getElementById('btn-add-nz').addEventListener('click', () => {
       customNozzleCount++;
-      const diaSelect = document.getElementById('new-nz-dia');
-      const diaIndex = Array.from(editDia.options).findIndex(option => option.value === diaSelect.value); 
-      const rating = document.getElementById('new-nz-rating').value;
+      const connectionType = newType.value === 'threaded' ? 'threaded' : 'flanged';
+      const diaIndex = Number(newDia.value);
+      const rating = connectionType === 'threaded' ? 'NPT' : document.getElementById('new-nz-rating').value;
       const bodyPart = document.getElementById('new-nz-body').value;
       const internalName = `Custom_Nozzle_${customNozzleCount}`;
       const startX = BODY_BOUNDS[bodyPart].center;
 
-      const newNz = buildNozzle(internalName, "", diaIndex, rating, bodyPart, "superior", startX,
+      const newNz = buildNozzle(internalName, "", diaIndex, connectionType, rating, bodyPart, "superior", startX,
         false, "", "", false, "", "");
       nozzlesList.push(newNz);
       selectNozzle(newNz);
