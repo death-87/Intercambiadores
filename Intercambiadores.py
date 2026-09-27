@@ -172,10 +172,10 @@ def validar_diseno(data):
     if not isinstance(dimensions, dict):
         raise ValueError("dimensions debe ser un objeto")
     limits = {
-        "shellLength": (3.0, 7.0), "reducerLength": (0.4, 1.8),
-        "channelLength": (0.35, 1.5), "bonnetLength": (0.25, 0.9),
-        "shellDiameter": (0.7, 2.5), "channelDiameter": (0.4, 2.0),
-        "bonnetDiameter": (0.7, 2.5),
+        "shellLength": (0.5, 7.0), "reducerLength": (0.2, 2.0),
+        "channelLength": (0.2, 2.0), "bonnetLength": (0.2, 2.0),
+        "shellDiameter": (0.2, 2.0), "channelDiameter": (0.2, 2.0),
+        "bonnetDiameter": (0.2, 2.0),
     }
     for field, value in dimensions.items():
         if field not in limits:
