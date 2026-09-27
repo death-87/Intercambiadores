@@ -166,7 +166,7 @@ def cargar_datos():
 def validar_diseno(data):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
-    if data.get("model", "A") not in ("A", "B"):
+    if data.get("model", "A") not in ("A", "B", "C"):
         raise ValueError("modelo desconocido")
     dimensions = data.get("dimensions", {})
     if not isinstance(dimensions, dict):
