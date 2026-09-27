@@ -29,7 +29,9 @@ SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
 HOJA_3D = "Diseño3D"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
-DIAMETROS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"', '6"', '8"', '10"', '12"']
+# Los primeros 11 índices se conservan para no alterar diseños históricos.
+DIAMETROS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"', '6"',
+             '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"']
 COLORES = {"CHEQUEADO": "#28a745", "NO CHEQUEADO": "#dc3545", "SIN INFORMACIÓN": "#6c757d"}
 
 
@@ -194,6 +196,8 @@ def validar_diseno(data):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
         if n.get("bodyPart") not in {"shell", "channel", "bonnet"}:
             raise ValueError("cuerpo de boquilla inválido")
+        if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
+            raise ValueError("tipo de conexión inválido")
         if n.get("pos") not in {"superior", "inferior"}:
             raise ValueError("posición de boquilla inválida")
         x = n.get("valX")
@@ -243,10 +247,12 @@ def filas_boquillas(config):
         tag_fs = "" if legacy_fs else (n.get("tagFS") or "")
         detalle_ns = medida_ns + (f" · TAG {tag_ns}" if tag_ns else "")
         detalle_fs = medida_fs + (f" · TAG {tag_fs}" if tag_fs else "")
+        tipo = "ROSCADA" if n.get("connectionType", "flanged") == "threaded" else "BRIDADA"
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
             "DIÁMETRO": DIAMETROS[n["diaIndex"]],
-            "RATING": n.get("rating") or "Sin información",
+            "RATING": "NPT" if tipo == "ROSCADA" else (n.get("rating") or "Sin información"),
+            "TIPO": tipo,
             "CUERPO": n["bodyPart"].upper(), "POSICIÓN": n["pos"],
             "NS": detalle_ns if n.get("hasNS", False) else "—",
             "FS": detalle_fs if n.get("hasFS", False) else "—",
@@ -270,8 +276,11 @@ def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
         return n, "Total declarado en planilla"
     if config is None:
         return None, "Sin cantidad válida ni diseño disponible"
-    n = sum(int(noz.get("hasNS", False)) + int(noz.get("hasFS", False))
-            for noz in config.get("nozzles", []))
+    n = sum(
+        1 if noz.get("connectionType", "flanged") == "threaded"
+        else int(noz.get("hasNS", False)) + int(noz.get("hasFS", False))
+        for noz in config.get("nozzles", [])
+    )
     if incluir_bonete:
         # En este esquema, una medida informada representa una conexión presente.
         n += int(informado(config.get("vent", ""))) + int(informado(config.get("drain", "")))
@@ -383,6 +392,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     conexiones = []
     if config:
         for n in config.get("nozzles", []):
+            if n.get("connectionType", "flanged") == "threaded":
+                conexiones.append([
+                    n.get("bodyPart", "").upper(), "DIRECTA", DIAMETROS[n["diaIndex"]],
+                    n.get("tagName") or "—", n.get("bodyPart", "").upper(), n.get("pos", ""),
+                ])
+                continue
             for lado in ("NS", "FS"):
                 if n.get("has" + lado, False):
                     legacy = ("size" + lado) not in n
@@ -418,9 +433,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
 
     elementos.append(Paragraph("NOZZLE SCHEDULE", section_style))
     if filas:
-        encabezado = ["MK", "QT", "DIÁMETRO", "RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
+        encabezado = ["MK", "QT", "DIÁMETRO", "TIPO / RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
         datos_nozzle = [[p(x, cell_header) for x in encabezado]] + [
-            [p(fila[k], cell_center if k in {"QT", "DIÁMETRO", "NS", "FS"} else cell) for k in encabezado]
+            [p(
+                f"{fila['TIPO']} · {fila['RATING']}" if k == "TIPO / RATING" else fila[k],
+                cell_center if k in {"QT", "DIÁMETRO", "TIPO / RATING", "NS", "FS"} else cell,
+            ) for k in encabezado]
             for fila in filas
         ]
         tabla_nozzle = Table(datos_nozzle, repeatRows=1,
