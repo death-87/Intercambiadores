@@ -194,11 +194,11 @@ def validar_diseno(data):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
-        if n.get("bodyPart") not in {"shell", "channel", "bonnet"}:
+        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet"}:
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
             raise ValueError("tipo de conexión inválido")
-        if n.get("pos") not in {"superior", "inferior"}:
+        if n.get("pos") not in {"superior", "inferior", "front", "rear"}:
             raise ValueError("posición de boquilla inválida")
         x = n.get("valX")
         if type(x) not in (int, float) or not math.isfinite(x):
@@ -248,12 +248,14 @@ def filas_boquillas(config):
         detalle_ns = medida_ns + (f" · TAG {tag_ns}" if tag_ns else "")
         detalle_fs = medida_fs + (f" · TAG {tag_fs}" if tag_fs else "")
         tipo = "ROSCADA" if n.get("connectionType", "flanged") == "threaded" else "BRIDADA"
+        posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
+                    "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
             "DIÁMETRO": DIAMETROS[n["diaIndex"]],
             "RATING": "NPT" if tipo == "ROSCADA" else (n.get("rating") or "Sin información"),
             "TIPO": tipo,
-            "CUERPO": n["bodyPart"].upper(), "POSICIÓN": n["pos"],
+            "CUERPO": n["bodyPart"].upper(), "POSICIÓN": posicion,
             "NS": detalle_ns if n.get("hasNS", False) else "—",
             "FS": detalle_fs if n.get("hasFS", False) else "—",
         })
@@ -392,10 +394,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     conexiones = []
     if config:
         for n in config.get("nozzles", []):
+            posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
+                        "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
             if n.get("connectionType", "flanged") == "threaded":
                 conexiones.append([
                     n.get("bodyPart", "").upper(), "DIRECTA", DIAMETROS[n["diaIndex"]],
-                    n.get("tagName") or "—", n.get("bodyPart", "").upper(), n.get("pos", ""),
+                    n.get("tagName") or "—", n.get("bodyPart", "").upper(), posicion,
                 ])
                 continue
             for lado in ("NS", "FS"):
@@ -405,7 +409,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
                     tag_plug = "" if legacy else (n.get("tag" + lado) or "")
                     conexiones.append([
                         n.get("tagName") or "Sin TAG", lado, medida, tag_plug or "—",
-                        n.get("bodyPart", "").upper(), n.get("pos", ""),
+                        n.get("bodyPart", "").upper(), posicion,
                     ])
         for servicio, campo in (("VENT", "vent"), ("DRAIN", "drain")):
             if informado(config.get(campo, "")):
@@ -653,14 +657,16 @@ def main():
                 st.info(estado(tag) + ": no hay una configuración válida disponible para mostrar boquillas.")
             else:
                 st.caption(f"Modelo del intercambiador: {config.get('model', 'A')}")
-                if config.get("model") == "B":
-                    dims = config.get("dimensions", {})
-                    st.caption("Largos: " + " · ".join([
-                        f"Shell {dims.get('shellLength', 4.5):.2f} m",
-                        f"Transición {dims.get('reducerLength', 0.9):.2f} m",
-                        f"Channel {dims.get('channelLength', 0.65):.2f} m",
-                        f"Bonete {dims.get('bonnetLength', 0.40):.2f} m",
-                    ]))
+                dims = config.get("dimensions", {})
+                modelo = config.get("model", "A")
+                largos = [f"Shell {dims.get('shellLength', 4.5 if modelo == 'B' else 4.275):.2f} m"]
+                if modelo == "B":
+                    largos.append(f"Transición {dims.get('reducerLength', 0.9):.2f} m")
+                largos.extend([
+                    f"Channel {dims.get('channelLength', 0.65 if modelo == 'B' else 1.20):.2f} m",
+                    f"Bonete {dims.get('bonnetLength', 0.40 if modelo == 'B' else 0.80):.2f} m",
+                ])
+                st.caption("Largos: " + " · ".join(largos))
                 boquillas = filas_boquillas(config)
                 if boquillas:
                     st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
