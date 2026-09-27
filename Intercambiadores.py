@@ -207,6 +207,12 @@ def validar_diseno(data):
         x = n.get("valX")
         if type(x) not in (int, float) or not math.isfinite(x):
             raise ValueError("posición X inválida")
+        neck_length = n.get("neckLength")
+        if neck_length is not None and (
+            type(neck_length) not in (int, float) or not math.isfinite(neck_length)
+            or not 0.10 <= neck_length <= 1.50
+        ):
+            raise ValueError("largo visual del niple fuera de rango")
         for field in ("hasNS", "hasFS"):
             if field in n and not isinstance(n[field], bool):
                 raise ValueError(f"{field} debe ser booleano")
