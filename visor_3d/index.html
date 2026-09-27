@@ -118,6 +118,7 @@
         <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
         <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
       </div>
+      <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
 
       <div class="input-group">
         <label>Cuerpo:</label>
@@ -193,6 +194,7 @@
       <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
       <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
     </div>
+    <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
     
     <div class="input-group">
       <select id="new-nz-body">
@@ -298,6 +300,63 @@
     const DIAMETER_INCHES = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5, 14, 16, 18, 20, 24];
     const FLANGED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16];
     const THREADED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11];
+    const INCH = 0.0254;
+    // ASME B16.5 WN: D exterior, B espesor, A base del hub, OD tubo,
+    // H largo total, K círculo de pernos, L perforación; todo en pulgadas.
+    const FLANGE_DIMENSIONS = {
+      '150#': [
+        [3.50,.38,1.19,.84,1.81,2.38,.625,4], [3.88,.44,1.50,1.05,2.00,2.75,.625,4],
+        [4.25,.50,1.94,1.32,2.12,3.12,.625,4], [5.00,.62,2.56,1.90,2.38,3.88,.625,4],
+        [6.00,.69,3.06,2.38,2.44,4.75,.750,4], [7.50,.88,4.25,3.50,2.69,6.00,.750,4],
+        [9.00,.88,5.31,4.50,2.94,7.50,.750,8], [11.00,.94,7.56,6.63,3.44,9.50,.875,8],
+        [13.50,1.06,9.69,8.63,3.94,11.75,.875,8], [16.00,1.12,12.00,10.75,3.94,14.25,1.000,12],
+        [19.00,1.19,14.38,12.75,4.44,17.00,1.000,12], [7.00,.81,3.56,2.88,2.69,5.50,.750,4],
+        [21.00,1.31,15.75,14.00,4.94,18.75,1.125,12], [23.50,1.38,18.00,16.00,4.94,21.25,1.125,16],
+        [25.00,1.50,19.88,18.00,5.44,22.75,1.250,16], [27.50,1.62,22.00,20.00,5.62,25.00,1.250,20],
+        [32.00,1.81,26.12,24.00,5.94,29.50,1.375,20]
+      ],
+      '300#': [
+        [3.75,.50,1.50,.84,2.00,2.62,.625,4], [4.62,.56,1.88,1.05,2.19,3.25,.750,4],
+        [4.88,.62,2.12,1.32,2.38,3.50,.750,4], [6.12,.75,2.75,1.90,2.63,4.50,.875,4],
+        [6.50,.81,3.31,2.38,2.69,5.00,.750,8], [8.25,1.06,4.62,3.50,3.06,6.62,.875,8],
+        [10.00,1.19,5.75,4.50,3.32,7.88,.875,8], [12.50,1.38,8.12,6.63,3.82,10.62,.875,12],
+        [15.00,1.56,10.25,8.63,4.32,13.00,1.000,12], [17.50,1.81,12.62,10.75,4.56,15.25,1.125,16],
+        [20.50,1.94,14.75,12.75,5.06,17.75,1.250,16], [7.50,.94,3.94,2.88,2.94,5.88,.875,8],
+        [23.00,2.06,16.75,14.00,5.56,20.25,1.250,20], [25.50,2.19,19.00,16.00,5.69,22.50,1.375,20],
+        [28.00,2.31,21.00,18.00,6.19,24.75,1.375,24], [30.50,2.44,23.12,20.00,6.32,27.00,1.375,24],
+        [36.00,2.69,27.62,24.00,6.56,32.00,1.625,24]
+      ],
+      '600#': [
+        [3.75,.56,1.50,.84,2.06,2.62,.625,4], [4.62,.62,1.88,1.05,2.25,3.25,.750,4],
+        [4.88,.69,2.12,1.32,2.44,3.50,.750,4], [6.12,.88,2.75,1.90,2.75,4.50,.875,4],
+        [6.50,1.00,3.31,2.38,2.88,5.00,.750,8], [8.25,1.25,4.62,3.50,3.25,6.62,.875,8],
+        [10.75,1.50,6.00,4.50,4.00,8.50,1.000,8], [14.00,1.88,8.75,6.63,4.62,11.50,1.125,12],
+        [16.50,2.19,10.75,8.63,5.25,13.75,1.250,12], [20.00,2.50,13.50,10.75,6.00,17.00,1.375,16],
+        [22.00,2.62,15.75,12.75,6.12,19.25,1.375,20], [7.50,1.12,3.94,2.88,3.12,5.88,.875,8],
+        [23.75,2.75,17.00,14.00,6.50,20.75,1.500,20], [27.00,3.00,19.50,16.00,7.00,23.75,1.625,20],
+        [29.25,3.25,21.50,18.00,7.25,25.75,1.750,20], [32.00,3.50,24.00,20.00,7.50,28.50,1.750,24],
+        [37.00,4.00,28.25,24.00,8.00,33.00,2.000,24]
+      ]
+    };
+
+    function flangeDimensions(diaIndex, rating) {
+      const row = (FLANGE_DIMENSIONS[rating] || FLANGE_DIMENSIONS['150#'])[diaIndex];
+      const [D, B, A, OD, H, K, L, bolts] = row;
+      return {D:D*INCH, B:B*INCH, A:A*INCH, OD:OD*INCH, H:H*INCH,
+        K:K*INCH, L:L*INCH, bolts};
+    }
+
+    function updateAsmeInfo(elementId, diaIndex, rating, type) {
+      const element = document.getElementById(elementId);
+      if (type === 'threaded') {
+        element.style.display = 'none';
+        return;
+      }
+      const dim = flangeDimensions(Number(diaIndex), rating);
+      const mm = value => Math.round(value * 1000);
+      element.textContent = `ASME B16.5 · Ø brida ${mm(dim.D)} mm · BCD ${mm(dim.K)} mm · ${dim.bolts} pernos · espesor ${mm(dim.B)} mm`;
+      element.style.display = 'block';
+    }
 
     function populateDiameterSelect(select, connectionType, selectedIndex) {
       const allowed = connectionType === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
@@ -980,36 +1039,48 @@
       group.userData.materials = [nzMat, flMat]; 
       let totalH, plugNS, plugFS;
       if (type === 'threaded') {
-        // Conexión roscada directa: copla, tramo roscado y cabeza hexagonal.
-        const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.10, 32), nzMat);
-        coupling.position.y = 0.05;
+        const pipeOD = flangeDimensions(dIndex, '150#').OD;
+        const classFactor = normalizedRating === '6000#' ? 1.16 : 1.0;
+        const couplingR = pipeOD * 0.72 * classFactor;
+        const couplingH = Math.max(0.018, pipeOD * 0.72);
+        const threadR = pipeOD * 0.54;
+        const threadH = Math.max(0.018, pipeOD * 0.65);
+        const headH = Math.max(0.018, pipeOD * 0.55);
+        const coupling = new THREE.Mesh(new THREE.CylinderGeometry(couplingR, couplingR, couplingH, 32), nzMat);
+        coupling.position.y = couplingH / 2;
         group.add(coupling);
-        const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.11, 32), flMat);
-        threadedBody.position.y = 0.145;
+        const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(threadR, threadR, threadH, 32), flMat);
+        threadedBody.position.y = couplingH + threadH / 2;
         group.add(threadedBody);
-        for (let y = 0.105; y <= 0.19; y += 0.012) {
-          const thread = new THREE.Mesh(new THREE.TorusGeometry(0.077, 0.003, 5, 32), nutMat);
+        for (let i = 0; i < 5; i++) {
+          const thread = new THREE.Mesh(new THREE.TorusGeometry(threadR * 1.03, Math.max(0.0008, pipeOD * 0.025), 5, 32), nutMat);
           thread.rotation.x = Math.PI / 2;
-          thread.position.y = y;
+          thread.position.y = couplingH + threadH * (0.15 + i * 0.17);
           group.add(thread);
         }
-        const hexHead = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.075, 6), plugMat);
-        hexHead.position.y = 0.235;
+        const headR = pipeOD * 0.78 * classFactor;
+        const hexHead = new THREE.Mesh(new THREE.CylinderGeometry(headR, headR, headH, 6), plugMat);
+        hexHead.position.y = couplingH + threadH + headH / 2;
         group.add(hexHead);
-        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.009, 8, 48), weldMat);
+        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(couplingR, Math.max(0.0012, pipeOD * 0.035), 8, 48), weldMat);
         baseWeld.rotation.x = Math.PI / 2;
-        baseWeld.position.y = 0.008;
+        baseWeld.position.y = 0.002;
         group.add(baseWeld);
-        totalH = 0.28;
+        totalH = couplingH + threadH + headH;
         plugNS = new THREE.Group();
         plugFS = new THREE.Group();
         group.add(plugNS, plugFS);
       } else {
-        const pOuter = 0.12, pInner = 0.09, nTop = 0.14, fOuter = 0.22;
-        const pHeight = 0.15, nHeight = 0.08, fThick = 0.03;
+        const dim = flangeDimensions(dIndex, normalizedRating);
+        const pipeR = dim.OD / 2;
+        const pInner = Math.max(dim.OD * 0.40, pipeR - Math.min(0.012, dim.OD * 0.08));
+        const hubR = dim.A / 2;
+        const fOuter = dim.D / 2;
+        const rfHeight = group.userData.face === 'RF' ? (normalizedRating === '600#' ? 0.00635 : 0.0016) : 0;
+        const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
         const tubeProfile = [
-          [pInner, 0], [pOuter, 0], [pOuter, pHeight],
-          [nTop, pHeight + nHeight], [pInner, pHeight + nHeight], [pInner, 0]
+          [pInner, 0], [pipeR, 0], [hubR, hubHeight],
+          [pInner, hubHeight], [pInner, 0]
         ].map(([x, y]) => new THREE.Vector2(x, y));
         group.add(new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat));
         const flangeShape = new THREE.Shape();
@@ -1017,22 +1088,24 @@
         const bore = new THREE.Path();
         bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
         flangeShape.holes.push(bore);
-        for (let i = 0; i < 8; i++) {
-          const angle = (i + 0.5) * Math.PI / 4;
+        for (let i = 0; i < dim.bolts; i++) {
+          const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
           const boltHole = new THREE.Path();
-          boltHole.absarc(Math.cos(angle) * 0.18, Math.sin(angle) * 0.18, 0.014, 0, Math.PI * 2, true);
+          boltHole.absarc(Math.cos(angle) * dim.K / 2, Math.sin(angle) * dim.K / 2,
+            dim.L / 2, 0, Math.PI * 2, true);
           flangeShape.holes.push(boltHole);
         }
         const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
-          depth: fThick, bevelEnabled: true, bevelThickness: 0.0015,
-          bevelSize: 0.0015, bevelSegments: 1, steps: 1, curveSegments: 32
+          depth: dim.B, bevelEnabled: true, bevelThickness: Math.min(0.0015, dim.B * 0.06),
+          bevelSize: Math.min(0.0015, dim.B * 0.06), bevelSegments: 1, steps: 1, curveSegments: 48
         }), flMat);
         flange.rotation.x = -Math.PI / 2;
-        flange.position.y = pHeight + nHeight;
+        flange.position.y = hubHeight;
         group.add(flange);
-        totalH = pHeight + nHeight + fThick;
-        const faceProfile = [[pInner, totalH], [0.145, totalH],
-          [0.145, totalH + 0.008], [pInner, totalH + 0.008], [pInner, totalH]]
+        totalH = dim.H;
+        const faceOuter = Math.min(fOuter * 0.78, Math.max(hubR * 1.12, pipeR * 1.28));
+        const faceProfile = [[pInner, totalH - rfHeight], [faceOuter, totalH - rfHeight],
+          [faceOuter, totalH], [pInner, totalH], [pInner, totalH - rfHeight]]
           .map(([x, y]) => new THREE.Vector2(x, y));
         const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat);
         faceMesh.visible = group.userData.face === 'RF';
@@ -1042,18 +1115,36 @@
         hole.rotation.x = -Math.PI / 2;
         hole.position.y = 0.003;
         group.add(hole);
-        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pOuter, 0.008, 8, 48), weldMat);
+        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pipeR, Math.max(0.0012, dim.OD * 0.028), 8, 48), weldMat);
         baseWeld.rotation.x = Math.PI / 2;
-        baseWeld.position.y = 0.007;
+        baseWeld.position.y = 0.002;
         group.add(baseWeld);
+        const studR = dim.L * 0.37;
+        const nutH = Math.max(0.004, studR * 0.85);
+        for (let i = 0; i < dim.bolts; i++) {
+          const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
+          const bx = Math.cos(angle) * dim.K / 2;
+          const bz = Math.sin(angle) * dim.K / 2;
+          const stud = new THREE.Mesh(new THREE.CylinderGeometry(studR, studR, dim.B + rfHeight + nutH * 2, 12), studMat);
+          stud.position.set(bx, hubHeight + dim.B / 2, bz);
+          group.add(stud);
+          for (const by of [hubHeight - nutH * 0.35, hubHeight + dim.B + rfHeight + nutH * 0.35]) {
+            const nut = new THREE.Mesh(new THREE.CylinderGeometry(studR * 1.65, studR * 1.65, nutH, 6), nutMat);
+            nut.position.set(bx, by, bz);
+            group.add(nut);
+          }
+        }
+        const plugScale = Math.max(0.18, Math.min(1.0, dim.OD * 2.4));
         plugNS = createNozzlePlug(flMat);
+        plugNS.scale.setScalar(plugScale);
         plugNS.rotation.x = Math.PI / 2;
-        plugNS.position.set(0, pHeight / 2, pOuter);
+        plugNS.position.set(0, hubHeight * 0.48, hubR + 0.008);
         plugNS.visible = hasNS;
         group.add(plugNS);
         plugFS = createNozzlePlug(flMat);
+        plugFS.scale.setScalar(plugScale);
         plugFS.rotation.x = -Math.PI / 2;
-        plugFS.position.set(0, pHeight / 2, -pOuter);
+        plugFS.position.set(0, hubHeight * 0.48, -hubR - 0.008);
         plugFS.visible = hasFS;
         group.add(plugFS);
       }
@@ -1061,15 +1152,10 @@
       group.userData.plugFS = plugFS;
 
       const nozzleSprite = createTextSprite(tagText, 'white', 40);
-      nozzleSprite.position.set(0, totalH + 0.2, 0);
+      const referenceOD = flangeDimensions(dIndex, type === 'flanged' ? normalizedRating : '150#').D;
+      nozzleSprite.position.set(0, totalH + Math.max(0.06, referenceOD * 0.18), 0);
       group.add(nozzleSprite);
       group.userData.nozzleSprite = nozzleSprite;
-
-      const inches = DIAMETER_INCHES[dIndex] || 2;
-      const scaleFactor = type === 'threaded'
-        ? 0.48 + Math.sqrt(inches) * 0.14
-        : 0.28 + Math.sqrt(inches) * 0.23;
-      group.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       placeNozzle(group, posX, pos, bodyPart);
 
@@ -1171,6 +1257,7 @@
       document.getElementById('edit-nz-body').value = data.bodyPart;
       updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
       document.getElementById('edit-nz-face').value = data.face || 'RF';
+      updateAsmeInfo('edit-asme-info', data.diaIndex, data.rating, data.connectionType);
       
       const bounds = BODY_BOUNDS[data.bodyPart];
       const editX = document.getElementById('edit-nz-x');
@@ -1231,6 +1318,7 @@
       const threaded = type === 'threaded';
       populateRatingSelect(editRating, type, preferredRating);
       document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
+      document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
     }
 
@@ -1254,17 +1342,15 @@
       syncStateToParent();
     });
 
-    editType.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
+    function rebuildSelectedNozzle(overrides = {}) {
+      if (!selectedNozzle) return null;
       const old = selectedNozzle;
-      const data = old.userData;
-      const type = e.target.value === 'threaded' ? 'threaded' : 'flanged';
+      const data = {...old.userData, ...overrides};
+      const type = data.connectionType === 'threaded' ? 'threaded' : 'flanged';
       const allowed = type === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
-      const diaIndex = allowed.includes(data.diaIndex) ? data.diaIndex : (type === 'threaded' ? 0 : 6);
+      const diaIndex = allowed.includes(Number(data.diaIndex)) ? Number(data.diaIndex) : (type === 'threaded' ? 0 : 6);
       const replacement = buildNozzle(
-        data.idName, data.tagName, diaIndex, type,
-        type === 'threaded' ? (['3000#', '6000#'].includes(data.rating) ? data.rating : '3000#')
-          : (['150#', '300#', '600#'].includes(data.rating) ? data.rating : '150#'),
+        data.idName, data.tagName, diaIndex, type, data.rating,
         data.bodyPart, data.pos, data.valX,
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
@@ -1276,31 +1362,31 @@
       selectedNozzle = null;
       selectNozzle(replacement);
       syncStateToParent();
+      return replacement;
+    }
+
+    editType.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      const type = e.target.value === 'threaded' ? 'threaded' : 'flanged';
+      rebuildSelectedNozzle({
+        connectionType: type,
+        rating: type === 'threaded' ? '3000#' : '150#'
+      });
     });
 
     editDia.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
-      const diaIndex = Number(e.target.value);
-      selectedNozzle.userData.diaIndex = diaIndex;
-      const inches = DIAMETER_INCHES[diaIndex] || 2;
-      const scaleFactor = selectedNozzle.userData.connectionType === 'threaded'
-        ? 0.48 + Math.sqrt(inches) * 0.14
-        : 0.28 + Math.sqrt(inches) * 0.23;
-      selectedNozzle.scale.set(scaleFactor, scaleFactor, scaleFactor);
-      syncStateToParent();
+      rebuildSelectedNozzle({diaIndex: Number(e.target.value)});
     });
 
     editRating.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
-      selectedNozzle.userData.rating = e.target.value;
-      syncStateToParent();
+      rebuildSelectedNozzle({rating: e.target.value});
     });
 
     editFace.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
-      selectedNozzle.userData.face = e.target.value;
-      if (selectedNozzle.userData.faceMesh) selectedNozzle.userData.faceMesh.visible = e.target.value === 'RF';
-      syncStateToParent();
+      rebuildSelectedNozzle({face: e.target.value});
     });
 
     editBody.addEventListener('change', (e) => {
@@ -1386,8 +1472,13 @@
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
         type === 'threaded' ? '3000#' : '150#');
       document.getElementById('new-flange-details').style.display = type === 'threaded' ? 'none' : 'flex';
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, type);
     }
     newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
+    newDia.addEventListener('change', () => updateAsmeInfo('new-asme-info', newDia.value,
+      document.getElementById('new-nz-rating').value, newType.value));
+    document.getElementById('new-nz-rating').addEventListener('change', () =>
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, newType.value));
     document.getElementById('new-nz-service').addEventListener('change', (event) => {
       if (event.target.value === 'vent' || event.target.value === 'drain') {
         newType.value = 'threaded';
