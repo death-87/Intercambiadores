@@ -63,7 +63,7 @@
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete elíptico</option><option value="B">Modelo B · Transición excéntrica</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
   <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
@@ -633,8 +633,21 @@
       .filter(part => part !== rearBonnetGroup && part !== channelGroup)
       .forEach(part => modelAShellGroup.add(part));
     heatExchanger.add(modelAShellGroup);
-    const modelAParts = [modelAShellGroup, rearBonnetGroup, channelGroup];
     const MODEL_A_BONNET_LENGTH = 0.80;
+
+    // Modelo C: mismo cuerpo y channel del A, con bonete soldado directamente.
+    const weldedBonnetGroup = new THREE.Group();
+    weldedBonnetGroup.name = 'Modelo C: bonete soldado sin bridas';
+    const weldedBonnetBody = new THREE.Mesh(new THREE.LatheGeometry(bonnetProfile, 96), shellMat);
+    weldedBonnetBody.rotation.z = -Math.PI / 2;
+    weldedBonnetGroup.add(weldedBonnetBody);
+    ringX(weldedBonnetGroup, 0.012, R, 0.014, weldMat);
+    const weldedVentPlug = createBonnetPlug(NOZZLE_Y, 0);
+    const weldedDrainPlug = createBonnetPlug(-NOZZLE_Y, Math.PI);
+    weldedBonnetGroup.add(weldedVentPlug, weldedDrainPlug);
+    heatExchanger.add(weldedBonnetGroup);
+    weldedBonnetGroup.visible = false;
+
     const modelB = new THREE.Group();
     modelB.name = 'Modelo B: transición cónica y cabezal reducido';
     heatExchanger.add(modelB);
@@ -836,6 +849,11 @@
       channelGroup.scale.set(1, channelScale, channelScale);
       bonnetBody.scale.y = bonnetLengthScale;
       rearBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
+      weldedBonnetGroup.position.x = currentDimensions.shellLength / 2;
+      weldedBonnetBody.scale.y = bonnetLengthScale;
+      weldedBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
+      weldedVentPlug.position.x = currentDimensions.bonnetLength * 0.45;
+      weldedDrainPlug.position.x = currentDimensions.bonnetLength * 0.45;
     }
     function componentRadius(bodyPart) {
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
@@ -843,7 +861,7 @@
       return currentDimensions.shellDiameter / 2;
     }
     function sectionAt(x, bodyPart = 'shell') {
-      if (currentModel === 'A') {
+      if (currentModel !== 'B') {
         return {centerY: 0, radius: componentRadius(bodyPart)};
       }
       const p = modelBLayout();
@@ -881,10 +899,17 @@
       }
     }
     function applyModel(model, reposition = false) {
-      currentModel = model === 'B' ? 'B' : 'A';
+      currentModel = ['A', 'B', 'C'].includes(model) ? model : 'A';
       document.getElementById('equipment-model').value = currentModel;
-      modelAParts.forEach(part => part.visible = currentModel === 'A');
+      modelAShellGroup.visible = currentModel !== 'B';
+      channelGroup.visible = currentModel !== 'B';
+      rearBonnetGroup.visible = currentModel === 'A';
+      weldedBonnetGroup.visible = currentModel === 'C';
       modelB.visible = currentModel === 'B';
+      flangeRight.visible = currentModel !== 'C';
+      shellFlangeRings
+        .filter(ring => ring.userData.modelASide > 0)
+        .forEach(ring => { ring.visible = currentModel !== 'C'; });
       document.getElementById('transition-length-control').style.display = currentModel === 'B' ? '' : 'none';
       applyModelADimensions();
       const p = modelBLayout();
@@ -902,12 +927,13 @@
         : {min: channelGroup.position.x - currentDimensions.channelLength - 0.04,
           max: channelGroup.position.x - 0.20,
           center: channelGroup.position.x - 0.12 - currentDimensions.channelLength / 2};
+      const bonnetBaseX = currentModel === 'C' ? weldedBonnetGroup.position.x : rearBonnetGroup.position.x;
       BODY_BOUNDS.bonnet = currentModel === 'B'
         ? {min: p.shellRight + 0.05, max: p.bonnetTip - 0.05,
           center: p.shellRight + currentDimensions.bonnetLength * 0.45}
-        : {min: rearBonnetGroup.position.x + 0.05,
-          max: rearBonnetGroup.position.x + Math.max(0.10, currentDimensions.bonnetLength - 0.05),
-          center: rearBonnetGroup.position.x + currentDimensions.bonnetLength * 0.45};
+        : {min: bonnetBaseX + 0.05,
+          max: bonnetBaseX + Math.max(0.10, currentDimensions.bonnetLength - 0.05),
+          center: bonnetBaseX + currentDimensions.bonnetLength * 0.45};
       document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
         .forEach(option => { option.disabled = currentModel !== 'B'; });
       nozzlesList.forEach(nozzle => {
