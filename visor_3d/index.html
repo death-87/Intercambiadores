@@ -34,6 +34,7 @@
     
     .plug-edit-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; background: rgba(0,0,0,0.2); padding: 3px; border-radius: 3px;}
     .plug-edit-row input[type="text"] { flex: 1; margin: 0; padding: 2px; font-size: 10px; }
+    .plug-edit-row select { min-width: 70px; padding: 2px; font-size: 10px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; }
     
     #btn-add-nz { width: 100%; padding: 6px; background: #38bdf8; color: #0f172a; border: none; border-radius: 3px; font-weight: bold; cursor: pointer; font-size: 11px; transition: 0.2s; }
     #btn-add-nz:hover { background: #0284c7; color: #fff; }
@@ -162,6 +163,23 @@
         <input type="text" id="edit-fs-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
         <input type="text" id="edit-fs-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
+      </div>
+
+      <div id="sub-nozzles-editor" style="margin-top:8px;padding-top:7px;border-top:1px solid #334155">
+        <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:3px">SUB-BOQUILLAS BRIDADAS</strong>
+        <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.3;margin-bottom:5px">Heredan clase y cara. Su diámetro no puede superar el de la boquilla principal.</small>
+        <div class="plug-edit-row" style="flex-wrap:wrap">
+          <input type="checkbox" id="edit-sub-front-check">
+          <label for="edit-sub-front-check" style="color:#fff;font-size:10px;margin:0">Frente</label>
+          <select id="edit-sub-front-dia" disabled style="flex:1"></select>
+          <input type="text" id="edit-sub-front-tag" placeholder="TAG, ej. S1" disabled style="margin-left:38px;flex-basis:155px">
+        </div>
+        <div class="plug-edit-row" style="flex-wrap:wrap">
+          <input type="checkbox" id="edit-sub-rear-check">
+          <label for="edit-sub-rear-check" style="color:#fff;font-size:10px;margin:0">Posterior</label>
+          <select id="edit-sub-rear-dia" disabled style="flex:1"></select>
+          <input type="text" id="edit-sub-rear-tag" placeholder="TAG, ej. T1" disabled style="margin-left:38px;flex-basis:155px">
+        </div>
       </div>
 
       <!-- BOTÓN ELIMINAR -->
@@ -403,6 +421,28 @@
       select.value = String(desired);
     }
 
+    function normalizeSubNozzle(value, parentDiaIndex) {
+      const source = value && typeof value === 'object' ? value : {};
+      const allowed = FLANGED_DIAMETER_INDEXES.filter(index =>
+        DIAMETER_INCHES[index] <= DIAMETER_INCHES[parentDiaIndex]);
+      const requested = Number(source.diaIndex);
+      const diaIndex = allowed.includes(requested) ? requested : allowed[allowed.length - 1];
+      return {enabled: !!source.enabled, tag: String(source.tag || ''), diaIndex};
+    }
+
+    function populateSubNozzleDiameterSelect(select, parentDiaIndex, selectedIndex) {
+      const allowed = FLANGED_DIAMETER_INDEXES.filter(index =>
+        DIAMETER_INCHES[index] <= DIAMETER_INCHES[parentDiaIndex]);
+      select.replaceChildren(...allowed.map(index => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = DIAMETERS[index];
+        return option;
+      }));
+      select.value = String(allowed.includes(Number(selectedIndex))
+        ? Number(selectedIndex) : allowed[allowed.length - 1]);
+    }
+
     function syncStateToParent(action = "change") {
       if (loading || !initialized || readOnly) return;
       const exportData = {
@@ -428,7 +468,9 @@
           tagNS: nz.userData.tagNS || "",
           hasFS: !!nz.userData.hasFS,
           sizeFS: nz.userData.sizeFS || "",
-          tagFS: nz.userData.tagFS || ""
+          tagFS: nz.userData.tagFS || "",
+          subFront: {...nz.userData.subFront},
+          subRear: {...nz.userData.subRear}
         }))
       };
       const eventId = sessionId + ':' + (++revision);
@@ -1049,8 +1091,75 @@
       return plugGroup;
     }
 
+    function createFlangedSubNozzle(config, side, parentPipeR, parentNippleLength,
+      rating, face, nzMat, flMat, rfMat) {
+      const branch = new THREE.Group();
+      const dim = flangeDimensions(config.diaIndex, rating);
+      const pipeR = dim.OD / 2;
+      const pInner = Math.max(dim.OD * 0.40, pipeR - Math.min(0.012, dim.OD * 0.08));
+      const hubR = dim.A / 2;
+      const rfHeight = face === 'RF' ? raisedFaceHeight(rating) : 0;
+      const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
+      const stubLength = Math.max(0.10, Math.min(0.28, dim.OD * 1.35));
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, stubLength, 40), nzMat);
+      stem.position.y = stubLength / 2;
+      branch.add(stem);
+      const hubProfile = [[pInner, stubLength], [pipeR, stubLength],
+        [hubR, stubLength + hubHeight], [pInner, stubLength + hubHeight],
+        [pInner, stubLength]].map(([x, y]) => new THREE.Vector2(x, y));
+      branch.add(new THREE.Mesh(new THREE.LatheGeometry(hubProfile, 48), nzMat));
+
+      const flangeShape = new THREE.Shape();
+      flangeShape.absarc(0, 0, dim.D / 2, 0, Math.PI * 2, false);
+      const bore = new THREE.Path();
+      bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
+      flangeShape.holes.push(bore);
+      for (let i = 0; i < dim.bolts; i++) {
+        const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
+        const boltHole = new THREE.Path();
+        boltHole.absarc(Math.cos(angle) * dim.K / 2, Math.sin(angle) * dim.K / 2,
+          dim.L / 2, 0, Math.PI * 2, true);
+        flangeShape.holes.push(boltHole);
+      }
+      const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
+        depth: dim.B, bevelEnabled: true, bevelThickness: Math.min(0.0012, dim.B * 0.05),
+        bevelSize: Math.min(0.0012, dim.B * 0.05), bevelSegments: 1, steps: 1, curveSegments: 40
+      }), flMat);
+      flange.rotation.x = -Math.PI / 2;
+      flange.position.y = stubLength + hubHeight;
+      branch.add(flange);
+
+      const totalH = stubLength + dim.H;
+      const faceOuter = dim.R / 2;
+      const faceProfile = [[pInner, totalH - rfHeight], [faceOuter, totalH - rfHeight],
+        [faceOuter, totalH], [pInner, totalH], [pInner, totalH - rfHeight]]
+        .map(([x, y]) => new THREE.Vector2(x, y));
+      const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), rfMat);
+      faceMesh.visible = face === 'RF';
+      branch.add(faceMesh);
+      const opening = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
+      opening.rotation.x = -Math.PI / 2;
+      opening.position.y = totalH + 0.0003;
+      branch.add(opening);
+      const weld = new THREE.Mesh(new THREE.TorusGeometry(pipeR,
+        Math.max(0.0012, dim.OD * 0.028), 8, 40), weldMat);
+      weld.rotation.x = Math.PI / 2;
+      branch.add(weld);
+      const label = createTextSprite(config.tag, 'white', 34);
+      label.position.y = totalH + Math.max(0.04, dim.D * 0.16);
+      label.visible = Boolean(config.tag.trim());
+      branch.add(label);
+
+      branch.position.set(0, Math.max(0.05, parentNippleLength * 0.52),
+        side * parentPipeR * 0.72);
+      branch.rotation.x = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+      branch.visible = config.enabled;
+      return branch;
+    }
+
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
-      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null) {
+      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
+      subFront = null, subRear = null) {
       const group = new THREE.Group();
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
       const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
@@ -1066,7 +1175,9 @@
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart, pos: pos,
         valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
-        hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS
+        hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS,
+        subFront: normalizeSubNozzle(subFront, dIndex),
+        subRear: normalizeSubNozzle(subRear, dIndex)
       };
 
       const nzMat = nozzleMatBase.clone();
@@ -1178,6 +1289,13 @@
         plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
         plugFS.visible = hasFS;
         group.add(plugFS);
+        const subFrontGroup = createFlangedSubNozzle(group.userData.subFront, 1,
+          pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
+        const subRearGroup = createFlangedSubNozzle(group.userData.subRear, -1,
+          pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
+        group.userData.subFrontGroup = subFrontGroup;
+        group.userData.subRearGroup = subRearGroup;
+        group.add(subFrontGroup, subRearGroup);
       }
       group.userData.plugNS = plugNS;
       group.userData.plugFS = plugFS;
@@ -1233,7 +1351,8 @@
             n.rating, n.bodyPart, n.pos, n.valX,
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
-            n.service || 'process', n.face || 'RF', n.neckLength
+            n.service || 'process', n.face || 'RF', n.neckLength,
+            n.subFront, n.subRear
           );
           nozzlesList.push(newNz);
         });
@@ -1310,6 +1429,17 @@
       document.getElementById('edit-fs-tag').value = data.tagFS || "";
       document.getElementById('edit-fs-size').disabled = !data.hasFS;
       document.getElementById('edit-fs-tag').disabled = !data.hasFS;
+      for (const [side, config] of [['front', data.subFront], ['rear', data.subRear]]) {
+        const normalized = normalizeSubNozzle(config, data.diaIndex);
+        const check = document.getElementById(`edit-sub-${side}-check`);
+        const dia = document.getElementById(`edit-sub-${side}-dia`);
+        const tag = document.getElementById(`edit-sub-${side}-tag`);
+        check.checked = normalized.enabled;
+        populateSubNozzleDiameterSelect(dia, data.diaIndex, normalized.diaIndex);
+        tag.value = normalized.tag;
+        dia.disabled = !normalized.enabled;
+        tag.disabled = !normalized.enabled;
+      }
     }
 
     function deselectNozzle() {
@@ -1337,6 +1467,12 @@
     const editFsCheck = document.getElementById('edit-fs-check');
     const editFsSize = document.getElementById('edit-fs-size');
     const editFsTag = document.getElementById('edit-fs-tag');
+    const editSubFrontCheck = document.getElementById('edit-sub-front-check');
+    const editSubFrontDia = document.getElementById('edit-sub-front-dia');
+    const editSubFrontTag = document.getElementById('edit-sub-front-tag');
+    const editSubRearCheck = document.getElementById('edit-sub-rear-check');
+    const editSubRearDia = document.getElementById('edit-sub-rear-dia');
+    const editSubRearTag = document.getElementById('edit-sub-rear-tag');
 
     function populateRatingSelect(select, type, preferred) {
       const allowed = type === 'threaded' ? ['3000#', '6000#'] : ['150#', '300#', '600#'];
@@ -1356,6 +1492,7 @@
       document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
       document.getElementById('edit-neck-control').style.display = threaded ? 'none' : '';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
+      document.getElementById('sub-nozzles-editor').style.display = threaded ? 'none' : '';
     }
 
     editName.addEventListener('input', (e) => {
@@ -1390,7 +1527,8 @@
         data.bodyPart, data.pos, data.valX,
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
-        data.service || 'process', data.face || 'RF', data.neckLength
+        data.service || 'process', data.face || 'RF', data.neckLength,
+        data.subFront, data.subRear
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1499,6 +1637,33 @@
       selectedNozzle.userData.tagFS = e.target.value;
       syncStateToParent();
     });
+
+    function bindSubNozzleEditor(side, check, dia, tag) {
+      const field = side === 'front' ? 'subFront' : 'subRear';
+      const readValue = enabled => ({
+        enabled, diaIndex: Number(dia.value), tag: tag.value.trim()
+      });
+      check.addEventListener('change', () => {
+        if (!selectedNozzle) return;
+        dia.disabled = !check.checked;
+        tag.disabled = !check.checked;
+        const value = readValue(check.checked);
+        selectedNozzle.userData[field] = value;
+        const branch = selectedNozzle.userData[field + 'Group'];
+        if (branch) branch.visible = value.enabled;
+        syncStateToParent();
+      });
+      dia.addEventListener('change', () => {
+        if (!selectedNozzle) return;
+        rebuildSelectedNozzle({[field]: readValue(check.checked)});
+      });
+      tag.addEventListener('change', () => {
+        if (!selectedNozzle) return;
+        rebuildSelectedNozzle({[field]: readValue(check.checked)});
+      });
+    }
+    bindSubNozzleEditor('front', editSubFrontCheck, editSubFrontDia, editSubFrontTag);
+    bindSubNozzleEditor('rear', editSubRearCheck, editSubRearDia, editSubRearTag);
 
     document.getElementById('btn-delete-nz').addEventListener('click', () => {
       if(!selectedNozzle) return;
