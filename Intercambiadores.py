@@ -359,11 +359,12 @@ def extraer_coordenadas(valor):
         return None
 
 
-def ir_editor(tag):
+def ir_editor(tag, como_plantilla=False):
     for nombre in ("diseno.py", "Diseño.py", "diseño.py", "Diseno.py", "editor_3d.py"):
         destino = ROOT / "pages" / nombre
         if destino.is_file():
-            st.session_state["tag_para_diseño"] = str(tag).strip()
+            clave = "tag_para_plantilla" if como_plantilla else "tag_para_diseño"
+            st.session_state[clave] = str(tag).strip()
             st.switch_page(str(destino))
             return
     st.error("No se encontró la página del editor dentro de pages/.")
@@ -737,8 +738,16 @@ def main():
                     st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
                 else:
                     st.info("Sin boquillas registradas.")
-            if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag), use_container_width=True):
-                ir_editor(tag)
+            abrir, copiar = st.columns(2)
+            with abrir:
+                if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag),
+                             use_container_width=True):
+                    ir_editor(tag)
+            with copiar:
+                if st.button("Usar como plantilla", disabled=config is None,
+                             help="Copia el modelo para crear otro TAG sin modificar este equipo.",
+                             use_container_width=True):
+                    ir_editor(tag, como_plantilla=True)
         with enlaces:
             seccion("Documentación", "Recursos y evidencia del equipo.")
             st.metric("Conexiones roscadas", cantidad if cantidad is not None else "No disponible")
