@@ -144,6 +144,11 @@
           <option value="rear">Posterior</option>
         </select>
       </div>
+
+      <div class="input-group">
+        <label>Ángulo perimetral: <output id="edit-nz-angle-value">0° · Arriba</output></label>
+        <input type="range" id="edit-nz-angle" min="0" max="359" step="1" value="0">
+      </div>
       
       <div class="input-group">
         <label>Posición X:</label>
@@ -236,6 +241,10 @@
         <option value="superior">Arriba</option><option value="inferior">Abajo</option>
         <option value="front">Frente</option><option value="rear">Posterior</option>
       </select>
+    </div>
+    <div class="input-group">
+      <label>Ángulo perimetral: <output id="new-nz-angle-value">0° · Arriba</output></label>
+      <input type="range" id="new-nz-angle" min="0" max="359" step="1" value="0">
     </div>
 
     <button id="btn-add-nz">AGREGAR CONEXIÓN</button>
@@ -462,6 +471,7 @@
           neckLength: nz.userData.neckLength || undefined,
           bodyPart: nz.userData.bodyPart || "shell",
           pos: nz.userData.pos || "superior",
+          angleDeg: Number.isFinite(nz.userData.angleDeg) ? nz.userData.angleDeg : 0,
           valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
           hasNS: !!nz.userData.hasNS,
           sizeNS: nz.userData.sizeNS || "",
@@ -1007,23 +1017,35 @@
       }
       return {centerY: 0, radius: p.shellRadius};
     }
-    function placeNozzle(nozzle, x, pos, bodyPart) {
+    const POSITION_ANGLES = {superior: 0, front: 90, inferior: 180, rear: 270};
+    const POSITION_LABELS = {superior: 'Arriba', front: 'Frente', inferior: 'Abajo', rear: 'Posterior'};
+    function normalizedPerimeterAngle(angleDeg, fallbackPos = 'superior') {
+      const hasAngle = angleDeg !== null && angleDeg !== undefined && angleDeg !== '';
+      const raw = Number(angleDeg);
+      return hasAngle && Number.isFinite(raw) ? ((raw % 360) + 360) % 360
+        : (POSITION_ANGLES[fallbackPos] ?? 0);
+    }
+    function closestPerimeterPosition(angleDeg) {
+      const angle = normalizedPerimeterAngle(angleDeg);
+      return Object.keys(POSITION_ANGLES).reduce((best, key) => {
+        const delta = Math.abs(((angle - POSITION_ANGLES[key] + 180) % 360) - 180);
+        return delta < best.delta ? {key, delta} : best;
+      }, {key: 'superior', delta: Infinity}).key;
+    }
+    function updatePerimeterAngleOutput(elementId, angleDeg) {
+      const angle = Math.round(normalizedPerimeterAngle(angleDeg));
+      const position = closestPerimeterPosition(angle);
+      document.getElementById(elementId).value = `${angle}° · ${POSITION_LABELS[position]}`;
+    }
+    function placeNozzle(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
       const section = sectionAt(x, bodyPart);
       const radius = Math.max(0.05, section.radius - 0.01);
-      nozzle.position.set(x, section.centerY, 0);
-      nozzle.rotation.set(0, 0, 0);
-      if (pos === 'inferior') {
-        nozzle.position.y -= radius;
-        nozzle.rotation.z = Math.PI;
-      } else if (pos === 'front') {
-        nozzle.position.z = radius;
-        nozzle.rotation.x = Math.PI / 2;
-      } else if (pos === 'rear') {
-        nozzle.position.z = -radius;
-        nozzle.rotation.x = -Math.PI / 2;
-      } else {
-        nozzle.position.y += radius;
-      }
+      const angle = normalizedPerimeterAngle(angleDeg, pos);
+      const radians = THREE.MathUtils.degToRad(angle);
+      nozzle.userData.angleDeg = angle;
+      nozzle.position.set(x, section.centerY + Math.cos(radians) * radius,
+        Math.sin(radians) * radius);
+      nozzle.rotation.set(radians, 0, 0);
     }
     function applyModel(model, reposition = false) {
       currentModel = ['A', 'B', 'C'].includes(model) ? model : 'A';
@@ -1159,7 +1181,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null) {
+      subFront = null, subRear = null, angleDeg = null) {
       const group = new THREE.Group();
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
       const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
@@ -1173,6 +1195,7 @@
         isNozzle: true, idName: internalName, tagName: tagText,
         diaIndex: dIndex, connectionType: type, rating: normalizedRating, service: service,
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart, pos: pos,
+        angleDeg: normalizedPerimeterAngle(angleDeg, pos),
         valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS,
@@ -1306,7 +1329,7 @@
       group.add(nozzleSprite);
       group.userData.nozzleSprite = nozzleSprite;
 
-      placeNozzle(group, posX, pos, bodyPart);
+      placeNozzle(group, posX, pos, bodyPart, group.userData.angleDeg);
 
       heatExchanger.add(group);
       return group;
@@ -1352,7 +1375,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear
+            n.subFront, n.subRear, n.angleDeg
           );
           nozzlesList.push(newNz);
         });
@@ -1419,6 +1442,9 @@
       editX.value = data.valX;
       
       document.getElementById('edit-nz-pos').value = data.pos;
+      const editAngle = document.getElementById('edit-nz-angle');
+      editAngle.value = Math.round(normalizedPerimeterAngle(data.angleDeg, data.pos));
+      updatePerimeterAngleOutput('edit-nz-angle-value', editAngle.value);
       document.getElementById('edit-ns-check').checked = data.hasNS;
       document.getElementById('edit-ns-size').value = data.sizeNS || "";
       document.getElementById('edit-ns-tag').value = data.tagNS || "";
@@ -1459,6 +1485,7 @@
     const editNeckLength = document.getElementById('edit-neck-length');
     const editBody = document.getElementById('edit-nz-body');
     const editPos = document.getElementById('edit-nz-pos');
+    const editAngle = document.getElementById('edit-nz-angle');
     const editX = document.getElementById('edit-nz-x');
     
     const editNsCheck = document.getElementById('edit-ns-check');
@@ -1528,7 +1555,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear
+        data.subFront, data.subRear, data.angleDeg
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1586,16 +1613,23 @@
 
     const updateTransform = () => {
       if(!selectedNozzle) return;
-      const pos = editPos.value;
+      const angleDeg = normalizedPerimeterAngle(editAngle.value, editPos.value);
+      const pos = closestPerimeterPosition(angleDeg);
       const vx = parseFloat(editX.value);
       selectedNozzle.userData.pos = pos;
+      selectedNozzle.userData.angleDeg = angleDeg;
       selectedNozzle.userData.valX = vx;
-
-      placeNozzle(selectedNozzle, vx, pos, selectedNozzle.userData.bodyPart);
+      editPos.value = pos;
+      updatePerimeterAngleOutput('edit-nz-angle-value', angleDeg);
+      placeNozzle(selectedNozzle, vx, pos, selectedNozzle.userData.bodyPart, angleDeg);
       syncStateToParent();
     };
     
-    editPos.addEventListener('change', updateTransform);
+    editPos.addEventListener('change', () => {
+      editAngle.value = POSITION_ANGLES[editPos.value] ?? 0;
+      updateTransform();
+    });
+    editAngle.addEventListener('input', updateTransform);
     editX.addEventListener('input', updateTransform);
 
     editNsCheck.addEventListener('change', (e) => {
@@ -1675,6 +1709,8 @@
 
     const newType = document.getElementById('new-nz-type');
     const newDia = document.getElementById('new-nz-dia');
+    const newPos = document.getElementById('new-nz-pos');
+    const newAngle = document.getElementById('new-nz-angle');
     function updateNewConnectionUI(preferred) {
       const type = newType.value;
       populateDiameterSelect(newDia, type, preferred);
@@ -1715,7 +1751,17 @@
     document.getElementById('new-neck-length').addEventListener('input', event => {
       document.getElementById('new-neck-length-value').value = Number(event.target.value).toFixed(2);
     });
+    newPos.addEventListener('change', () => {
+      newAngle.value = POSITION_ANGLES[newPos.value] ?? 0;
+      updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
+    });
+    newAngle.addEventListener('input', () => {
+      const angle = normalizedPerimeterAngle(newAngle.value);
+      newPos.value = closestPerimeterPosition(angle);
+      updatePerimeterAngleOutput('new-nz-angle-value', angle);
+    });
     updateNewConnectionUI(6);
+    updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
       customNozzleCount++;
@@ -1726,13 +1772,14 @@
       const service = document.getElementById('new-nz-service').value;
       const face = document.getElementById('new-nz-face').value;
       const neckLength = Number(document.getElementById('new-neck-length').value);
-      const pos = document.getElementById('new-nz-pos').value;
+      const pos = newPos.value;
+      const angleDeg = normalizedPerimeterAngle(newAngle.value, pos);
       const internalName = `Custom_Nozzle_${customNozzleCount}`;
       const startX = BODY_BOUNDS[bodyPart].center;
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength);
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg);
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
