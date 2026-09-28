@@ -64,8 +64,8 @@
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
-<div class="input-group"><label for="nameplate-side">Cara del nameplate / cara principal:</label><select id="nameplate-side"><option value="front">Frente (+Z)</option><option value="rear">Posterior (−Z)</option></select></div>
-<small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">Frente y Posterior usan la misma referencia global en shell, channel y bonete.</small>
+<div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
+<small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option><option value="D">Modelo D · Bonetes soldados en ambos extremos</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
@@ -144,8 +144,8 @@
         <select id="edit-nz-pos">
           <option value="superior">Arriba</option>
           <option value="inferior">Abajo</option>
-          <option value="front">Frente</option>
-          <option value="rear">Posterior</option>
+          <option value="front">Frente / NS</option>
+          <option value="rear">Posterior / FS</option>
         </select>
       </div>
 
@@ -162,13 +162,13 @@
       <div id="flange-plugs-editor">
       <div class="plug-edit-row" style="flex-wrap:wrap">
         <input type="checkbox" id="edit-ns-check">
-        <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS</label>
+        <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS (Frente)</label>
         <input type="text" id="edit-ns-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
         <input type="text" id="edit-ns-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
       <div class="plug-edit-row" style="flex-wrap:wrap">
         <input type="checkbox" id="edit-fs-check">
-        <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS</label>
+        <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS (Posterior)</label>
         <input type="text" id="edit-fs-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
         <input type="text" id="edit-fs-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
@@ -179,13 +179,13 @@
         <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.3;margin-bottom:5px">Heredan clase y cara. Su diámetro no puede superar el de la boquilla principal.</small>
         <div class="plug-edit-row" style="flex-wrap:wrap">
           <input type="checkbox" id="edit-sub-front-check">
-          <label for="edit-sub-front-check" style="color:#fff;font-size:10px;margin:0">Frente</label>
+          <label for="edit-sub-front-check" style="color:#fff;font-size:10px;margin:0">Frente / NS</label>
           <select id="edit-sub-front-dia" disabled style="flex:1"></select>
           <input type="text" id="edit-sub-front-tag" placeholder="TAG, ej. S1" disabled style="margin-left:38px;flex-basis:155px">
         </div>
         <div class="plug-edit-row" style="flex-wrap:wrap">
           <input type="checkbox" id="edit-sub-rear-check">
-          <label for="edit-sub-rear-check" style="color:#fff;font-size:10px;margin:0">Posterior</label>
+          <label for="edit-sub-rear-check" style="color:#fff;font-size:10px;margin:0">Posterior / FS</label>
           <select id="edit-sub-rear-dia" disabled style="flex:1"></select>
           <input type="text" id="edit-sub-rear-tag" placeholder="TAG, ej. T1" disabled style="margin-left:38px;flex-basis:155px">
         </div>
@@ -244,7 +244,7 @@
       <label>Posición inicial:</label>
       <select id="new-nz-pos">
         <option value="superior">Arriba</option><option value="inferior">Abajo</option>
-        <option value="front">Frente</option><option value="rear">Posterior</option>
+        <option value="front">Frente / NS</option><option value="rear">Posterior / FS</option>
       </select>
     </div>
     <div class="input-group">
@@ -1065,7 +1065,18 @@
       return {centerY: 0, radius: p.shellRadius};
     }
     const POSITION_ANGLES = {superior: 0, front: 90, inferior: 180, rear: 270};
-    const POSITION_LABELS = {superior: 'Arriba', front: 'Frente', inferior: 'Abajo', rear: 'Posterior'};
+    const POSITION_LABELS = {
+      superior: 'Arriba', front: 'Frente / NS', inferior: 'Abajo', rear: 'Posterior / FS'
+    };
+    function syncPositionAnglesToNameplate() {
+      const frontAngle = currentNameplateSide === 'rear' ? 270 : 90;
+      POSITION_ANGLES.front = frontAngle;
+      POSITION_ANGLES.rear = (frontAngle + 180) % 360;
+    }
+    function nameplateGlobalSide() {
+      return currentNameplateSide === 'rear' ? -1 : 1;
+    }
+    syncPositionAnglesToNameplate();
     function normalizedPerimeterAngle(angleDeg, fallbackPos = 'superior') {
       const hasAngle = angleDeg !== null && angleDeg !== undefined && angleDeg !== '';
       const raw = Number(angleDeg);
@@ -1087,7 +1098,7 @@
     function localSubNozzleSide(angleDeg, globalSide) {
       // La rama vive dentro del sistema local de la boquilla madre. Al pasar por
       // la mitad inferior, su +Z local apunta a -Z global; se compensa aquí para
-      // que Frente sea siempre +Z y Posterior siempre -Z en todo el equipo.
+      // conservar la cara global solicitada alrededor de todo el equipo.
       const cosine = Math.cos(THREE.MathUtils.degToRad(normalizedPerimeterAngle(angleDeg)));
       const orientation = Math.abs(cosine) < 1e-6 ? 1 : Math.sign(cosine);
       return globalSide * orientation;
@@ -1098,10 +1109,15 @@
       branch.rotation.x = localSide > 0 ? Math.PI / 2 : -Math.PI / 2;
     }
     function orientSubNozzlesGlobally(nozzle, angleDeg) {
+      const frontSide = nameplateGlobalSide();
       orientSubNozzleBranch(nozzle.userData.subFrontGroup,
-        localSubNozzleSide(angleDeg, 1));
+        localSubNozzleSide(angleDeg, frontSide));
       orientSubNozzleBranch(nozzle.userData.subRearGroup,
-        localSubNozzleSide(angleDeg, -1));
+        localSubNozzleSide(angleDeg, -frontSide));
+      orientSubNozzleBranch(nozzle.userData.plugNS,
+        localSubNozzleSide(angleDeg, frontSide));
+      orientSubNozzleBranch(nozzle.userData.plugFS,
+        localSubNozzleSide(angleDeg, -frontSide));
     }
     function placeNozzle(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
       const section = sectionAt(x, bodyPart);
@@ -1285,14 +1301,15 @@
       const normalizedRating = type === 'threaded'
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
+      const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
       
       const visualNeckLength = type === 'flanged'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
         isNozzle: true, idName: internalName, tagName: tagText,
         diaIndex: dIndex, connectionType: type, rating: normalizedRating, service: service,
-        flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart, pos: pos,
-        angleDeg: normalizedPerimeterAngle(angleDeg, pos),
+        flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
+        pos: closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
         valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS,
@@ -1409,8 +1426,9 @@
         plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
         plugFS.visible = hasFS;
         group.add(plugFS);
-        const frontLocalSide = localSubNozzleSide(group.userData.angleDeg, 1);
-        const rearLocalSide = localSubNozzleSide(group.userData.angleDeg, -1);
+        const frontSide = nameplateGlobalSide();
+        const frontLocalSide = localSubNozzleSide(group.userData.angleDeg, frontSide);
+        const rearLocalSide = localSubNozzleSide(group.userData.angleDeg, -frontSide);
         const subFrontGroup = createFlangedSubNozzle(group.userData.subFront, frontLocalSide,
           pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
         const subRearGroup = createFlangedSubNozzle(group.userData.subRear, rearLocalSide,
@@ -1437,6 +1455,7 @@
       loadDimensions(data.dimensions, data.model);
       currentNameplateSide = data.nameplateSide === 'rear' ? 'rear' : 'front';
       document.getElementById('nameplate-side').value = currentNameplateSide;
+      syncPositionAnglesToNameplate();
       applyModel(data.model);
       currentNameplate = data.nameplate || "";
       document.getElementById("nameplate-input").value = currentNameplate;
@@ -1960,7 +1979,19 @@
     });
     document.getElementById('nameplate-side').addEventListener('change', event => {
       currentNameplateSide = event.target.value === 'rear' ? 'rear' : 'front';
+      syncPositionAnglesToNameplate();
       updateNameplatePlacement();
+      nozzlesList.forEach(nozzle => {
+        const data = nozzle.userData;
+        data.pos = closestPerimeterPosition(data.angleDeg);
+        placeNozzle(nozzle, data.valX, data.pos, data.bodyPart, data.angleDeg);
+      });
+      newPos.value = closestPerimeterPosition(newAngle.value);
+      updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
+      if (selectedNozzle) {
+        editPos.value = selectedNozzle.userData.pos;
+        updatePerimeterAngleOutput('edit-nz-angle-value', selectedNozzle.userData.angleDeg);
+      }
       syncStateToParent();
     });
     document.getElementById('save-equipment').addEventListener('click', () => {
