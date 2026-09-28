@@ -168,7 +168,7 @@ def cargar_datos():
 def validar_diseno(data):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
-    if data.get("model", "A") not in ("A", "B", "C"):
+    if data.get("model", "A") not in ("A", "B", "C", "D"):
         raise ValueError("modelo desconocido")
     dimensions = data.get("dimensions", {})
     if not isinstance(dimensions, dict):
@@ -198,7 +198,7 @@ def validar_diseno(data):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
-        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet"}:
+        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft"}:
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
             raise ValueError("tipo de conexión inválido")
@@ -272,6 +272,13 @@ def cargar_disenos():
     return db, errores
 
 
+def nombre_cuerpo(valor):
+    return {
+        "shell": "SHELL", "transition": "TRANSICIÓN", "channel": "CHANNEL",
+        "bonnet": "BONETE DERECHO", "bonnetLeft": "BONETE IZQUIERDO",
+    }.get(valor, str(valor or "").upper())
+
+
 def filas_boquillas(config):
     filas = []
     for n in config.get("nozzles", []):
@@ -295,7 +302,7 @@ def filas_boquillas(config):
             "DIÁMETRO": DIAMETROS[n["diaIndex"]],
             "RATING": n.get("rating") or ("3000#" if roscada else "Sin información"),
             "TIPO": tipo,
-            "CUERPO": n["bodyPart"].upper(), "POSICIÓN": posicion,
+            "CUERPO": nombre_cuerpo(n["bodyPart"]), "POSICIÓN": posicion,
             "NS": detalle_ns if n.get("hasNS", False) else "—",
             "FS": detalle_fs if n.get("hasFS", False) else "—",
         })
@@ -444,7 +451,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
                 conexiones.append([
                     n.get("tagName") or "Sin TAG", servicio,
                     f"{DIAMETROS[n['diaIndex']]} · {n.get('rating') or '3000#'}",
-                    "—", n.get("bodyPart", "").upper(), posicion,
+                    "—", nombre_cuerpo(n.get("bodyPart")), posicion,
                 ])
                 continue
             for lado in ("NS", "FS"):
@@ -454,7 +461,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
                     tag_plug = "" if legacy else (n.get("tag" + lado) or "")
                     conexiones.append([
                         n.get("tagName") or "Sin TAG", lado, medida, tag_plug or "—",
-                        n.get("bodyPart", "").upper(), posicion,
+                        nombre_cuerpo(n.get("bodyPart")), posicion,
                     ])
         servicios = {n.get("service") for n in config.get("nozzles", [])}
         for servicio, campo in (("VENTEO", "vent"), ("DRENAJE", "drain")):
@@ -708,10 +715,15 @@ def main():
                 largos = [f"Shell {dims.get('shellLength', 4.5 if modelo == 'B' else 4.275):.2f} m"]
                 if modelo == "B":
                     largos.append(f"Transición {dims.get('reducerLength', 0.9):.2f} m")
-                largos.extend([
-                    f"Channel {dims.get('channelLength', 0.65 if modelo == 'B' else 1.20):.2f} m",
-                    f"Bonete {dims.get('bonnetLength', 0.40 if modelo == 'B' else 0.80):.2f} m",
-                ])
+                if modelo == "D":
+                    largo_bonete = dims.get("bonnetLength", 0.80)
+                    largos.extend([f"Bonete izquierdo {largo_bonete:.2f} m",
+                                   f"Bonete derecho {largo_bonete:.2f} m"])
+                else:
+                    largos.extend([
+                        f"Channel {dims.get('channelLength', 0.65 if modelo == 'B' else 1.20):.2f} m",
+                        f"Bonete {dims.get('bonnetLength', 0.40 if modelo == 'B' else 0.80):.2f} m",
+                    ])
                 st.caption("Largos: " + " · ".join(largos))
                 boquillas = filas_boquillas(config)
                 if boquillas:
