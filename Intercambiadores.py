@@ -227,9 +227,12 @@ def validar_diseno(data):
             if field in n and not isinstance(n[field], bool):
                 raise ValueError(f"{field} debe ser booleano")
         for field in ("tagName", "rating", "flangeType", "face", "service",
-                      "sizeNS", "tagNS", "sizeFS", "tagFS"):
+                      "sizeNS", "tagNS", "ratingNS", "sizeFS", "tagFS", "ratingFS"):
             if field in n and not isinstance(n[field], str):
                 raise ValueError(f"{field} debe ser texto")
+        for field in ("ratingNS", "ratingFS"):
+            if field in n and n[field] not in {"3000#", "6000#"}:
+                raise ValueError(f"{field} debe ser 3000# o 6000#")
         for field in ("subFront", "subRear"):
             config = n.get(field)
             if config is None:
@@ -288,8 +291,10 @@ def filas_boquillas(config):
         medida_fs = (n.get("tagFS") if legacy_fs else n.get("sizeFS")) or "Sin medida"
         tag_ns = "" if legacy_ns else (n.get("tagNS") or "")
         tag_fs = "" if legacy_fs else (n.get("tagFS") or "")
-        detalle_ns = medida_ns + (f" · TAG {tag_ns}" if tag_ns else "")
-        detalle_fs = medida_fs + (f" · TAG {tag_fs}" if tag_fs else "")
+        rating_ns = n.get("ratingNS") or "3000#"
+        rating_fs = n.get("ratingFS") or "3000#"
+        detalle_ns = medida_ns + f" · {rating_ns}" + (f" · TAG {tag_ns}" if tag_ns else "")
+        detalle_fs = medida_fs + f" · {rating_fs}" + (f" · TAG {tag_fs}" if tag_fs else "")
         roscada = n.get("connectionType", "flanged") == "threaded"
         tipo = "ROSCADA" if roscada else f"WN-{n.get('face', 'RF')}"
         servicio = {"process": "PROCESO", "vent": "VENTEO", "drain": "DRENAJE"}.get(
@@ -459,8 +464,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
                     legacy = ("size" + lado) not in n
                     medida = (n.get("tag" + lado) if legacy else n.get("size" + lado)) or "Sin medida"
                     tag_plug = "" if legacy else (n.get("tag" + lado) or "")
+                    rating_plug = n.get("rating" + lado) or "3000#"
                     conexiones.append([
-                        n.get("tagName") or "Sin TAG", lado, medida, tag_plug or "—",
+                        n.get("tagName") or "Sin TAG", lado,
+                        f"{medida} · {rating_plug}", tag_plug or "—",
                         nombre_cuerpo(n.get("bodyPart")), posicion,
                     ])
         servicios = {n.get("service") for n in config.get("nozzles", [])}
@@ -512,7 +519,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         elementos.append(p("No hay boquillas registradas en el diseño.", body))
     elementos += [Spacer(1, 6 * mm), Paragraph("REGISTRO DE ROSCAS", section_style)]
     if conexiones:
-        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TAG PLUG", "CUERPO", "POSICIÓN"]
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA / CLASE", "TAG PLUG", "CUERPO", "POSICIÓN"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
             [p(x, cell_center if i in (1, 2, 3) else cell) for i, x in enumerate(fila)] for fila in conexiones
         ]
