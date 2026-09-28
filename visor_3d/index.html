@@ -64,6 +64,8 @@
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
+<div class="input-group"><label for="nameplate-side">Cara del nameplate / cara principal:</label><select id="nameplate-side"><option value="front">Frente (+Z)</option><option value="rear">Posterior (−Z)</option></select></div>
+<small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">Frente y Posterior usan la misma referencia global en shell, channel y bonete.</small>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
@@ -328,6 +330,7 @@
       window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, '*');
     }
     let currentNameplate = "";
+    let currentNameplateSide = 'front';
     let currentModel = 'A';
     // Los primeros 11 índices conservan exactamente la tabla histórica.
     const DIAMETERS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"',
@@ -458,6 +461,7 @@
         model: currentModel,
         dimensions: {...currentDimensions, modelALengthsEnabled: true},
         nameplate: currentNameplate,
+        nameplateSide: currentNameplateSide,
         vent: "",
         drain: "",
         nozzles: nozzlesList.map(nz => ({
@@ -1091,7 +1095,7 @@
         if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
         placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
       });
-      nameplate.position.z = currentDimensions.shellDiameter / 2 + 0.02;
+      updateNameplatePlacement();
       if (reposition && selectedNozzle) {
         const activeNozzle = selectedNozzle;
         deselectNozzle();
@@ -1337,6 +1341,8 @@
 
     function loadExchangerData(data) {
       loadDimensions(data.dimensions, data.model);
+      currentNameplateSide = data.nameplateSide === 'rear' ? 'rear' : 'front';
+      document.getElementById('nameplate-side').value = currentNameplateSide;
       applyModel(data.model);
       currentNameplate = data.nameplate || "";
       document.getElementById("nameplate-input").value = currentNameplate;
@@ -1824,8 +1830,13 @@
     }
 
     const plateMat = new THREE.MeshStandardMaterial({ map: plateTexture, metalness: 0.5, roughness: 0.3, transparent: true });
-    const nameplate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.52, 0.02), plateMat);
-    nameplate.position.set(0, 0, R + 0.02); 
+    const nameplate = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.34, 0.018), plateMat);
+    function updateNameplatePlacement() {
+      const side = currentNameplateSide === 'rear' ? -1 : 1;
+      nameplate.position.set(0, 0, side * (currentDimensions.shellDiameter / 2 + 0.012));
+      nameplate.rotation.set(0, side < 0 ? Math.PI : 0, 0);
+    }
+    updateNameplatePlacement();
     heatExchanger.add(nameplate);
 
 
@@ -1851,6 +1862,11 @@
     document.getElementById('nameplate-input').addEventListener('input', event => {
       currentNameplate = event.target.value;
       updateNameplateText(currentNameplate);
+      syncStateToParent();
+    });
+    document.getElementById('nameplate-side').addEventListener('change', event => {
+      currentNameplateSide = event.target.value === 'rear' ? 'rear' : 'front';
+      updateNameplatePlacement();
       syncStateToParent();
     });
     document.getElementById('save-equipment').addEventListener('click', () => {
