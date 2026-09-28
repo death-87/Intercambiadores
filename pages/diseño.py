@@ -23,7 +23,7 @@ plantilla_blanco = {
         "channelDiameter": 1.098, "bonnetDiameter": 1.098,
         "modelALengthsEnabled": True,
     },
-    "nameplate": "", "vent": "", "drain": "",
+    "nameplate": "", "nameplateSide": "front", "vent": "", "drain": "",
     "nozzles": [
         {"tagName": "S1", "service": "process", "diaIndex": 6, "connectionType": "flanged", "rating": "300#", "flangeType": "WN", "face": "RF", "bodyPart": "shell",
          "pos": "superior", "valX": -1.5, "hasNS": True, "sizeNS": '3/4"',
