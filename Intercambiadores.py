@@ -32,6 +32,8 @@ GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssn
 # Los primeros 11 índices se conservan para no alterar diseños históricos.
 DIAMETROS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"', '6"',
              '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"']
+DIAMETROS_PULGADAS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5,
+                      14, 16, 18, 20, 24]
 COLORES = {"CHEQUEADO": "#28a745", "NO CHEQUEADO": "#dc3545", "SIN INFORMACIÓN": "#6c757d"}
 
 
@@ -220,6 +222,21 @@ def validar_diseno(data):
                       "sizeNS", "tagNS", "sizeFS", "tagFS"):
             if field in n and not isinstance(n[field], str):
                 raise ValueError(f"{field} debe ser texto")
+        for field in ("subFront", "subRear"):
+            config = n.get(field)
+            if config is None:
+                continue
+            if not isinstance(config, dict):
+                raise ValueError(f"{field} debe ser un objeto")
+            if not isinstance(config.get("enabled", False), bool):
+                raise ValueError(f"{field}.enabled debe ser booleano")
+            if not isinstance(config.get("tag", ""), str):
+                raise ValueError(f"{field}.tag debe ser texto")
+            sub_idx = config.get("diaIndex")
+            if type(sub_idx) is not int or not 0 <= sub_idx < len(DIAMETROS):
+                raise ValueError(f"{field}.diaIndex fuera de la tabla")
+            if DIAMETROS_PULGADAS[sub_idx] > DIAMETROS_PULGADAS[idx]:
+                raise ValueError(f"{field} no puede superar el diámetro principal")
     return data
 
 
