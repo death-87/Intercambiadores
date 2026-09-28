@@ -164,12 +164,14 @@
         <input type="checkbox" id="edit-ns-check">
         <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS (Frente)</label>
         <input type="text" id="edit-ns-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
+        <select id="edit-ns-rating" disabled style="margin-left:38px;flex-basis:74px"><option value="3000#">3000#</option><option value="6000#">6000#</option></select>
         <input type="text" id="edit-ns-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
       <div class="plug-edit-row" style="flex-wrap:wrap">
         <input type="checkbox" id="edit-fs-check">
         <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS (Posterior)</label>
         <input type="text" id="edit-fs-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
+        <select id="edit-fs-rating" disabled style="margin-left:38px;flex-basis:74px"><option value="3000#">3000#</option><option value="6000#">6000#</option></select>
         <input type="text" id="edit-fs-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
       </div>
       </div>
@@ -483,9 +485,11 @@
           hasNS: !!nz.userData.hasNS,
           sizeNS: nz.userData.sizeNS || "",
           tagNS: nz.userData.tagNS || "",
+          ratingNS: nz.userData.ratingNS || "3000#",
           hasFS: !!nz.userData.hasFS,
           sizeFS: nz.userData.sizeFS || "",
           tagFS: nz.userData.tagFS || "",
+          ratingFS: nz.userData.ratingFS || "3000#",
           subFront: {...nz.userData.subFront},
           subRear: {...nz.userData.subRear}
         }))
@@ -1202,18 +1206,39 @@
       }
     }
 
-    function createNozzlePlug(colorMat) {
+    function createNozzlePlug(colorMat, tagText = '', rating = '3000#') {
       const plugGroup = new THREE.Group();
-      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 24), colorMat);
-      coupling.position.y = 0.03; 
+      const classFactor = rating === '6000#' ? 1.16 : 1.0;
+      const couplingH = 0.06 * classFactor;
+      const threadH = 0.02 * classFactor;
+      const headH = 0.08 * classFactor;
+      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(
+        0.04 * classFactor, 0.04 * classFactor, couplingH, 24), colorMat);
+      coupling.position.y = couplingH / 2;
       plugGroup.add(coupling);
-      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 24), plugMat);
-      threadedBody.position.y = 0.07;
+      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(
+        0.025 * classFactor, 0.025 * classFactor, threadH, 24), plugMat);
+      threadedBody.position.y = couplingH + threadH / 2;
       plugGroup.add(threadedBody);
-      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 24), plugMat);
-      elongatedHead.position.y = 0.12;
+      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(
+        0.025 * classFactor, 0.025 * classFactor, headH, 24), plugMat);
+      elongatedHead.position.y = couplingH + threadH + headH / 2;
       plugGroup.add(elongatedHead);
+      const tagSprite = createTextSprite(tagText, 'white', 34);
+      attachNozzleLabel(plugGroup, tagSprite, couplingH + threadH + headH,
+        0.08 * classFactor);
+      plugGroup.userData.tagSprite = tagSprite;
       return plugGroup;
+    }
+    function scaleNozzlePlug(plugGroup, size) {
+      const scale = sideConnectionScale(size);
+      plugGroup.scale.setScalar(scale);
+      const tagSprite = plugGroup.userData.tagSprite;
+      if (tagSprite) {
+        tagSprite.position.multiplyScalar(1 / scale);
+        tagSprite.scale.multiplyScalar(1 / scale);
+        tagSprite.userData.labelLeader?.scale.setScalar(1 / scale);
+      }
     }
 
     function createFlangedSubNozzle(config, side, parentPipeR, parentNippleLength,
@@ -1288,7 +1313,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#') {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1312,7 +1337,9 @@
         pos: closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
         valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
+        ratingNS: ['3000#', '6000#'].includes(ratingNS) ? ratingNS : '3000#',
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS,
+        ratingFS: ['3000#', '6000#'].includes(ratingFS) ? ratingFS : '3000#',
         subFront: normalizeSubNozzle(subFront, dIndex),
         subRear: normalizeSubNozzle(subRear, dIndex)
       };
@@ -1414,14 +1441,14 @@
         neckWeld.rotation.x = Math.PI / 2;
         neckWeld.position.y = nippleLength;
         group.add(neckWeld);
-        plugNS = createNozzlePlug(flMat);
-        plugNS.scale.setScalar(sideConnectionScale(sizeNS));
+        plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS);
+        scaleNozzlePlug(plugNS, sizeNS);
         plugNS.rotation.x = Math.PI / 2;
         plugNS.position.set(0, nippleLength * 0.55, pipeR + 0.008);
         plugNS.visible = hasNS;
         group.add(plugNS);
-        plugFS = createNozzlePlug(flMat);
-        plugFS.scale.setScalar(sideConnectionScale(sizeFS));
+        plugFS = createNozzlePlug(flMat, tagFS, group.userData.ratingFS);
+        scaleNozzlePlug(plugFS, sizeFS);
         plugFS.rotation.x = -Math.PI / 2;
         plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
         plugFS.visible = hasFS;
@@ -1494,7 +1521,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#'
           );
           nozzlesList.push(newNz);
         });
@@ -1567,13 +1594,17 @@
       document.getElementById('edit-ns-check').checked = data.hasNS;
       document.getElementById('edit-ns-size').value = data.sizeNS || "";
       document.getElementById('edit-ns-tag').value = data.tagNS || "";
+      document.getElementById('edit-ns-rating').value = data.ratingNS || "3000#";
       document.getElementById('edit-ns-size').disabled = !data.hasNS;
       document.getElementById('edit-ns-tag').disabled = !data.hasNS;
+      document.getElementById('edit-ns-rating').disabled = !data.hasNS;
       document.getElementById('edit-fs-check').checked = data.hasFS;
       document.getElementById('edit-fs-size').value = data.sizeFS || "";
       document.getElementById('edit-fs-tag').value = data.tagFS || "";
+      document.getElementById('edit-fs-rating').value = data.ratingFS || "3000#";
       document.getElementById('edit-fs-size').disabled = !data.hasFS;
       document.getElementById('edit-fs-tag').disabled = !data.hasFS;
+      document.getElementById('edit-fs-rating').disabled = !data.hasFS;
       for (const [side, config] of [['front', data.subFront], ['rear', data.subRear]]) {
         const normalized = normalizeSubNozzle(config, data.diaIndex);
         const check = document.getElementById(`edit-sub-${side}-check`);
@@ -1610,9 +1641,11 @@
     const editNsCheck = document.getElementById('edit-ns-check');
     const editNsSize = document.getElementById('edit-ns-size');
     const editNsTag = document.getElementById('edit-ns-tag');
+    const editNsRating = document.getElementById('edit-ns-rating');
     const editFsCheck = document.getElementById('edit-fs-check');
     const editFsSize = document.getElementById('edit-fs-size');
     const editFsTag = document.getElementById('edit-fs-tag');
+    const editFsRating = document.getElementById('edit-fs-rating');
     const editSubFrontCheck = document.getElementById('edit-sub-front-check');
     const editSubFrontDia = document.getElementById('edit-sub-front-dia');
     const editSubFrontTag = document.getElementById('edit-sub-front-tag');
@@ -1674,7 +1707,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1758,6 +1791,7 @@
       selectedNozzle.userData.plugNS.visible = isChecked;
       editNsSize.disabled = !isChecked;
       editNsTag.disabled = !isChecked;
+      editNsRating.disabled = !isChecked;
       syncStateToParent();
     });
     editNsSize.addEventListener('input', (e) => {
@@ -1765,10 +1799,19 @@
       selectedNozzle.userData.sizeNS = e.target.value;
       syncStateToParent();
     });
+    editNsSize.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      rebuildSelectedNozzle({sizeNS: e.target.value});
+    });
     editNsTag.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.tagNS = e.target.value;
+      selectedNozzle.userData.plugNS.userData.tagSprite?.updateText(e.target.value);
       syncStateToParent();
+    });
+    editNsRating.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      rebuildSelectedNozzle({ratingNS: e.target.value});
     });
 
     editFsCheck.addEventListener('change', (e) => {
@@ -1778,6 +1821,7 @@
       selectedNozzle.userData.plugFS.visible = isChecked;
       editFsSize.disabled = !isChecked;
       editFsTag.disabled = !isChecked;
+      editFsRating.disabled = !isChecked;
       syncStateToParent();
     });
     editFsSize.addEventListener('input', (e) => {
@@ -1785,10 +1829,19 @@
       selectedNozzle.userData.sizeFS = e.target.value;
       syncStateToParent();
     });
+    editFsSize.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      rebuildSelectedNozzle({sizeFS: e.target.value});
+    });
     editFsTag.addEventListener('input', (e) => {
       if(!selectedNozzle) return;
       selectedNozzle.userData.tagFS = e.target.value;
+      selectedNozzle.userData.plugFS.userData.tagSprite?.updateText(e.target.value);
       syncStateToParent();
+    });
+    editFsRating.addEventListener('change', (e) => {
+      if(!selectedNozzle) return;
+      rebuildSelectedNozzle({ratingFS: e.target.value});
     });
 
     function bindSubNozzleEditor(side, check, dia, tag) {
