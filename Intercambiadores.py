@@ -209,6 +209,12 @@ def validar_diseno(data):
         x = n.get("valX")
         if type(x) not in (int, float) or not math.isfinite(x):
             raise ValueError("posición X inválida")
+        angle = n.get("angleDeg")
+        if angle is not None and (
+            type(angle) not in (int, float) or not math.isfinite(angle)
+            or not 0 <= angle < 360
+        ):
+            raise ValueError("ángulo perimetral fuera de rango")
         neck_length = n.get("neckLength")
         if neck_length is not None and (
             type(neck_length) not in (int, float) or not math.isfinite(neck_length)
