@@ -190,6 +190,8 @@ def validar_diseno(data):
     for field in ("nameplate", "vent", "drain"):
         if field in data and not isinstance(data[field], str):
             raise ValueError(f"{field} debe ser texto")
+    if data.get("nameplateSide", "front") not in {"front", "rear"}:
+        raise ValueError("cara del nameplate inválida")
     for n in data["nozzles"]:
         if not isinstance(n, dict):
             raise ValueError("boquilla inválida")
