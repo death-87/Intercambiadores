@@ -103,6 +103,16 @@ def normalizar_tag(value):
     return " ".join("".join(c for c in value if not unicodedata.combining(c)).upper().split())
 
 
+def preparar_copia_desde(origen):
+    """Callback: se ejecuta antes del rerun y puede cambiar el widget ex_select."""
+    copia = deepcopy(ss.ex_drafts[origen])
+    copia["nameplate"] = ""
+    ss.ex_drafts[NEW] = copia
+    ss.ex_template_source = origen
+    ss.ex_select = NEW
+    ss.ex_loaded = None
+
+
 # La página principal puede abrir un equipo o copiarlo como plantilla. La copia
 # comienza como un borrador sin TAG y nunca escribe sobre el equipo de origen.
 template_requested = ss.get("tag_para_plantilla")
@@ -153,6 +163,9 @@ if requested:
     ss.pop("tag_para_diseño", None)
 
 options = [NEW] + sorted(ss.ex_db)
+pending_selection = ss.pop("ex_select_pending", None)
+if pending_selection in options:
+    ss.ex_select = pending_selection
 if "ex_select" not in ss:
     initial = st.query_params.get("equipo")
     ss.ex_select = initial if initial in ss.ex_db else NEW
@@ -174,18 +187,14 @@ if selected not in ss.ex_drafts:
     if selected != NEW and not ss.ex_drafts[selected].get("nameplate"):
         ss.ex_drafts[selected]["nameplate"] = selected
 
-if selected != NEW and st.button(
-    "📋 Crear equipo nuevo usando este formato",
-    help="Copia modelo, dimensiones y boquillas; el equipo actual queda intacto.",
-    use_container_width=True,
-):
-    copia = deepcopy(ss.ex_drafts[selected])
-    copia["nameplate"] = ""
-    ss.ex_drafts[NEW] = copia
-    ss.ex_template_source = selected
-    ss.ex_select = NEW
-    ss.ex_loaded = None
-    st.rerun()
+if selected != NEW:
+    st.button(
+        "📋 Crear equipo nuevo usando este formato",
+        help="Copia modelo, dimensiones y boquillas; el equipo actual queda intacto.",
+        use_container_width=True,
+        on_click=preparar_copia_desde,
+        args=(selected,),
+    )
 
 if selected == NEW and ss.get("ex_template_source"):
     st.info(f"Plantilla copiada desde '{ss.ex_template_source}'. Escribe un TAG nuevo y guarda; el equipo original no se modificará.")
@@ -223,7 +232,7 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                 with st.spinner("Guardando y verificando en Sheets..."):
                     ss.ex_db = guardar_db(tag, data)
                 ss.ex_drafts[tag] = deepcopy(data)
-                ss.ex_select = tag
+                ss.ex_select_pending = tag
                 ss.ex_loaded = None
                 ss.pop("ex_template_source", None)
                 ss.design_revision = ss.get("design_revision", 0) + 1
