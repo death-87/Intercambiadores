@@ -1041,6 +1041,25 @@
       const position = closestPerimeterPosition(angle);
       document.getElementById(elementId).value = `${angle}° · ${POSITION_LABELS[position]}`;
     }
+    function localSubNozzleSide(angleDeg, globalSide) {
+      // La rama vive dentro del sistema local de la boquilla madre. Al pasar por
+      // la mitad inferior, su +Z local apunta a -Z global; se compensa aquí para
+      // que Frente sea siempre +Z y Posterior siempre -Z en todo el equipo.
+      const cosine = Math.cos(THREE.MathUtils.degToRad(normalizedPerimeterAngle(angleDeg)));
+      const orientation = Math.abs(cosine) < 1e-6 ? 1 : Math.sign(cosine);
+      return globalSide * orientation;
+    }
+    function orientSubNozzleBranch(branch, localSide) {
+      if (!branch) return;
+      branch.position.z = localSide * Math.abs(branch.position.z);
+      branch.rotation.x = localSide > 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+    function orientSubNozzlesGlobally(nozzle, angleDeg) {
+      orientSubNozzleBranch(nozzle.userData.subFrontGroup,
+        localSubNozzleSide(angleDeg, 1));
+      orientSubNozzleBranch(nozzle.userData.subRearGroup,
+        localSubNozzleSide(angleDeg, -1));
+    }
     function placeNozzle(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
       const section = sectionAt(x, bodyPart);
       const radius = Math.max(0.05, section.radius - 0.01);
@@ -1050,6 +1069,7 @@
       nozzle.position.set(x, section.centerY + Math.cos(radians) * radius,
         Math.sin(radians) * radius);
       nozzle.rotation.set(radians, 0, 0);
+      orientSubNozzlesGlobally(nozzle, angle);
     }
     function applyModel(model, reposition = false) {
       currentModel = ['A', 'B', 'C'].includes(model) ? model : 'A';
@@ -1316,9 +1336,11 @@
         plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
         plugFS.visible = hasFS;
         group.add(plugFS);
-        const subFrontGroup = createFlangedSubNozzle(group.userData.subFront, 1,
+        const frontLocalSide = localSubNozzleSide(group.userData.angleDeg, 1);
+        const rearLocalSide = localSubNozzleSide(group.userData.angleDeg, -1);
+        const subFrontGroup = createFlangedSubNozzle(group.userData.subFront, frontLocalSide,
           pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
-        const subRearGroup = createFlangedSubNozzle(group.userData.subRear, -1,
+        const subRearGroup = createFlangedSubNozzle(group.userData.subRear, rearLocalSide,
           pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
         group.userData.subFrontGroup = subFrontGroup;
         group.userData.subRearGroup = subRearGroup;
