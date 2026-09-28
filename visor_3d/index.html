@@ -66,13 +66,14 @@
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Cara del nameplate / cara principal:</label><select id="nameplate-side"><option value="front">Frente (+Z)</option><option value="rear">Posterior (−Z)</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">Frente y Posterior usan la misma referencia global en shell, channel y bonete.</small>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option><option value="D">Modelo D · Bonete en ambos extremos</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
   <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
   <div class="input-group"><label>Channel: <output id="channel-diameter-value">1.10</output> m</label><input type="range" id="channel-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
   <div class="input-group"><label>Bonete: <output id="bonnet-diameter-value">1.10</output> m</label><input type="range" id="bonnet-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
   <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin-bottom:7px">La transición une automáticamente los diámetros del shell y channel.</small>
+  <small id="model-d-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Modelo D: el diámetro y largo de Bonete se aplican a ambos extremos. Channel no aplica.</small>
   <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
     <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="0.50" max="7.00" step="0.025" value="4.275"></div>
@@ -133,7 +134,8 @@
           <option value="shell">Shell</option>
           <option value="transition" disabled>Transición</option>
           <option value="channel">Channel</option>
-          <option value="bonnet">Bonnet</option>
+          <option value="bonnet">Bonete derecho</option>
+          <option value="bonnetLeft" disabled>Bonete izquierdo</option>
         </select>
       </div>
       
@@ -234,7 +236,8 @@
         <option value="shell" selected>Shell</option>
         <option value="transition" disabled>Transición</option>
         <option value="channel">Channel</option>
-        <option value="bonnet">Bonnet</option>
+        <option value="bonnet">Bonete derecho</option>
+        <option value="bonnetLeft" disabled>Bonete izquierdo</option>
       </select>
     </div>
     <div class="input-group">
@@ -513,7 +516,8 @@
       shell:   { min: -2.0, max: 2.0, center: 0 },
       transition: { min: -2.0, max: 2.0, center: 0 },
       channel: { min: -3.3, max: -2.4, center: -2.9775 },
-      bonnet:  { min: 2.35, max: 2.95, center: 2.6575 }
+      bonnet:  { min: 2.35, max: 2.95, center: 2.6575 },
+      bonnetLeft: { min: -2.95, max: -2.35, center: -2.6575 }
     };
 
     const container = document.getElementById('canvas-container');
@@ -692,7 +696,10 @@
 
       sprite.updateText = function(text) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if(!text || text.trim() === "") {
+        const hasText = Boolean(text && text.trim());
+        sprite.visible = hasText;
+        if (sprite.userData.labelLeader) sprite.userData.labelLeader.visible = hasText;
+        if(!hasText) {
           texture.needsUpdate = true;
           return;
         }
@@ -709,6 +716,30 @@
 
       sprite.updateText(initialText);
       return sprite;
+    }
+
+    function attachNozzleLabel(parent, sprite, totalHeight, referenceOD, xDirection = 1) {
+      const direction = xDirection < 0 ? -1 : 1;
+      const labelX = direction * Math.max(0.38, referenceOD * 1.10);
+      const labelY = totalHeight + Math.max(0.16, referenceOD * 0.40);
+      sprite.scale.set(0.72, 0.23, 1);
+      sprite.position.set(labelX, labelY, 0);
+      sprite.renderOrder = 51;
+
+      const leader = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, totalHeight + Math.max(0.015, referenceOD * 0.035), 0),
+          new THREE.Vector3(labelX * 0.72, labelY - 0.035, 0)
+        ]),
+        new THREE.LineBasicMaterial({
+          color: 0xa9c7ff, transparent: true, opacity: 0.78, depthTest: false
+        })
+      );
+      leader.visible = sprite.visible;
+      leader.renderOrder = 50;
+      sprite.userData.labelLeader = leader;
+      parent.add(leader, sprite);
+      return leader;
     }
 
     const rearBonnetGroup = new THREE.Group();
@@ -780,6 +811,16 @@
       .forEach(part => modelAShellGroup.add(part));
     heatExchanger.add(modelAShellGroup);
     const MODEL_A_BONNET_LENGTH = 0.80;
+
+    // Modelo D: segundo bonete apernado, reflejado en el extremo izquierdo.
+    // Comparte geometría y materiales con el derecho, pero mantiene sus propias
+    // transformaciones para admitir largo y diámetro editables.
+    const leftBonnetGroup = rearBonnetGroup.clone(true);
+    leftBonnetGroup.name = 'Modelo D: bonete apernado izquierdo';
+    leftBonnetGroup.rotation.y = Math.PI;
+    const leftBonnetBody = leftBonnetGroup.children.find(child => child.geometry === bonnetBody.geometry);
+    heatExchanger.add(leftBonnetGroup);
+    leftBonnetGroup.visible = false;
 
     // Modelo C: mismo cuerpo y channel del A, con bonete soldado directamente.
     const weldedBonnetGroup = new THREE.Group();
@@ -988,17 +1029,20 @@
       const jointOffset = 0.132;
       channelGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
       rearBonnetGroup.position.x = currentDimensions.shellLength / 2 + jointOffset;
+      leftBonnetGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
       rebuildModelAChannel();
       channelGroup.scale.set(1, channelScale, channelScale);
       bonnetBody.scale.y = bonnetLengthScale;
       rearBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
+      if (leftBonnetBody) leftBonnetBody.scale.y = bonnetLengthScale;
+      leftBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
       weldedBonnetGroup.position.x = currentDimensions.shellLength / 2;
       weldedBonnetBody.scale.y = bonnetLengthScale;
       weldedBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
     }
     function componentRadius(bodyPart) {
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
-      if (bodyPart === 'bonnet') return currentDimensions.bonnetDiameter / 2;
+      if (bodyPart === 'bonnet' || bodyPart === 'bonnetLeft') return currentDimensions.bonnetDiameter / 2;
       return currentDimensions.shellDiameter / 2;
     }
     function sectionAt(x, bodyPart = 'shell') {
@@ -1072,11 +1116,12 @@
       orientSubNozzlesGlobally(nozzle, angle);
     }
     function applyModel(model, reposition = false) {
-      currentModel = ['A', 'B', 'C'].includes(model) ? model : 'A';
+      currentModel = ['A', 'B', 'C', 'D'].includes(model) ? model : 'A';
       document.getElementById('equipment-model').value = currentModel;
       modelAShellGroup.visible = currentModel !== 'B';
-      channelGroup.visible = currentModel !== 'B';
-      rearBonnetGroup.visible = currentModel === 'A';
+      channelGroup.visible = currentModel === 'A' || currentModel === 'C';
+      rearBonnetGroup.visible = currentModel === 'A' || currentModel === 'D';
+      leftBonnetGroup.visible = currentModel === 'D';
       weldedBonnetGroup.visible = currentModel === 'C';
       modelB.visible = currentModel === 'B';
       flangeRight.visible = currentModel !== 'C';
@@ -1084,6 +1129,9 @@
         .filter(ring => ring.userData.modelASide > 0)
         .forEach(ring => { ring.visible = currentModel !== 'C'; });
       document.getElementById('transition-length-control').style.display = currentModel === 'B' ? '' : 'none';
+      document.getElementById('model-d-note').style.display = currentModel === 'D' ? 'block' : 'none';
+      document.getElementById('channel-diameter').disabled = currentModel === 'D';
+      document.getElementById('channel-length').disabled = currentModel === 'D';
       applyModelADimensions();
       const p = modelBLayout();
       BODY_BOUNDS.shell = currentModel === 'B'
@@ -1094,7 +1142,14 @@
         ? {min: p.reducerSmall + 0.05, max: p.shellLeft - 0.05,
           center: (p.reducerSmall + p.shellLeft) / 2}
         : {...BODY_BOUNDS.shell};
-      BODY_BOUNDS.channel = currentModel === 'B'
+      BODY_BOUNDS.bonnetLeft = {
+        min: leftBonnetGroup.position.x - Math.max(0.10, currentDimensions.bonnetLength - 0.05),
+        max: leftBonnetGroup.position.x - 0.05,
+        center: leftBonnetGroup.position.x - currentDimensions.bonnetLength * 0.45
+      };
+      BODY_BOUNDS.channel = currentModel === 'D'
+        ? {...BODY_BOUNDS.bonnetLeft}
+        : currentModel === 'B'
         ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
           center: (p.channelBodyLeft + p.channelBodyRight) / 2}
         : {min: channelGroup.position.x - currentDimensions.channelLength - 0.04,
@@ -1109,8 +1164,14 @@
           center: bonnetBaseX + currentDimensions.bonnetLength * 0.45};
       document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
         .forEach(option => { option.disabled = currentModel !== 'B'; });
+      document.querySelectorAll('#edit-nz-body option[value="channel"], #new-nz-body option[value="channel"]')
+        .forEach(option => { option.disabled = currentModel === 'D'; });
+      document.querySelectorAll('#edit-nz-body option[value="bonnetLeft"], #new-nz-body option[value="bonnetLeft"]')
+        .forEach(option => { option.disabled = currentModel !== 'D'; });
       nozzlesList.forEach(nozzle => {
         const data = nozzle.userData;
+        if (currentModel === 'D' && data.bodyPart === 'channel') data.bodyPart = 'bonnetLeft';
+        if (currentModel !== 'D' && data.bodyPart === 'bonnetLeft') data.bodyPart = 'channel';
         const bounds = BODY_BOUNDS[data.bodyPart];
         if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
         placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
@@ -1192,9 +1253,7 @@
       weld.rotation.x = Math.PI / 2;
       branch.add(weld);
       const label = createTextSprite(config.tag, 'white', 34);
-      label.position.y = totalH + Math.max(0.04, dim.D * 0.16);
-      label.visible = Boolean(config.tag.trim());
-      branch.add(label);
+      attachNozzleLabel(branch, label, totalH, dim.D);
 
       branch.position.set(0, Math.max(0.05, parentNippleLength * 0.52),
         side * parentPipeR * 0.72);
@@ -1203,10 +1262,22 @@
       return branch;
     }
 
+    function normalizeBodyPartForCurrentModel(bodyPart) {
+      if (currentModel === 'D' && bodyPart === 'channel') return 'bonnetLeft';
+      if (currentModel !== 'D' && bodyPart === 'bonnetLeft') return 'channel';
+      return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
+    }
+
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
       subFront = null, subRear = null, angleDeg = null) {
       const group = new THREE.Group();
+      const requestedBodyPart = bodyPart;
+      bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
+      const bodyBounds = BODY_BOUNDS[bodyPart];
+      const numericX = Number(posX);
+      posX = requestedBodyPart === bodyPart && Number.isFinite(numericX) &&
+        numericX >= bodyBounds.min && numericX <= bodyBounds.max ? numericX : bodyBounds.center;
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
       const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
       const normalizedRating = type === 'threaded'
@@ -1351,8 +1422,7 @@
 
       const nozzleSprite = createTextSprite(tagText, 'white', 40);
       const referenceOD = flangeDimensions(dIndex, type === 'flanged' ? normalizedRating : '150#').D;
-      nozzleSprite.position.set(0, totalH + Math.max(0.06, referenceOD * 0.18), 0);
-      group.add(nozzleSprite);
+      attachNozzleLabel(group, nozzleSprite, totalH, referenceOD, posX < 0 ? -1 : 1);
       group.userData.nozzleSprite = nozzleSprite;
 
       placeNozzle(group, posX, pos, bodyPart, group.userData.angleDeg);
