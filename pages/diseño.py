@@ -103,6 +103,29 @@ def normalizar_tag(value):
     return " ".join("".join(c for c in value if not unicodedata.combining(c)).upper().split())
 
 
+# La página principal puede abrir un equipo o copiarlo como plantilla. La copia
+# comienza como un borrador sin TAG y nunca escribe sobre el equipo de origen.
+template_requested = ss.get("tag_para_plantilla")
+if template_requested:
+    try:
+        ss.ex_db = cargar_db()
+    except Exception as exc:
+        st.error(f"No se pudo actualizar Diseño3D antes de copiar {template_requested}: {exc}")
+        st.stop()
+    coincidencias = [k for k in ss.ex_db if normalizar_tag(k) == normalizar_tag(template_requested)]
+    if len(coincidencias) != 1:
+        st.error(f"No se encontró un único diseño válido para usar como plantilla: {template_requested}.")
+        st.stop()
+    origen = coincidencias[0]
+    copia = deepcopy(ss.ex_db[origen])
+    copia["nameplate"] = ""
+    ss.ex_drafts[NEW] = copia
+    ss.ex_select = NEW
+    ss.ex_loaded = None
+    ss.ex_template_source = origen
+    ss.pop("tag_para_plantilla", None)
+    ss.pop("tag_para_diseño", None)
+
 # La página principal entrega el TAG por sesión; switch_page puede limpiar la URL.
 requested = ss.get("tag_para_diseño")
 if requested:
@@ -134,6 +157,8 @@ if "ex_select" not in ss:
     initial = st.query_params.get("equipo")
     ss.ex_select = initial if initial in ss.ex_db else NEW
 selected = st.selectbox("Seleccionar equipo para editar:", options, key="ex_select")
+if selected != NEW and ss.get("ex_template_source"):
+    ss.pop("ex_template_source", None)
 if selected == NEW:
     if "equipo" in st.query_params:
         del st.query_params["equipo"]
@@ -149,7 +174,23 @@ if selected not in ss.ex_drafts:
     if selected != NEW and not ss.ex_drafts[selected].get("nameplate"):
         ss.ex_drafts[selected]["nameplate"] = selected
 
-st.caption("Edita el TAG y guarda desde el panel del visor. Cambiar el TAG guarda bajo ese nombre; no elimina la fila anterior.")
+if selected != NEW and st.button(
+    "📋 Crear equipo nuevo usando este formato",
+    help="Copia modelo, dimensiones y boquillas; el equipo actual queda intacto.",
+    use_container_width=True,
+):
+    copia = deepcopy(ss.ex_drafts[selected])
+    copia["nameplate"] = ""
+    ss.ex_drafts[NEW] = copia
+    ss.ex_template_source = selected
+    ss.ex_select = NEW
+    ss.ex_loaded = None
+    st.rerun()
+
+if selected == NEW and ss.get("ex_template_source"):
+    st.info(f"Plantilla copiada desde '{ss.ex_template_source}'. Escribe un TAG nuevo y guarda; el equipo original no se modificará.")
+else:
+    st.caption("Edita el TAG y guarda desde el panel del visor. Cambiar el TAG guarda bajo ese nombre; no elimina la fila anterior.")
 viewer_path = Path(__file__).resolve().parent.parent / "visor_3d"
 if not (viewer_path / "index.html").is_file():
     st.error(f"No se encontró {viewer_path / 'index.html'}")
@@ -173,10 +214,18 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
             try:
                 if not tag:
                     raise ValueError("Debes ingresar el TAG del equipo.")
+                if ss.get("ex_template_source"):
+                    existente = next((k for k in ss.ex_db if normalizar_tag(k) == normalizar_tag(tag)), None)
+                    if existente:
+                        raise ValueError(
+                            f"El TAG '{existente}' ya existe. Usa otro TAG para no modificar equipos guardados.")
                 data["nameplate"] = tag
                 with st.spinner("Guardando y verificando en Sheets..."):
                     ss.ex_db = guardar_db(tag, data)
                 ss.ex_drafts[tag] = deepcopy(data)
+                ss.ex_select = tag
+                ss.ex_loaded = None
+                ss.pop("ex_template_source", None)
                 ss.design_revision = ss.get("design_revision", 0) + 1
                 message = f"✅ Equipo '{tag}' guardado y verificado en Sheets."
             except Exception as exc:
