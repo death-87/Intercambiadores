@@ -306,6 +306,11 @@
     const DIAMETERS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"',
       '6"', '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"'];
     const DIAMETER_INCHES = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5, 14, 16, 18, 20, 24];
+    // ASME B16.5, diámetro exterior R de la cara elevada por NPS (pulgadas).
+    // El orden conserva los índices históricos de DIAMETERS.
+    const RAISED_FACE_DIAMETER_INCHES = [1.375, 1.688, 2.000, 2.875, 3.625,
+      5.000, 6.188, 8.500, 10.625, 12.750, 15.000, 4.125, 16.250, 18.500,
+      21.000, 23.000, 27.250];
     const FLANGED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16];
     const THREADED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11];
     const INCH = 0.0254;
@@ -351,7 +356,11 @@
       const row = (FLANGE_DIMENSIONS[rating] || FLANGE_DIMENSIONS['150#'])[diaIndex];
       const [D, B, A, OD, H, K, L, bolts] = row;
       return {D:D*INCH, B:B*INCH, A:A*INCH, OD:OD*INCH, H:H*INCH,
-        K:K*INCH, L:L*INCH, bolts};
+        K:K*INCH, L:L*INCH, bolts, R:RAISED_FACE_DIAMETER_INCHES[diaIndex]*INCH};
+    }
+
+    function raisedFaceHeight(rating) {
+      return (rating === '600#' ? 0.250 : 0.0625) * INCH;
     }
 
     function defaultNozzleNeckLength(diaIndex) {
@@ -367,7 +376,7 @@
       return Math.max(0.45, Math.min(1.25, pipeOD * 25));
     }
 
-    function updateAsmeInfo(elementId, diaIndex, rating, type) {
+    function updateAsmeInfo(elementId, diaIndex, rating, type, face = 'RF') {
       const element = document.getElementById(elementId);
       if (type === 'threaded') {
         element.style.display = 'none';
@@ -375,7 +384,9 @@
       }
       const dim = flangeDimensions(Number(diaIndex), rating);
       const mm = value => Math.round(value * 1000);
-      element.textContent = `ASME B16.5 · Ø brida ${mm(dim.D)} mm · BCD ${mm(dim.K)} mm · ${dim.bolts} agujeros Ø ${mm(dim.L)} mm · espesor ${mm(dim.B)} mm`;
+      const faceInfo = face === 'FF' ? 'cara FF'
+        : `RF Ø ${mm(dim.R)} mm · h ${(raisedFaceHeight(rating) * 1000).toFixed(2)} mm`;
+      element.textContent = `ASME B16.5 · Ø brida ${mm(dim.D)} mm · BCD ${mm(dim.K)} mm · ${dim.bolts} agujeros Ø ${mm(dim.L)} mm · espesor ${mm(dim.B)} mm · ${faceInfo}`;
       element.style.display = 'block';
     }
 
@@ -1060,7 +1071,10 @@
 
       const nzMat = nozzleMatBase.clone();
       const flMat = flangeMatBase.clone();
-      group.userData.materials = [nzMat, flMat]; 
+      const rfMat = flangeMatBase.clone();
+      rfMat.color.setHex(0x9ba7b1);
+      rfMat.roughness = 0.22;
+      group.userData.materials = [nzMat, flMat, rfMat]; 
       let totalH, plugNS, plugFS;
       if (type === 'threaded') {
         const pipeOD = flangeDimensions(dIndex, '150#').OD;
@@ -1100,7 +1114,7 @@
         const pInner = Math.max(dim.OD * 0.40, pipeR - Math.min(0.012, dim.OD * 0.08));
         const hubR = dim.A / 2;
         const fOuter = dim.D / 2;
-        const rfHeight = group.userData.face === 'RF' ? (normalizedRating === '600#' ? 0.00635 : 0.0016) : 0;
+        const rfHeight = group.userData.face === 'RF' ? raisedFaceHeight(normalizedRating) : 0;
         const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
         const nippleLength = visualNeckLength;
         const nipple = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, nippleLength, 48), nzMat);
@@ -1131,11 +1145,11 @@
         flange.position.y = nippleLength + hubHeight;
         group.add(flange);
         totalH = nippleLength + dim.H;
-        const faceOuter = Math.min(fOuter * 0.78, Math.max(hubR * 1.12, pipeR * 1.28));
+        const faceOuter = dim.R / 2;
         const faceProfile = [[pInner, totalH - rfHeight], [faceOuter, totalH - rfHeight],
           [faceOuter, totalH], [pInner, totalH], [pInner, totalH - rfHeight]]
           .map(([x, y]) => new THREE.Vector2(x, y));
-        const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), flMat);
+        const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 64), rfMat);
         faceMesh.visible = group.userData.face === 'RF';
         group.add(faceMesh);
         group.userData.faceMesh = faceMesh;
@@ -1274,7 +1288,7 @@
       document.getElementById('edit-nz-body').value = data.bodyPart;
       updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
       document.getElementById('edit-nz-face').value = data.face || 'RF';
-      updateAsmeInfo('edit-asme-info', data.diaIndex, data.rating, data.connectionType);
+      updateAsmeInfo('edit-asme-info', data.diaIndex, data.rating, data.connectionType, data.face);
       const editNeckLength = document.getElementById('edit-neck-length');
       editNeckLength.value = data.neckLength || defaultNozzleNeckLength(data.diaIndex);
       document.getElementById('edit-neck-length-value').value = Number(editNeckLength.value).toFixed(2);
@@ -1508,7 +1522,8 @@
         document.getElementById('new-neck-length').value = neck;
         document.getElementById('new-neck-length-value').value = neck.toFixed(2);
       }
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, type);
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
+        type, document.getElementById('new-nz-face').value);
     }
     newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
     newDia.addEventListener('change', () => {
@@ -1517,10 +1532,15 @@
         document.getElementById('new-neck-length').value = neck;
         document.getElementById('new-neck-length-value').value = neck.toFixed(2);
       }
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, newType.value);
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
+        newType.value, document.getElementById('new-nz-face').value);
     });
     document.getElementById('new-nz-rating').addEventListener('change', () =>
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value, newType.value));
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
+        newType.value, document.getElementById('new-nz-face').value));
+    document.getElementById('new-nz-face').addEventListener('change', event =>
+      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
+        newType.value, event.target.value));
     document.getElementById('new-nz-service').addEventListener('change', (event) => {
       if (event.target.value === 'vent' || event.target.value === 'drain') {
         newType.value = 'threaded';
