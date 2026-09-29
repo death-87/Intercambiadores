@@ -66,7 +66,7 @@
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option><option value="D">Modelo D · Bonetes soldados en ambos extremos</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option><option value="D">Modelo D · Bonetes soldados en ambos extremos</option><option value="E">Modelo E · Bonete bridado + bonete soldado</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
   <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
@@ -74,6 +74,7 @@
   <div class="input-group"><label>Bonete: <output id="bonnet-diameter-value">1.10</output> m</label><input type="range" id="bonnet-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
   <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin-bottom:7px">La transición une automáticamente los diámetros del shell y channel.</small>
   <small id="model-d-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Modelo D: dos bonetes soldados directamente al shell, sin bridas. El diámetro y largo de Bonete se aplican a ambos extremos.</small>
+  <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Modelo E: bonete derecho apernado con flange y bonete izquierdo soldado directamente al shell. El diámetro y largo de Bonete se aplican a ambos extremos.</small>
   <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
     <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="0.50" max="7.00" step="0.025" value="4.275"></div>
@@ -826,9 +827,9 @@
     heatExchanger.add(weldedBonnetGroup);
     weldedBonnetGroup.visible = false;
 
-    // Modelo D: el mismo bonete soldado se refleja en el extremo izquierdo.
+    // Modelos D/E: el mismo bonete soldado se refleja en el extremo izquierdo.
     const leftBonnetGroup = weldedBonnetGroup.clone(true);
-    leftBonnetGroup.name = 'Modelo D: bonete soldado izquierdo sin bridas';
+    leftBonnetGroup.name = 'Modelos D/E: bonete soldado izquierdo sin bridas';
     leftBonnetGroup.rotation.y = Math.PI;
     const leftBonnetBody = leftBonnetGroup.children.find(
       child => child.geometry === weldedBonnetBody.geometry);
@@ -1135,24 +1136,26 @@
       orientSubNozzlesGlobally(nozzle, angle);
     }
     function applyModel(model, reposition = false) {
-      currentModel = ['A', 'B', 'C', 'D'].includes(model) ? model : 'A';
+      currentModel = ['A', 'B', 'C', 'D', 'E'].includes(model) ? model : 'A';
       document.getElementById('equipment-model').value = currentModel;
       modelAShellGroup.visible = currentModel !== 'B';
       channelGroup.visible = currentModel === 'A' || currentModel === 'C';
-      rearBonnetGroup.visible = currentModel === 'A';
-      leftBonnetGroup.visible = currentModel === 'D';
+      rearBonnetGroup.visible = currentModel === 'A' || currentModel === 'E';
+      leftBonnetGroup.visible = currentModel === 'D' || currentModel === 'E';
       weldedBonnetGroup.visible = currentModel === 'C' || currentModel === 'D';
       modelB.visible = currentModel === 'B';
       flangeRight.visible = currentModel !== 'C' && currentModel !== 'D';
-      flangeLeft.visible = currentModel !== 'D';
+      flangeLeft.visible = currentModel !== 'D' && currentModel !== 'E';
       shellFlangeRings.forEach(ring => {
         ring.visible = currentModel !== 'D' &&
-          !(currentModel === 'C' && ring.userData.modelASide > 0);
+          !(currentModel === 'C' && ring.userData.modelASide > 0) &&
+          !(currentModel === 'E' && ring.userData.modelASide < 0);
       });
       document.getElementById('transition-length-control').style.display = currentModel === 'B' ? '' : 'none';
       document.getElementById('model-d-note').style.display = currentModel === 'D' ? 'block' : 'none';
-      document.getElementById('channel-diameter').disabled = currentModel === 'D';
-      document.getElementById('channel-length').disabled = currentModel === 'D';
+      document.getElementById('model-e-note').style.display = currentModel === 'E' ? 'block' : 'none';
+      document.getElementById('channel-diameter').disabled = currentModel === 'D' || currentModel === 'E';
+      document.getElementById('channel-length').disabled = currentModel === 'D' || currentModel === 'E';
       applyModelADimensions();
       const p = modelBLayout();
       BODY_BOUNDS.shell = currentModel === 'B'
@@ -1168,7 +1171,7 @@
         max: leftBonnetGroup.position.x - 0.05,
         center: leftBonnetGroup.position.x - currentDimensions.bonnetLength * 0.45
       };
-      BODY_BOUNDS.channel = currentModel === 'D'
+      BODY_BOUNDS.channel = currentModel === 'D' || currentModel === 'E'
         ? {...BODY_BOUNDS.bonnetLeft}
         : currentModel === 'B'
         ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
@@ -1187,13 +1190,13 @@
       document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
         .forEach(option => { option.disabled = currentModel !== 'B'; });
       document.querySelectorAll('#edit-nz-body option[value="channel"], #new-nz-body option[value="channel"]')
-        .forEach(option => { option.disabled = currentModel === 'D'; });
+        .forEach(option => { option.disabled = currentModel === 'D' || currentModel === 'E'; });
       document.querySelectorAll('#edit-nz-body option[value="bonnetLeft"], #new-nz-body option[value="bonnetLeft"]')
-        .forEach(option => { option.disabled = currentModel !== 'D'; });
+        .forEach(option => { option.disabled = currentModel !== 'D' && currentModel !== 'E'; });
       nozzlesList.forEach(nozzle => {
         const data = nozzle.userData;
-        if (currentModel === 'D' && data.bodyPart === 'channel') data.bodyPart = 'bonnetLeft';
-        if (currentModel !== 'D' && data.bodyPart === 'bonnetLeft') data.bodyPart = 'channel';
+        if ((currentModel === 'D' || currentModel === 'E') && data.bodyPart === 'channel') data.bodyPart = 'bonnetLeft';
+        if (currentModel !== 'D' && currentModel !== 'E' && data.bodyPart === 'bonnetLeft') data.bodyPart = 'channel';
         const bounds = BODY_BOUNDS[data.bodyPart];
         if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
         placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
@@ -1306,8 +1309,8 @@
     }
 
     function normalizeBodyPartForCurrentModel(bodyPart) {
-      if (currentModel === 'D' && bodyPart === 'channel') return 'bonnetLeft';
-      if (currentModel !== 'D' && bodyPart === 'bonnetLeft') return 'channel';
+      if ((currentModel === 'D' || currentModel === 'E') && bodyPart === 'channel') return 'bonnetLeft';
+      if (currentModel !== 'D' && currentModel !== 'E' && bodyPart === 'bonnetLeft') return 'channel';
       return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
     }
 
