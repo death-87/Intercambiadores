@@ -168,7 +168,7 @@ def cargar_datos():
 def validar_diseno(data):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
-    if data.get("model", "A") not in ("A", "B", "C", "D"):
+    if data.get("model", "A") not in ("A", "B", "C", "D", "E"):
         raise ValueError("modelo desconocido")
     dimensions = data.get("dimensions", {})
     if not isinstance(dimensions, dict):
@@ -723,7 +723,7 @@ def main():
                 largos = [f"Shell {dims.get('shellLength', 4.5 if modelo == 'B' else 4.275):.2f} m"]
                 if modelo == "B":
                     largos.append(f"Transición {dims.get('reducerLength', 0.9):.2f} m")
-                if modelo == "D":
+                if modelo in {"D", "E"}:
                     largo_bonete = dims.get("bonnetLength", 0.80)
                     largos.extend([f"Bonete izquierdo {largo_bonete:.2f} m",
                                    f"Bonete derecho {largo_bonete:.2f} m"])
