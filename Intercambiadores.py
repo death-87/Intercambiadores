@@ -394,7 +394,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
         topMargin=14 * mm, bottomMargin=17 * mm,
-        title=f"Ficha de conexiones roscadas - {tag}", author="Control de Intercambiadores",
+        title=f"Ficha técnica de boquillas - {tag}", author="Control de Intercambiadores",
     )
     navy, teal, pale, line, ink, muted = (
         colors.HexColor("#173247"), colors.HexColor("#0F9385"), colors.HexColor("#E8F4F2"),
@@ -433,7 +433,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     elementos = []
     cabecera = Table([
         [Paragraph("REGISTRO DE INSPECCIÓN", eyebrow)],
-        [Paragraph(f"Conexiones roscadas · {escape(str(tag))}", title_style)],
+        [Paragraph(f"Ficha técnica de boquillas · {escape(str(tag))}", title_style)],
         [p(f"Emitido {datetime.now():%d-%m-%Y %H:%M} · hora del servidor", small)],
     ], colWidths=[180 * mm])
     cabecera.setStyle(TableStyle([
@@ -783,6 +783,7 @@ def main():
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
+                st.caption("Incluye el nozzle schedule de las boquillas enflanchadas y roscadas, incluso con cero conexiones roscadas.")
             except Exception as exc:
                 st.error(f"No se pudo generar el PDF: {exc}")
             st.divider()
