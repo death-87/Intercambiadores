@@ -311,6 +311,20 @@ def filas_boquillas(config):
             "NS": detalle_ns if n.get("hasNS", False) else "—",
             "FS": detalle_fs if n.get("hasFS", False) else "—",
         })
+    # Los diseños antiguos guardan estos plugs fuera de la lista nozzles.
+    servicios = {n.get("service") for n in config.get("nozzles", [])}
+    for campo, servicio, tag, posicion in (
+        ("vent", "VENTEO", "VENT", "SUPERIOR"),
+        ("drain", "DRENAJE", "DRAIN", "INFERIOR"),
+    ):
+        medida = config.get(campo, "")
+        if campo not in servicios and informado(medida):
+            filas.append({
+                "MK": tag, "QT": 1, "SERVICIO": servicio,
+                "DIÁMETRO": medida, "RATING": "3000#", "TIPO": "ROSCADA",
+                "CUERPO": nombre_cuerpo("bonnet"), "POSICIÓN": posicion,
+                "NS": "—", "FS": "—",
+            })
     return filas
 
 
