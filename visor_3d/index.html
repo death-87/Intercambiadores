@@ -1,2103 +1,818 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Visor 3D Interactivo</title>
-  <style>
-    body { margin: 0; background: transparent; color: inherit; font-family: sans-serif; overflow: hidden; }
-    #canvas-container { width: 100vw; height: 100vh; }
-    
-    #info { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.65); padding: 8px 12px; border-radius: 6px; border: 1px solid #444; text-align: right; pointer-events: none; color: #fff;}
-    
-    #ui-container { 
-      position: absolute; top: 52px; left: 10px; z-index: 10; 
-      background: rgba(15, 23, 42, 0.9); padding: 10px; border-radius: 6px; 
-      border: 1px solid #475569; width: 240px; max-height: calc(100vh - 84px); overflow-y: auto; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3); color: #f8fafc;
+"""Página principal. Ejecutar: streamlit run Intercambiadores.py (Python 3.10 o posterior)."""
+from pathlib import Path
+from io import BytesIO, StringIO
+from datetime import datetime
+import hashlib
+import json
+import math
+import re
+import unicodedata
+import urllib.parse
+import uuid
+from html import escape
+
+import pandas as pd
+import plotly.express as px
+import requests
+import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from visor_3d import declarar_visor
+
+st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
+ROOT = Path(__file__).resolve().parent
+SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
+NOMBRE_HOJA = "Hoja 1"
+HOJA_3D = "Diseño3D"
+GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
+# Los primeros 11 índices se conservan para no alterar diseños históricos.
+DIAMETROS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"', '6"',
+             '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"']
+DIAMETROS_PULGADAS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5,
+                      14, 16, 18, 20, 24]
+COLORES = {"CHEQUEADO": "#28a745", "NO CHEQUEADO": "#dc3545", "SIN INFORMACIÓN": "#6c757d"}
+
+
+def aplicar_diseno():
+    st.markdown("""
+    <style>
+    .block-container { max-width: 1480px; padding-top: 2rem; padding-bottom: 3rem; }
+    [data-testid="stSidebar"] { border-right: 1px solid rgba(128,145,165,.18); }
+    [data-testid="stSidebar"] .block-container { padding-top: 1.5rem; }
+    h1,h2,h3 { letter-spacing: -.025em; }
+    [data-testid="stCaptionContainer"] { opacity: .85; }
+    [data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; }
+    [data-testid="stTable"] th { text-align: left; font-size: .8rem; }
+    [data-testid="stTable"] td { font-size: .85rem; }
+    [data-testid="stButton"] button, [data-testid="stDownloadButton"] button,
+    [data-testid="stLinkButton"] a { border-radius: 8px; min-height: 2.6rem; font-weight: 600; }
+    button[kind="primary"] { background: #0f766e; border-color: #0f766e; color: white; }
+    button[kind="primary"]:hover { background: #115e59; border-color: #115e59; color: white; }
+    [data-baseweb="tab-list"] { gap: 1.6rem; border-bottom: 1px solid rgba(128,145,165,.2); }
+    [data-baseweb="tab"] { font-weight: 600; padding: .75rem 0; }
+    .hx-brand { display: flex; align-items: center; gap: .7rem; margin-bottom: 1.5rem; }
+    .hx-brand-mark { background: #0f766e; color: #fff; border-radius: 10px; padding: .65rem;
+      font-size: .8rem; font-weight: 800; letter-spacing: .07em; }
+    .hx-brand strong { display: block; font-size: .95rem; }
+    .hx-brand small { font-size: .7rem; opacity: .65; }
+    .hx-hero { display: flex; align-items: center; justify-content: space-between; gap: 2rem;
+      padding: 2.2rem 2.4rem; border-radius: 16px; background: #142638; color: #f5f8fc;
+      border: 1px solid #2b4258; margin: .3rem 0 1.5rem; position: relative; overflow: hidden; }
+    .hx-hero:before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #40c7b0; }
+    .hx-eyebrow { color: #6ad7c4; text-transform: uppercase; letter-spacing: .16em;
+      font-size: .68rem; font-weight: 700; margin-bottom: .7rem; }
+    .hx-hero h1 { font-size: clamp(1.7rem, 3vw, 2.5rem); color: #f5f8fc;
+      line-height: 1.15; margin: 0 0 .75rem; padding: 0; font-weight: 650; }
+    .hx-hero p { color: #b4c4d4; font-size: .92rem; margin: 0; max-width: 620px; line-height: 1.6; }
+    .hx-hero svg { width: 220px; flex-shrink: 0; opacity: .85; }
+    .hx-kpis { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1rem; margin: .3rem 0 1.6rem; }
+    .hx-kpi { padding: 1.15rem 1.25rem; border: 1px solid rgba(128,145,165,.24);
+      border-radius: 12px; background: var(--secondary-background-color,rgba(128,145,165,.05)); }
+    .hx-kpi-label { font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
+    .hx-kpi-value { font-size: 2rem; font-weight: 650; letter-spacing: -.04em; margin: .3rem 0; line-height: 1.2; }
+    .hx-kpi-note { font-size: .75rem; opacity: .7; line-height: 1.5; }
+    .hx-section { margin: 1.35rem 0 .8rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+    .hx-section h2 { margin: 0 0 .25rem; padding: 0; font-size: 1.2rem; font-weight: 650; }
+    .hx-section p { font-size: .82rem; opacity: .7; margin: 0; }
+    .hx-pill { display: inline-block; border: 1px solid rgba(128,145,165,.3); border-radius: 30px;
+      padding: .3rem .7rem; font-size: .7rem; white-space: nowrap; }
+    .hx-detail { padding: 1.35rem 1.5rem; border: 1px solid rgba(128,145,165,.24);
+      border-left: 4px solid #0f9385; border-radius: 12px; margin: .5rem 0 1.25rem; }
+    .hx-detail h2 { margin: .25rem 0 .6rem; padding: 0; font-size: 1.8rem; }
+    .hx-detail .hx-eyebrow { color: inherit; opacity: .65; }
+    .hx-detail-meta { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; font-size: .82rem; }
+    .hx-empty { padding: 1.6rem; border: 1px dashed rgba(128,145,165,.4); border-radius: 12px;
+      text-align: center; margin: 1rem 0; }
+    .hx-empty strong { display: block; margin-bottom: .35rem; }
+    .hx-empty span { font-size: .85rem; opacity: .7; }
+    @media(max-width: 850px) { .hx-hero svg { display: none; } .hx-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+    @media(max-width: 480px) { .hx-hero { padding: 1.5rem; } .hx-kpis { gap: .6rem; }
+      .hx-kpi { padding: .9rem; } .hx-kpi-value { font-size: 1.65rem; } .hx-section { flex-wrap: wrap; } }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def seccion(titulo, descripcion, etiqueta=""):
+    pill = f'<span class="hx-pill">{escape(str(etiqueta))}</span>' if etiqueta else ""
+    st.markdown(f'<div class="hx-section"><div><h2>{escape(titulo)}</h2>'
+                f'<p>{escape(descripcion)}</p></div>{pill}</div>', unsafe_allow_html=True)
+
+
+def indicadores(items):
+    cards = "".join(
+        f'<div class="hx-kpi"><div class="hx-kpi-label">{escape(str(label))}</div>'
+        f'<div class="hx-kpi-value">{escape(str(value))}</div>'
+        f'<div class="hx-kpi-note">{escape(str(note))}</div></div>'
+        for label, value, note in items
+    )
+    st.markdown(f'<div class="hx-kpis">{cards}</div>', unsafe_allow_html=True)
+
+
+def normalizar(texto):
+    texto = unicodedata.normalize("NFKD", str(texto).strip())
+    return " ".join("".join(c for c in texto if not unicodedata.combining(c)).upper().split())
+
+
+def informado(valor):
+    return normalizar(valor) not in {"", "NAN", "NONE", "NULL", "SIN INFORMACION", "N/A"}
+
+
+def es_columna_conn(nombre):
+    """Oculta columnas auxiliares Conn, Conn1, Conn2... sin ocultar CONEXIONES ROSCADAS."""
+    compacto = re.sub(r"[\s_.-]+", "", normalizar(nombre))
+    return re.fullmatch(r"CONN\d*", compacto) is not None
+
+
+def buscar_columna(columnas, exactas, fragmentos=()):
+    for nombre in exactas:
+        for col in columnas:
+            if normalizar(col) == nombre:
+                return col
+    return next((c for c in columnas if any(x in normalizar(c) for x in fragmentos)), None)
+
+
+def leer_csv(hoja):
+    response = requests.get(
+        f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq",
+        params={"tqx": "out:csv", "sheet": hoja, "nc": uuid.uuid4().hex}, timeout=25,
+    )
+    response.raise_for_status()
+    if response.text.lstrip().startswith("<"):
+        raise ValueError("Google devolvió HTML en lugar de CSV. Revisa permisos y nombre de la hoja.")
+    return pd.read_csv(StringIO(response.text), dtype=str, keep_default_na=False)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def cargar_datos():
+    data = leer_csv(NOMBRE_HOJA)
+    nombres, usados = [], set()
+    for raw in data.columns:
+        base = " ".join(str(raw).split()) or "Sin título"
+        nombre, n = base, 2
+        while nombre in usados:
+            nombre = f"{base} ({n})"
+            n += 1
+        nombres.append(nombre)
+        usados.add(nombre)
+    data.columns = nombres
+    for col in data.columns:
+        data[col] = data[col].str.strip()
+        data[col] = data[col].map(lambda v: v if informado(v) else "Sin información")
+    return data
+
+
+def validar_diseno(data):
+    if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
+        raise ValueError("se esperaba un objeto con una lista nozzles")
+    if data.get("model", "A") not in ("A", "B", "C", "D", "E"):
+        raise ValueError("modelo desconocido")
+    dimensions = data.get("dimensions", {})
+    if not isinstance(dimensions, dict):
+        raise ValueError("dimensions debe ser un objeto")
+    limits = {
+        "shellLength": (0.5, 7.0), "reducerLength": (0.2, 2.0),
+        "channelLength": (0.2, 2.0), "bonnetLength": (0.2, 2.0),
+        "shellDiameter": (0.2, 2.0), "channelDiameter": (0.2, 2.0),
+        "bonnetDiameter": (0.2, 2.0),
     }
-    #ui-container::-webkit-scrollbar { width: 4px; }
-    #ui-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
-    #toggle-equipment-panel {
-      position: absolute; top: 10px; left: 10px; z-index: 20;
-      padding: 9px 12px; border: 1px solid #475569; border-radius: 6px;
-      background: #0f172a; color: #f8fafc; font-size: 12px;
-      font-weight: bold; cursor: pointer;
-    }
-    #toggle-equipment-panel:hover { background: #1e293b; border-color: #38bdf8; }
-    #toggle-equipment-panel:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
-    
-    .panel-title { font-size: 12px; font-weight: bold; margin-top: 0; margin-bottom: 8px; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 3px; }
-    .input-group { margin-bottom: 6px; }
-    .input-group label { display: block; font-size: 10px; color: #94a3b8; margin-bottom: 2px; }
-    .input-group input[type="text"], .input-group select { width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; outline: none; }
-    .input-group input[type="range"] { width: 100%; cursor: pointer; margin: 2px 0; }
-    
-    .plug-edit-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; background: rgba(0,0,0,0.2); padding: 3px; border-radius: 3px;}
-    .plug-edit-row input[type="text"] { flex: 1; margin: 0; padding: 2px; font-size: 10px; }
-    .plug-edit-row select { min-width: 70px; padding: 2px; font-size: 10px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; }
-    
-    #btn-add-nz { width: 100%; padding: 6px; background: #38bdf8; color: #0f172a; border: none; border-radius: 3px; font-weight: bold; cursor: pointer; font-size: 11px; transition: 0.2s; }
-    #btn-add-nz:hover { background: #0284c7; color: #fff; }
+    for field, value in dimensions.items():
+        if field not in limits:
+            continue
+        if type(value) not in (int, float) or not math.isfinite(value):
+            raise ValueError(f"{field} debe ser numérico")
+        low, high = limits[field]
+        if not low <= value <= high:
+            raise ValueError(f"{field} fuera de rango")
+    for field in ("nameplate", "vent", "drain"):
+        if field in data and not isinstance(data[field], str):
+            raise ValueError(f"{field} debe ser texto")
+    if data.get("nameplateSide", "front") not in {"front", "rear"}:
+        raise ValueError("cara del nameplate inválida")
+    for n in data["nozzles"]:
+        if not isinstance(n, dict):
+            raise ValueError("boquilla inválida")
+        idx = n.get("diaIndex")
+        if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
+            raise ValueError("diaIndex fuera de la tabla de diámetros")
+        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft"}:
+            raise ValueError("cuerpo de boquilla inválido")
+        if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
+            raise ValueError("tipo de conexión inválido")
+        if n.get("service", "process") not in {"process", "vent", "drain"}:
+            raise ValueError("servicio de conexión inválido")
+        if n.get("face", "RF") not in {"RF", "FF"}:
+            raise ValueError("cara de brida inválida")
+        if n.get("pos") not in {"superior", "inferior", "front", "rear"}:
+            raise ValueError("posición de boquilla inválida")
+        x = n.get("valX")
+        if type(x) not in (int, float) or not math.isfinite(x):
+            raise ValueError("posición X inválida")
+        angle = n.get("angleDeg")
+        if angle is not None and (
+            type(angle) not in (int, float) or not math.isfinite(angle)
+            or not 0 <= angle < 360
+        ):
+            raise ValueError("ángulo perimetral fuera de rango")
+        neck_length = n.get("neckLength")
+        if neck_length is not None and (
+            type(neck_length) not in (int, float) or not math.isfinite(neck_length)
+            or not 0.10 <= neck_length <= 1.50
+        ):
+            raise ValueError("largo visual del niple fuera de rango")
+        for field in ("hasNS", "hasFS"):
+            if field in n and not isinstance(n[field], bool):
+                raise ValueError(f"{field} debe ser booleano")
+        for field in ("tagName", "rating", "flangeType", "face", "service",
+                      "sizeNS", "tagNS", "ratingNS", "sizeFS", "tagFS", "ratingFS"):
+            if field in n and not isinstance(n[field], str):
+                raise ValueError(f"{field} debe ser texto")
+        for field in ("ratingNS", "ratingFS"):
+            if field in n and n[field] not in {"3000#", "6000#"}:
+                raise ValueError(f"{field} debe ser 3000# o 6000#")
+        for field in ("subFront", "subRear"):
+            config = n.get(field)
+            if config is None:
+                continue
+            if not isinstance(config, dict):
+                raise ValueError(f"{field} debe ser un objeto")
+            if not isinstance(config.get("enabled", False), bool):
+                raise ValueError(f"{field}.enabled debe ser booleano")
+            if not isinstance(config.get("tag", ""), str):
+                raise ValueError(f"{field}.tag debe ser texto")
+            sub_idx = config.get("diaIndex")
+            if type(sub_idx) is not int or not 0 <= sub_idx < len(DIAMETROS):
+                raise ValueError(f"{field}.diaIndex fuera de la tabla")
+            if DIAMETROS_PULGADAS[sub_idx] > DIAMETROS_PULGADAS[idx]:
+                raise ValueError(f"{field} no puede superar el diámetro principal")
+    return data
 
-    #btn-delete-nz { width: 100%; padding: 6px; background: #ef4444; color: #fff; border: none; border-radius: 3px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 8px; transition: 0.2s; }
-    #btn-delete-nz:hover { background: #b91c1c; }
-    
-    #editor-panel { display: none; background: rgba(56, 189, 248, 0.08); border: 1px solid #38bdf8; padding: 8px; border-radius: 4px; margin-bottom: 10px; }
-    #editor-title { color: #38bdf8; font-weight: bold; margin-bottom: 6px; font-size: 11px; }
-  </style>
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-      }
-    }
-  </script>
-</head>
-<body>
-  <div id="info">
-    <h4 style="margin:0;">Visor 3D</h4>
-    <p style="margin:0; font-size:10px; color:#38bdf8;">Scroll Click: Desplazar | Clic Izq: Rotar</p>
-  </div>
 
-  <button id="toggle-equipment-panel" type="button" aria-controls="ui-container" aria-expanded="true" hidden>Ocultar datos equipo</button>
-  <div id="ui-container">
-    <div class="panel-title">DATOS EQUIPO</div>
-<div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
-<div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
-<small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Modelo A · Bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Modelo C · Bonete soldado</option><option value="D">Modelo D · Bonetes soldados en ambos extremos</option><option value="E">Modelo E · Bonete bridado + bonete soldado</option></select></div>
-<div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
-  <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
-  <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
-  <div class="input-group"><label>Channel: <output id="channel-diameter-value">1.10</output> m</label><input type="range" id="channel-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
-  <div class="input-group"><label>Bonete: <output id="bonnet-diameter-value">1.10</output> m</label><input type="range" id="bonnet-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
-  <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin-bottom:7px">La transición une automáticamente los diámetros del shell y channel.</small>
-  <small id="model-d-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Modelo D: dos bonetes soldados directamente al shell, sin bridas. El diámetro y largo de Bonete se aplican a ambos extremos.</small>
-  <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Modelo E: bonete derecho apernado con flange y bonete izquierdo soldado directamente al shell. El diámetro y largo de Bonete se aplican a ambos extremos.</small>
-  <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
-    <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
-    <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="0.50" max="7.00" step="0.025" value="4.275"></div>
-    <div class="input-group" id="transition-length-control" style="display:none"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.20" max="2.00" step="0.05" value="0.90"></div>
-    <div class="input-group"><label>Channel: <output id="channel-length-value">1.20</output> m</label><input type="range" id="channel-length" min="0.20" max="2.00" step="0.05" value="1.20"></div>
-    <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.80</output> m</label><input type="range" id="bonnet-length" min="0.20" max="2.00" step="0.05" value="0.80"></div>
-  </div>
-</div>
-<button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
-<p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
-    
-    <!-- EDITOR BOQUILLA -->
-    <div id="editor-panel">
-      <div id="editor-title">✏️ Editando Boquilla</div>
-      <div class="input-group">
-        <label>Tag Boquilla:</label>
-        <input type="text" id="edit-nz-name" value="" placeholder="Ej: N1">
-      </div>
-      <div class="input-group">
-        <label>Servicio:</label>
-        <select id="edit-nz-service">
-          <option value="process">Proceso</option>
-          <option value="vent">Venteo</option>
-          <option value="drain">Drenaje</option>
-        </select>
-      </div>
-      <div class="input-group">
-        <label>Tipo de conexión:</label>
-        <select id="edit-nz-type">
-          <option value="flanged">Bridada</option>
-          <option value="threaded">Roscada (plug)</option>
-        </select>
-      </div>
+@st.cache_data(ttl=15, show_spinner=False)
+def cargar_disenos():
+    data = leer_csv(HOJA_3D)
+    if len(data.columns) < 2:
+        raise ValueError("Diseño3D necesita dos columnas con encabezados: TAG y datos JSON.")
+    db, errores, vistos = {}, {}, set()
+    for _, row in data.iterrows():
+        tag, raw = row.iloc[0].strip(), row.iloc[1].strip()
+        if not informado(tag):
+            continue
+        clave = normalizar(tag)
+        if clave in vistos:
+            errores[clave] = f"TAG duplicado: {tag}"
+            db.pop(clave, None)
+            continue
+        vistos.add(clave)
+        try:
+            cfg = validar_diseno(json.loads(raw))
+            db[clave] = {"tag": tag, "data": cfg}
+        except (ValueError, TypeError) as exc:
+            errores[clave] = f"{tag}: {exc}"
+    return db, errores
 
-      <div style="display:flex; gap:4px;">
-        <div class="input-group" style="flex:1;">
-          <label>Diámetro:</label>
-          <select id="edit-nz-dia"></select>
-        </div>
-        <div class="input-group" id="edit-rating-group" style="flex:1;">
-          <label>Clase:</label>
-          <select id="edit-nz-rating"></select>
-        </div>
-      </div>
-      <div id="edit-flange-details" style="display:flex;gap:4px">
-        <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
-      </div>
-      <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
-      <div class="input-group" id="edit-neck-control">
-        <label>Largo niple visual: <output id="edit-neck-length-value">0.30</output> m</label>
-        <input type="range" id="edit-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
-      </div>
 
-      <div class="input-group">
-        <label>Cuerpo:</label>
-        <select id="edit-nz-body">
-          <option value="shell">Shell</option>
-          <option value="transition" disabled>Transición</option>
-          <option value="channel">Channel</option>
-          <option value="bonnet">Bonete derecho</option>
-          <option value="bonnetLeft" disabled>Bonete izquierdo</option>
-        </select>
-      </div>
-      
-      <div class="input-group">
-        <label>Posición:</label>
-        <select id="edit-nz-pos">
-          <option value="superior">Arriba</option>
-          <option value="inferior">Abajo</option>
-          <option value="front">Frente / NS</option>
-          <option value="rear">Posterior / FS</option>
-        </select>
-      </div>
+def nombre_cuerpo(valor):
+    return {
+        "shell": "SHELL", "transition": "TRANSICIÓN", "channel": "CHANNEL",
+        "bonnet": "BONETE DERECHO", "bonnetLeft": "BONETE IZQUIERDO",
+    }.get(valor, str(valor or "").upper())
 
-      <div class="input-group">
-        <label>Ángulo perimetral: <output id="edit-nz-angle-value">0° · Arriba</output></label>
-        <input type="range" id="edit-nz-angle" min="0" max="359" step="1" value="0">
-      </div>
-      
-      <div class="input-group">
-        <label>Posición X:</label>
-        <input type="range" id="edit-nz-x" step="0.05">
-      </div>
-      
-      <div id="flange-plugs-editor">
-      <div class="plug-edit-row" style="flex-wrap:wrap">
-        <input type="checkbox" id="edit-ns-check">
-        <label for="edit-ns-check" style="color:#fff; font-size:10px; margin:0;">NS (Frente)</label>
-        <input type="text" id="edit-ns-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
-        <select id="edit-ns-rating" disabled style="margin-left:38px;flex-basis:74px"><option value="3000#">3000#</option><option value="6000#">6000#</option></select>
-        <input type="text" id="edit-ns-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
-      </div>
-      <div class="plug-edit-row" style="flex-wrap:wrap">
-        <input type="checkbox" id="edit-fs-check">
-        <label for="edit-fs-check" style="color:#fff; font-size:10px; margin:0;">FS (Posterior)</label>
-        <input type="text" id="edit-fs-size" placeholder='Medida (ej. 1/2" NPT)' disabled style="flex-basis:155px">
-        <select id="edit-fs-rating" disabled style="margin-left:38px;flex-basis:74px"><option value="3000#">3000#</option><option value="6000#">6000#</option></select>
-        <input type="text" id="edit-fs-tag" placeholder="TAG opcional" disabled style="margin-left:38px;flex-basis:155px">
-      </div>
-      </div>
 
-      <div id="sub-nozzles-editor" style="margin-top:8px;padding-top:7px;border-top:1px solid #334155">
-        <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:3px">SUB-BOQUILLAS BRIDADAS</strong>
-        <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.3;margin-bottom:5px">Heredan clase y cara. Su diámetro no puede superar el de la boquilla principal.</small>
-        <div class="plug-edit-row" style="flex-wrap:wrap">
-          <input type="checkbox" id="edit-sub-front-check">
-          <label for="edit-sub-front-check" style="color:#fff;font-size:10px;margin:0">Frente / NS</label>
-          <select id="edit-sub-front-dia" disabled style="flex:1"></select>
-          <input type="text" id="edit-sub-front-tag" placeholder="TAG, ej. S1" disabled style="margin-left:38px;flex-basis:155px">
-        </div>
-        <div class="plug-edit-row" style="flex-wrap:wrap">
-          <input type="checkbox" id="edit-sub-rear-check">
-          <label for="edit-sub-rear-check" style="color:#fff;font-size:10px;margin:0">Posterior / FS</label>
-          <select id="edit-sub-rear-dia" disabled style="flex:1"></select>
-          <input type="text" id="edit-sub-rear-tag" placeholder="TAG, ej. T1" disabled style="margin-left:38px;flex-basis:155px">
-        </div>
-      </div>
-
-      <!-- BOTÓN ELIMINAR -->
-      <button id="btn-delete-nz">🗑️ ELIMINAR BOQUILLA</button>
-    </div>
-
-    <div class="panel-title" style="margin-top: 8px;">➕ Nueva Conexión</div>
-    <div class="input-group">
-      <label>Servicio:</label>
-      <select id="new-nz-service">
-        <option value="process">Proceso</option>
-        <option value="vent">Venteo</option>
-        <option value="drain">Drenaje</option>
-      </select>
-    </div>
-    <div class="input-group">
-      <label>Tipo:</label>
-      <select id="new-nz-type">
-        <option value="flanged">Boquilla bridada</option>
-        <option value="threaded">Boquilla roscada (plug)</option>
-      </select>
-    </div>
-    <div style="display:flex; gap:4px;">
-      <div class="input-group" style="flex:1;">
-        <label>Diámetro:</label>
-        <select id="new-nz-dia"></select>
-      </div>
-      <div class="input-group" id="new-rating-group" style="flex:1;">
-        <label>Clase:</label>
-        <select id="new-nz-rating"></select>
-      </div>
-    </div>
-    <div id="new-flange-details" style="display:flex;gap:4px">
-      <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
-    </div>
-    <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
-    <div class="input-group" id="new-neck-control">
-      <label>Largo niple visual: <output id="new-neck-length-value">0.30</output> m</label>
-      <input type="range" id="new-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
-    </div>
-    
-    <div class="input-group">
-      <select id="new-nz-body">
-        <option value="shell" selected>Shell</option>
-        <option value="transition" disabled>Transición</option>
-        <option value="channel">Channel</option>
-        <option value="bonnet">Bonete derecho</option>
-        <option value="bonnetLeft" disabled>Bonete izquierdo</option>
-      </select>
-    </div>
-    <div class="input-group">
-      <label>Posición inicial:</label>
-      <select id="new-nz-pos">
-        <option value="superior">Arriba</option><option value="inferior">Abajo</option>
-        <option value="front">Frente / NS</option><option value="rear">Posterior / FS</option>
-      </select>
-    </div>
-    <div class="input-group">
-      <label>Ángulo perimetral: <output id="new-nz-angle-value">0° · Arriba</output></label>
-      <input type="range" id="new-nz-angle" min="0" max="359" step="1" value="0">
-    </div>
-
-    <button id="btn-add-nz">AGREGAR CONEXIÓN</button>
-  </div>
-
-  <div id="canvas-container"></div>
-  <div id="load-error" role="alert" style="display:none;position:absolute;bottom:12px;right:12px;max-width:440px;padding:12px;background:#7f1d1d;color:white;border-radius:6px;z-index:30;white-space:pre-wrap;font-size:12px"></div>
-
-  <script>
-    // La conexión con Streamlit no depende de Three.js ni de WebGL.
-    (() => {
-      const status = document.getElementById('save-status');
-      const panel = document.getElementById('ui-container');
-      const panelToggle = document.getElementById('toggle-equipment-panel');
-      let panelCollapsed = false;
-      let panelReadOnly = false;
-      function updatePanel() {
-        panel.style.display = panelReadOnly || panelCollapsed ? 'none' : '';
-        panelToggle.hidden = panelReadOnly;
-        panelToggle.setAttribute('aria-expanded', String(!panelReadOnly && !panelCollapsed));
-        panelToggle.textContent = panelCollapsed ? 'Mostrar datos equipo' : 'Ocultar datos equipo';
-      }
-      panelToggle.addEventListener('click', () => {
-        panelCollapsed = !panelCollapsed;
-        updatePanel();
-      });
-      status.textContent = 'Conectando visor 3D...';
-      const bridge = window.exchangerBridge = {
-        args: null,
-        render: null,
-        setReadOnly(value) {
-          panelReadOnly = Boolean(value);
-          updatePanel();
-        },
-        send(type, fields) {
-          window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, '*');
-        },
-        fail(error) {
-          clearTimeout(bridge.timer);
-          status.textContent = 'No se pudo iniciar el visor 3D: ' +
-            (error && error.message ? error.message : String(error)) +
-            '\nRecarga la página. Si persiste, copia este mensaje.';
-          const errorBox = document.getElementById('load-error');
-          errorBox.textContent = status.textContent;
-          errorBox.style.display = 'block';
-          console.error('Visor 3D:', error);
-        },
-        attach(render) {
-          bridge.render = render;
-          if (bridge.args) render(bridge.args);
-        }
-      };
-      window.addEventListener('message', event => {
-        if (event.source !== window.parent || event.data?.type !== 'streamlit:render') return;
-        bridge.args = event.data.args;
-        bridge.setReadOnly(bridge.args.readonly);
-        if (bridge.render) {
-          try { bridge.render(bridge.args); } catch (error) { bridge.fail(error); }
-        }
-      });
-      window.addEventListener('error', event => bridge.fail(event.error || event.message));
-      window.addEventListener('unhandledrejection', event => bridge.fail(event.reason));
-      bridge.timer = setTimeout(() => {
-        status.textContent = 'La carga está tardando. Comprueba el acceso a cdn.jsdelivr.net y que WebGL esté disponible en el navegador.';
-      }, 20000);
-      bridge.send('streamlit:componentReady', {apiVersion: 1});
-      bridge.send('streamlit:setFrameHeight', {height: 720});
-    })();
-  </script>
-
-  <script type="module">
-    try {
-    const THREE = await import('three');
-    const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-
-    let initialized = false, loading = false, saving = false, readOnly = false;
-    let revision = 0, pendingSave = null;
-    const sessionId = globalThis.crypto?.randomUUID?.() ||
-      Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
-    function send(type, fields) {
-      window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, '*');
-    }
-    let currentNameplate = "";
-    let currentNameplateSide = 'front';
-    let currentModel = 'A';
-    // Los primeros 11 índices conservan exactamente la tabla histórica.
-    const DIAMETERS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"',
-      '6"', '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"'];
-    const DIAMETER_INCHES = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5, 14, 16, 18, 20, 24];
-    // ASME B16.5, diámetro exterior R de la cara elevada por NPS (pulgadas).
-    // El orden conserva los índices históricos de DIAMETERS.
-    const RAISED_FACE_DIAMETER_INCHES = [1.375, 1.688, 2.000, 2.875, 3.625,
-      5.000, 6.188, 8.500, 10.625, 12.750, 15.000, 4.125, 16.250, 18.500,
-      21.000, 23.000, 27.250];
-    const FLANGED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16];
-    const THREADED_DIAMETER_INDEXES = [0, 1, 2, 3, 4, 11];
-    const INCH = 0.0254;
-    // ASME B16.5 WN: D exterior, B espesor, A base del hub, OD tubo,
-    // H largo total, K círculo de pernos, L perforación; todo en pulgadas.
-    const FLANGE_DIMENSIONS = {
-      '150#': [
-        [3.50,.38,1.19,.84,1.81,2.38,.625,4], [3.88,.44,1.50,1.05,2.00,2.75,.625,4],
-        [4.25,.50,1.94,1.32,2.12,3.12,.625,4], [5.00,.62,2.56,1.90,2.38,3.88,.625,4],
-        [6.00,.69,3.06,2.38,2.44,4.75,.750,4], [7.50,.88,4.25,3.50,2.69,6.00,.750,4],
-        [9.00,.88,5.31,4.50,2.94,7.50,.750,8], [11.00,.94,7.56,6.63,3.44,9.50,.875,8],
-        [13.50,1.06,9.69,8.63,3.94,11.75,.875,8], [16.00,1.12,12.00,10.75,3.94,14.25,1.000,12],
-        [19.00,1.19,14.38,12.75,4.44,17.00,1.000,12], [7.00,.81,3.56,2.88,2.69,5.50,.750,4],
-        [21.00,1.31,15.75,14.00,4.94,18.75,1.125,12], [23.50,1.38,18.00,16.00,4.94,21.25,1.125,16],
-        [25.00,1.50,19.88,18.00,5.44,22.75,1.250,16], [27.50,1.62,22.00,20.00,5.62,25.00,1.250,20],
-        [32.00,1.81,26.12,24.00,5.94,29.50,1.375,20]
-      ],
-      '300#': [
-        [3.75,.50,1.50,.84,2.00,2.62,.625,4], [4.62,.56,1.88,1.05,2.19,3.25,.750,4],
-        [4.88,.62,2.12,1.32,2.38,3.50,.750,4], [6.12,.75,2.75,1.90,2.63,4.50,.875,4],
-        [6.50,.81,3.31,2.38,2.69,5.00,.750,8], [8.25,1.06,4.62,3.50,3.06,6.62,.875,8],
-        [10.00,1.19,5.75,4.50,3.32,7.88,.875,8], [12.50,1.38,8.12,6.63,3.82,10.62,.875,12],
-        [15.00,1.56,10.25,8.63,4.32,13.00,1.000,12], [17.50,1.81,12.62,10.75,4.56,15.25,1.125,16],
-        [20.50,1.94,14.75,12.75,5.06,17.75,1.250,16], [7.50,.94,3.94,2.88,2.94,5.88,.875,8],
-        [23.00,2.06,16.75,14.00,5.56,20.25,1.250,20], [25.50,2.19,19.00,16.00,5.69,22.50,1.375,20],
-        [28.00,2.31,21.00,18.00,6.19,24.75,1.375,24], [30.50,2.44,23.12,20.00,6.32,27.00,1.375,24],
-        [36.00,2.69,27.62,24.00,6.56,32.00,1.625,24]
-      ],
-      '600#': [
-        [3.75,.56,1.50,.84,2.06,2.62,.625,4], [4.62,.62,1.88,1.05,2.25,3.25,.750,4],
-        [4.88,.69,2.12,1.32,2.44,3.50,.750,4], [6.12,.88,2.75,1.90,2.75,4.50,.875,4],
-        [6.50,1.00,3.31,2.38,2.88,5.00,.750,8], [8.25,1.25,4.62,3.50,3.25,6.62,.875,8],
-        [10.75,1.50,6.00,4.50,4.00,8.50,1.000,8], [14.00,1.88,8.75,6.63,4.62,11.50,1.125,12],
-        [16.50,2.19,10.75,8.63,5.25,13.75,1.250,12], [20.00,2.50,13.50,10.75,6.00,17.00,1.375,16],
-        [22.00,2.62,15.75,12.75,6.12,19.25,1.375,20], [7.50,1.12,3.94,2.88,3.12,5.88,.875,8],
-        [23.75,2.75,17.00,14.00,6.50,20.75,1.500,20], [27.00,3.00,19.50,16.00,7.00,23.75,1.625,20],
-        [29.25,3.25,21.50,18.00,7.25,25.75,1.750,20], [32.00,3.50,24.00,20.00,7.50,28.50,1.750,24],
-        [37.00,4.00,28.25,24.00,8.00,33.00,2.000,24]
-      ]
-    };
-
-    function flangeDimensions(diaIndex, rating) {
-      const row = (FLANGE_DIMENSIONS[rating] || FLANGE_DIMENSIONS['150#'])[diaIndex];
-      const [D, B, A, OD, H, K, L, bolts] = row;
-      return {D:D*INCH, B:B*INCH, A:A*INCH, OD:OD*INCH, H:H*INCH,
-        K:K*INCH, L:L*INCH, bolts, R:RAISED_FACE_DIAMETER_INCHES[diaIndex]*INCH};
-    }
-
-    function raisedFaceHeight(rating) {
-      return (rating === '600#' ? 0.250 : 0.0625) * INCH;
-    }
-
-    function defaultNozzleNeckLength(diaIndex) {
-      const pipeOD = flangeDimensions(Number(diaIndex), '150#').OD;
-      const raw = Math.min(1.10, Math.max(0.20, 0.20 + pipeOD * 1.10));
-      return Math.round(raw / 0.05) * 0.05;
-    }
-
-    function sideConnectionScale(size) {
-      const text = String(size || '').replace(/NPT/gi, '').trim();
-      const index = DIAMETERS.findIndex(value => text.startsWith(value));
-      const pipeOD = flangeDimensions(index >= 0 ? index : 1, '150#').OD;
-      return Math.max(0.45, Math.min(1.25, pipeOD * 25));
-    }
-
-    function updateAsmeInfo(elementId, diaIndex, rating, type, face = 'RF') {
-      const element = document.getElementById(elementId);
-      if (type === 'threaded') {
-        element.style.display = 'none';
-        return;
-      }
-      const dim = flangeDimensions(Number(diaIndex), rating);
-      const mm = value => Math.round(value * 1000);
-      const faceInfo = face === 'FF' ? 'cara FF'
-        : `RF Ø ${mm(dim.R)} mm · h ${(raisedFaceHeight(rating) * 1000).toFixed(2)} mm`;
-      element.textContent = `ASME B16.5 · Ø brida ${mm(dim.D)} mm · BCD ${mm(dim.K)} mm · ${dim.bolts} agujeros Ø ${mm(dim.L)} mm · espesor ${mm(dim.B)} mm · ${faceInfo}`;
-      element.style.display = 'block';
-    }
-
-    function populateDiameterSelect(select, connectionType, selectedIndex) {
-      const allowed = connectionType === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
-      select.replaceChildren(...allowed.map(index => {
-        const option = document.createElement('option');
-        option.value = String(index);
-        option.textContent = DIAMETERS[index];
-        return option;
-      }));
-      const desired = allowed.includes(Number(selectedIndex)) ? Number(selectedIndex)
-        : (connectionType === 'threaded' ? 0 : 6);
-      select.value = String(desired);
-    }
-
-    function normalizeSubNozzle(value, parentDiaIndex) {
-      const source = value && typeof value === 'object' ? value : {};
-      const allowed = FLANGED_DIAMETER_INDEXES.filter(index =>
-        DIAMETER_INCHES[index] <= DIAMETER_INCHES[parentDiaIndex]);
-      const requested = Number(source.diaIndex);
-      const diaIndex = allowed.includes(requested) ? requested : allowed[allowed.length - 1];
-      return {enabled: !!source.enabled, tag: String(source.tag || ''), diaIndex};
-    }
-
-    function populateSubNozzleDiameterSelect(select, parentDiaIndex, selectedIndex) {
-      const allowed = FLANGED_DIAMETER_INDEXES.filter(index =>
-        DIAMETER_INCHES[index] <= DIAMETER_INCHES[parentDiaIndex]);
-      select.replaceChildren(...allowed.map(index => {
-        const option = document.createElement('option');
-        option.value = String(index);
-        option.textContent = DIAMETERS[index];
-        return option;
-      }));
-      select.value = String(allowed.includes(Number(selectedIndex))
-        ? Number(selectedIndex) : allowed[allowed.length - 1]);
-    }
-
-    function syncStateToParent(action = "change") {
-      if (loading || !initialized || readOnly) return;
-      const exportData = {
-        model: currentModel,
-        dimensions: {...currentDimensions, modelALengthsEnabled: true},
-        nameplate: currentNameplate,
-        nameplateSide: currentNameplateSide,
-        vent: "",
-        drain: "",
-        nozzles: nozzlesList.map(nz => ({
-          tagName: nz.userData.tagName || "",
-          service: nz.userData.service || "process",
-          connectionType: nz.userData.connectionType || "flanged",
-          diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
-          rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
-          flangeType: "WN",
-          face: nz.userData.face || "RF",
-          neckLength: nz.userData.neckLength || undefined,
-          bodyPart: nz.userData.bodyPart || "shell",
-          pos: nz.userData.pos || "superior",
-          angleDeg: Number.isFinite(nz.userData.angleDeg) ? nz.userData.angleDeg : 0,
-          valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
-          hasNS: !!nz.userData.hasNS,
-          sizeNS: nz.userData.sizeNS || "",
-          tagNS: nz.userData.tagNS || "",
-          ratingNS: nz.userData.ratingNS || "3000#",
-          hasFS: !!nz.userData.hasFS,
-          sizeFS: nz.userData.sizeFS || "",
-          tagFS: nz.userData.tagFS || "",
-          ratingFS: nz.userData.ratingFS || "3000#",
-          subFront: {...nz.userData.subFront},
-          subRear: {...nz.userData.subRear}
-        }))
-      };
-      const eventId = sessionId + ':' + (++revision);
-      if (action === 'save') pendingSave = eventId;
-      send('streamlit:setComponentValue', {dataType: 'json', value: {
-        event_id: eventId, action, data: exportData
-      }});
-    }
-
-    let nozzlesList = [];
-    let customNozzleCount = 0;
-
-    const R = 0.549; 
-    const L_SHELL = 4.275;
-    const T_FLANGE = 0.12;
-    const R_FLANGE = 0.65;
-    
-    const FLANGE_SHELL_R_X = 2.1975;
-    const FLANGE_SHELL_L_X = -2.1975;
-    const GASKET_T = 0.012; // Separación visual para distinguir la junta comprimida.
-    const BONNET_GRP_X = 2.2575 + GASKET_T;
-    const CHANNEL_GRP_X = -2.2575 - GASKET_T;
-    const NOZZLE_Y = R - 0.01; 
-
-    const BODY_BOUNDS = {
-      shell:   { min: -2.0, max: 2.0, center: 0 },
-      transition: { min: -2.0, max: 2.0, center: 0 },
-      channel: { min: -3.3, max: -2.4, center: -2.9775 },
-      bonnet:  { min: 2.35, max: 2.95, center: 2.6575 },
-      bonnetLeft: { min: -2.95, max: -2.35, center: -2.6575 }
-    };
-
-    const container = document.getElementById('canvas-container');
-    const scene = new THREE.Scene();
-
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(6, 4, 10); 
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setClearColor(0x172231, 1);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.enablePan = true;
-    controls.panSpeed = 1.0;
-    controls.target.set(0, 0, 0);
-
-    controls.mouseButtons = {
-      LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.PAN,
-      RIGHT: THREE.MOUSE.DOLLY
-    };
-
-    scene.add(new THREE.HemisphereLight(0xe5efff, 0x38404b, 2.1));
-    const dirLight = new THREE.DirectionalLight(0xfff4e6, 3.2);
-    dirLight.position.set(15, 25, 20);
-    scene.add(dirLight);
-    const fillLight = new THREE.DirectionalLight(0xb9d8ff, 2.2);
-    fillLight.position.set(-8, 3, -6);
-    scene.add(fillLight);
-    const rimLight = new THREE.DirectionalLight(0xffffff, 2.6);
-    rimLight.position.set(2, -2, 8);
-    scene.add(rimLight);
-
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0xa5b0b9, roughness: 0.38, metalness: 0.55 });
-    const flangeMatBase = new THREE.MeshStandardMaterial({ color: 0x788693, roughness: 0.29, metalness: 0.65 });
-    const nozzleMatBase = new THREE.MeshStandardMaterial({ color: 0x8a9ba7, roughness: 0.34, metalness: 0.55 });
-    const studMat = new THREE.MeshStandardMaterial({color: 0x343c46, roughness: 0.38, metalness: 0.7});
-    const nutMat = new THREE.MeshStandardMaterial({color: 0xa6adb5, roughness: 0.26, metalness: 0.7});
-    const gasketMat = new THREE.MeshStandardMaterial({color: 0x158447, roughness: 0.48, metalness: 0.25});
-    const gasketSteelMat = new THREE.MeshStandardMaterial({color: 0xc0c8ce, roughness: 0.3, metalness: 0.75});
-    const weldMat = new THREE.MeshStandardMaterial({color: 0x7c8790, roughness: 0.55, metalness: 0.5});
-    const partitionMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.5, metalness: 0.6 });
-    const plugMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.25, metalness: 0.85 }); 
-    const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
-
-    const heatExchanger = new THREE.Group();
-    scene.add(heatExchanger);
-
-    // Detalles visuales orientativos; no representan un patrón normativo de pernos.
-    function ringX(parent, x, radius, tube, material) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 8, 96), material);
-      ring.rotation.y = Math.PI / 2;
-      ring.position.x = x;
-      parent.add(ring);
-      return ring;
-    }
-    function cylinderX(parent, x, radius, thickness, material) {
-      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, thickness, 96), material);
-      mesh.rotation.z = Math.PI / 2;
-      mesh.position.x = x;
-      parent.add(mesh);
-      return mesh;
-    }
-    function spiralGasket(parent, x) {
-      const gasket = new THREE.Group();
-      gasket.name = 'Junta espirometalica: aro verde y espiral inoxidable';
-      function annulus(inner, outer, thickness, material) {
-        const points = [[inner, -thickness / 2], [outer, -thickness / 2],
-          [outer, thickness / 2], [inner, thickness / 2], [inner, -thickness / 2]]
-          .map(([r, axial]) => new THREE.Vector2(r, axial));
-        const mesh = new THREE.Mesh(new THREE.LatheGeometry(points, 96), material);
-        mesh.rotation.z = -Math.PI / 2;
-        gasket.add(mesh);
-      }
-      annulus(0.518, 0.533, GASKET_T * 0.75, gasketSteelMat);
-      annulus(0.533, 0.562, GASKET_T, gasketSteelMat);
-      annulus(0.562, 0.583, GASKET_T * 0.65, gasketMat);
-      // Espiral visible en ambas caras del anillo de sellado.
-      for (const side of [-1, 1]) {
-        const points = [];
-        for (let i = 0; i <= 600; i++) {
-          const fraction = i / 600;
-          const angle = fraction * Math.PI * 2 * 8;
-          const r = 0.534 + fraction * 0.026;
-          points.push(new THREE.Vector3(side * (GASKET_T / 2 + 0.0001), r * Math.cos(angle), r * Math.sin(angle)));
-        }
-        gasket.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
-          new THREE.LineBasicMaterial({color: 0x576873})));
-      }
-      gasket.position.x = x;
-      parent.add(gasket);
-    }
-    function studCircle(parent, leftFace, rightFace, count = 20, pitchRadius = 0.603) {
-      const shaftRadius = 0.014, nutHeight = 0.026;
-      const shaftLength = rightFace - leftFace + 0.094;
-      const groups = [
-        {geo: new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 12), mat: studMat, positions: []},
-        {geo: new THREE.CylinderGeometry(0.026, 0.026, nutHeight, 6), mat: nutMat, positions: []},
-        {geo: new THREE.TorusGeometry(shaftRadius, 0.0015, 4, 12), mat: nutMat, positions: [], torus: true}
-      ];
-      for (let i = 0; i < count; i++) {
-        const angle = (i + 0.5) * Math.PI * 2 / count;
-        const y = Math.cos(angle) * pitchRadius, z = Math.sin(angle) * pitchRadius;
-        groups[0].positions.push([(leftFace + rightFace) / 2, y, z]);
-        for (const [face, sign] of [[leftFace, -1], [rightFace, 1]]) {
-          groups[1].positions.push([face + sign * nutHeight / 2, y, z]);
-          // Anillos finos simulan los filetes visibles en los extremos del espárrago.
-          for (let t = 0; t < 5; t++) groups[2].positions.push([face + sign * (0.028 + t * 0.0035), y, z]);
-        }
-      }
-      const transform = new THREE.Object3D();
-      for (const part of groups) {
-        const mesh = new THREE.InstancedMesh(part.geo, part.mat, part.positions.length);
-        part.positions.forEach((pos, index) => {
-          transform.position.set(...pos);
-          transform.rotation.set(0, part.torus ? Math.PI / 2 : 0, part.torus ? 0 : Math.PI / 2);
-          transform.updateMatrix();
-          mesh.setMatrixAt(index, transform.matrix);
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        parent.add(mesh);
-      }
-    }
-
-    const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, L_SHELL, 96), shellMat);
-    shell.rotation.z = Math.PI / 2;
-    heatExchanger.add(shell);
-
-    const flangeGeo = new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, T_FLANGE, 96);
-    const flangeRight = new THREE.Mesh(flangeGeo, flangeMatBase);
-    flangeRight.rotation.z = Math.PI / 2;
-    flangeRight.position.x = FLANGE_SHELL_R_X;
-    heatExchanger.add(flangeRight);
-    
-    const flangeLeft = new THREE.Mesh(flangeGeo, flangeMatBase);
-    flangeLeft.rotation.z = Math.PI / 2;
-    flangeLeft.position.x = FLANGE_SHELL_L_X;
-    heatExchanger.add(flangeLeft);
-    const shellWeldRings = [];
-    for (const x of [-2.13, 2.13, -0.7, 0.7]) {
-      const ring = ringX(heatExchanger, x, R, 0.006, weldMat);
-      ring.userData.modelABaseX = x;
-      shellWeldRings.push(ring);
-    }
-    const shellFlangeRings = [];
-    for (const x of [FLANGE_SHELL_R_X, FLANGE_SHELL_L_X]) {
-      const side = Math.sign(x);
-      for (const offset of [-0.053, 0.053]) {
-        const ring = ringX(heatExchanger, x + offset, R_FLANGE, 0.003, nutMat);
-        ring.userData.modelASide = side;
-        ring.userData.modelAOffset = offset;
-        shellFlangeRings.push(ring);
-      }
-    }
-
-    function createTextSprite(initialText, color = 'white', fontSize = 32) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 300; 
-      canvas.height = 128;
-      const ctx = canvas.getContext('2d');
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
-      const sprite = new THREE.Sprite(spriteMat);
-      
-      sprite.userData.baseScaleX = 1.0;
-      sprite.userData.baseScaleY = 0.4;
-      sprite.scale.set(sprite.userData.baseScaleX, sprite.userData.baseScaleY, 1);
-
-      sprite.updateText = function(text) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const hasText = Boolean(text && text.trim());
-        sprite.visible = hasText;
-        if (sprite.userData.labelLeader) sprite.userData.labelLeader.visible = hasText;
-        if(!hasText) {
-          texture.needsUpdate = true;
-          return;
-        }
-        ctx.font = `bold ${fontSize}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = 'black'; 
-        ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
-        ctx.fillStyle = color;
-        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-        texture.needsUpdate = true;
-      };
-
-      sprite.updateText(initialText);
-      return sprite;
-    }
-
-    function attachNozzleLabel(parent, sprite, totalHeight, referenceOD, xDirection = 1) {
-      const direction = xDirection < 0 ? -1 : 1;
-      const labelX = direction * Math.max(0.38, referenceOD * 1.10);
-      const labelY = totalHeight + Math.max(0.16, referenceOD * 0.40);
-      sprite.scale.set(0.72, 0.23, 1);
-      sprite.position.set(labelX, labelY, 0);
-      sprite.renderOrder = 51;
-
-      const leader = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0, totalHeight + Math.max(0.015, referenceOD * 0.035), 0),
-          new THREE.Vector3(labelX * 0.72, labelY - 0.035, 0)
-        ]),
-        new THREE.LineBasicMaterial({
-          color: 0xa9c7ff, transparent: true, opacity: 0.78, depthTest: false
+def filas_boquillas(config):
+    filas = []
+    for n in config.get("nozzles", []):
+        legacy_ns = "sizeNS" not in n
+        legacy_fs = "sizeFS" not in n
+        medida_ns = (n.get("tagNS") if legacy_ns else n.get("sizeNS")) or "Sin medida"
+        medida_fs = (n.get("tagFS") if legacy_fs else n.get("sizeFS")) or "Sin medida"
+        tag_ns = "" if legacy_ns else (n.get("tagNS") or "")
+        tag_fs = "" if legacy_fs else (n.get("tagFS") or "")
+        rating_ns = n.get("ratingNS") or "3000#"
+        rating_fs = n.get("ratingFS") or "3000#"
+        detalle_ns = medida_ns + f" · {rating_ns}" + (f" · TAG {tag_ns}" if tag_ns else "")
+        detalle_fs = medida_fs + f" · {rating_fs}" + (f" · TAG {tag_fs}" if tag_fs else "")
+        roscada = n.get("connectionType", "flanged") == "threaded"
+        tipo = "ROSCADA" if roscada else f"WN-{n.get('face', 'RF')}"
+        servicio = {"process": "PROCESO", "vent": "VENTEO", "drain": "DRENAJE"}.get(
+            n.get("service", "process"), "PROCESO")
+        posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
+                    "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
+        filas.append({
+            "MK": n.get("tagName") or "Sin TAG", "QT": 1,
+            "SERVICIO": servicio,
+            "DIÁMETRO": DIAMETROS[n["diaIndex"]],
+            "RATING": n.get("rating") or ("3000#" if roscada else "Sin información"),
+            "TIPO": tipo,
+            "CUERPO": nombre_cuerpo(n["bodyPart"]), "POSICIÓN": posicion,
+            "NS": detalle_ns if n.get("hasNS", False) else "—",
+            "FS": detalle_fs if n.get("hasFS", False) else "—",
         })
-      );
-      leader.visible = sprite.visible;
-      leader.renderOrder = 50;
-      sprite.userData.labelLeader = leader;
-      parent.add(leader, sprite);
-      return leader;
-    }
-
-    const rearBonnetGroup = new THREE.Group();
-    // Bonete completo: brida de base solidaria al cuerpo y fondo elíptico.
-    // La cara x=0 se aperna a la brida del shell. No hay tapa desmontable.
-    // Perfil elíptico ilustrativo 2:1; ajustar con dimensiones reales si se dispone de plano.
-    const bonnetHeadDepth = R / 2;
-    const bonnetProfile = [
-      new THREE.Vector2(0, 0),
-      new THREE.Vector2(R, 0),
-      new THREE.Vector2(R, 0.8)
-    ];
-    for (let i = 1; i <= 32; i++) {
-      const angle = i * Math.PI / 64;
-      bonnetProfile.push(new THREE.Vector2(
-        i === 32 ? 0 : R * Math.cos(angle),
-        0.8 + bonnetHeadDepth * Math.sin(angle)
-      ));
-    }
-    const bonnetBody = new THREE.Mesh(new THREE.LatheGeometry(bonnetProfile, 96), shellMat);
-    bonnetBody.rotation.z = -Math.PI / 2;
-    rearBonnetGroup.add(bonnetBody);
-    const bonnetFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
-    bonnetFlange.rotation.z = Math.PI / 2;
-    bonnetFlange.position.x = T_FLANGE / 2;
-    rearBonnetGroup.add(bonnetFlange);
-    for (const x of [0.007, T_FLANGE - 0.007]) ringX(rearBonnetGroup, x, R_FLANGE, 0.003, nutMat);
-    spiralGasket(rearBonnetGroup, -GASKET_T / 2);
-    studCircle(rearBonnetGroup, -T_FLANGE - GASKET_T, T_FLANGE);
-
-    rearBonnetGroup.position.x = BONNET_GRP_X;
-    heatExchanger.add(rearBonnetGroup);
-
-    const channelGroup = new THREE.Group();
-    const channelBody = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 1.2, 96), shellMat);
-    channelBody.rotation.z = Math.PI / 2;
-    channelBody.position.x = -0.72;
-    channelGroup.add(channelBody);
-    const channelInnerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
-    channelInnerFlange.rotation.z = Math.PI / 2;
-    channelInnerFlange.position.x = -0.06;
-    channelGroup.add(channelInnerFlange);
-    const channelOuterFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
-    channelOuterFlange.rotation.z = Math.PI / 2;
-    channelOuterFlange.position.x = -1.38;
-    channelGroup.add(channelOuterFlange);
-    const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
-    coverPlate.rotation.z = Math.PI / 2;
-    coverPlate.position.x = -1.49 - GASKET_T;
-    channelGroup.add(coverPlate);
-    spiralGasket(channelGroup, -1.44 - GASKET_T / 2);
-    studCircle(channelGroup, -1.54 - GASKET_T, -1.32);
-    studCircle(channelGroup, -T_FLANGE, T_FLANGE + GASKET_T);
-    spiralGasket(channelGroup, GASKET_T / 2);
-    ringX(channelGroup, -1.31, R, 0.009, weldMat);
-    ringX(channelGroup, -0.13, R, 0.009, weldMat);
-    ringX(channelGroup, -1.542 - GASKET_T, R_FLANGE - 0.02, 0.003, nutMat);
-    const partitionPlate = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 1.09), partitionMat);
-    partitionPlate.position.x = -0.72;
-    channelGroup.add(partitionPlate);
-    channelGroup.position.x = CHANNEL_GRP_X; 
-    heatExchanger.add(channelGroup);
-
-    const originalModelAParts = [...heatExchanger.children];
-    const modelAShellGroup = new THREE.Group();
-    modelAShellGroup.name = 'Modelo A: shell y bridas principales';
-    originalModelAParts
-      .filter(part => part !== rearBonnetGroup && part !== channelGroup)
-      .forEach(part => modelAShellGroup.add(part));
-    heatExchanger.add(modelAShellGroup);
-    const MODEL_A_BONNET_LENGTH = 0.80;
-
-    // Modelo C: mismo cuerpo y channel del A, con bonete soldado directamente.
-    const weldedBonnetGroup = new THREE.Group();
-    weldedBonnetGroup.name = 'Modelo C: bonete soldado sin bridas';
-    const weldedBonnetBody = new THREE.Mesh(new THREE.LatheGeometry(bonnetProfile, 96), shellMat);
-    weldedBonnetBody.rotation.z = -Math.PI / 2;
-    weldedBonnetGroup.add(weldedBonnetBody);
-    ringX(weldedBonnetGroup, 0.012, R, 0.014, weldMat);
-    heatExchanger.add(weldedBonnetGroup);
-    weldedBonnetGroup.visible = false;
-
-    // Modelos D/E: el mismo bonete soldado se refleja en el extremo izquierdo.
-    const leftBonnetGroup = weldedBonnetGroup.clone(true);
-    leftBonnetGroup.name = 'Modelos D/E: bonete soldado izquierdo sin bridas';
-    leftBonnetGroup.rotation.y = Math.PI;
-    const leftBonnetBody = leftBonnetGroup.children.find(
-      child => child.geometry === weldedBonnetBody.geometry);
-    heatExchanger.add(leftBonnetGroup);
-    leftBonnetGroup.visible = false;
-
-    const modelB = new THREE.Group();
-    modelB.name = 'Modelo B: transición cónica y cabezal reducido';
-    heatExchanger.add(modelB);
-    modelB.visible = false;
-    let currentDimensions = {
-      shellLength: 4.275,
-      reducerLength: 0.9,
-      channelLength: 1.20,
-      bonnetLength: 0.80,
-      shellDiameter: 1.098,
-      channelDiameter: 1.098,
-      bonnetDiameter: 1.098
-    };
-    function modelBLayout() {
-      const shellRadius = currentDimensions.shellDiameter / 2;
-      const channelRadius = currentDimensions.channelDiameter / 2;
-      const bonnetRadius = currentDimensions.bonnetDiameter / 2;
-      const shellLeft = -currentDimensions.shellLength / 2;
-      const shellRight = currentDimensions.shellLength / 2;
-      const reducerSmall = shellLeft - currentDimensions.reducerLength;
-      const channelBodyRight = reducerSmall - (2 * T_FLANGE + GASKET_T);
-      const channelBodyLeft = channelBodyRight - currentDimensions.channelLength;
-      return {shellLeft, shellRight, reducerSmall, channelBodyRight, channelBodyLeft,
-        bonnetTip: shellRight + currentDimensions.bonnetLength,
-        channelY: -shellRadius + channelRadius, shellRadius, channelRadius, bonnetRadius};
-    }
-    // Reductor excéntrico: la generatriz inferior queda recta y la superior
-    // forma la diagonal hacia el cabezal de menor diámetro.
-    function eccentricReducer(xSmall, xLarge, rSmall, rLarge, segments = 96) {
-      const positions = [], indices = [];
-      for (const [x, radius] of [[xSmall, rSmall], [xLarge, rLarge]]) {
-        const centerY = -rLarge + radius; // Mantiene y inferior = -rLarge.
-        for (let i = 0; i <= segments; i++) {
-          const angle = i / segments * Math.PI * 2;
-          positions.push(x, centerY + radius * Math.cos(angle), radius * Math.sin(angle));
-        }
-      }
-      const stride = segments + 1;
-      for (let i = 0; i < segments; i++) {
-        const a = i, b = i + 1, c = stride + i, d = stride + i + 1;
-        indices.push(a, c, b, b, c, d);
-      }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geometry.setIndex(indices);
-      geometry.computeVertexNormals();
-      return new THREE.Mesh(geometry, shellMat);
-    }
-    function clearModelB() {
-      modelB.traverse(object => { if (object.geometry) object.geometry.dispose(); });
-      modelB.clear();
-    }
-    function buildModelB() {
-      clearModelB();
-      const p = modelBLayout();
-      cylinderX(modelB, 0, p.shellRadius, currentDimensions.shellLength, shellMat);
-      ringX(modelB, p.shellLeft, p.shellRadius, 0.007, weldMat);
-      ringX(modelB, p.shellRight, p.shellRadius, 0.007, weldMat);
-
-      // Reductor excéntrico: fondo recto y parte superior diagonal.
-      modelB.add(eccentricReducer(p.reducerSmall, p.shellLeft, p.channelRadius, p.shellRadius));
-
-      // Bonete mayor soldado: fondo elíptico integrado y sin brida.
-      const bonnet = new THREE.Mesh(
-        new THREE.SphereGeometry(p.bonnetRadius, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
-      bonnet.rotation.z = -Math.PI / 2;
-      bonnet.scale.y = currentDimensions.bonnetLength / p.bonnetRadius;
-      bonnet.position.x = p.shellRight;
-      modelB.add(bonnet);
-
-      // Channel menor, unido al reductor y cerrado por una tapa plana apernada.
-      const channel = new THREE.Group();
-      channel.name = 'Channel con tapa plana';
-      channel.position.y = p.channelY;
-      modelB.add(channel);
-      cylinderX(channel, (p.channelBodyLeft + p.channelBodyRight) / 2,
-        p.channelRadius, currentDimensions.channelLength, shellMat);
-
-      // Unión reductor-channel.
-      const channelFlangeRadius = p.channelRadius * 1.25;
-      const channelPitchRadius = p.channelRadius * 1.133;
-      cylinderX(channel, p.reducerSmall - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
-      cylinderX(channel, p.reducerSmall - 1.5 * T_FLANGE - GASKET_T, channelFlangeRadius, T_FLANGE, flangeMatBase);
-      const innerGasket = new THREE.Group();
-      const gasketScale = p.channelRadius / R;
-      innerGasket.scale.set(1, gasketScale, gasketScale);
-      channel.add(innerGasket);
-      spiralGasket(innerGasket, p.reducerSmall - T_FLANGE - GASKET_T / 2);
-      studCircle(channel, p.reducerSmall - 2 * T_FLANGE - GASKET_T,
-        p.reducerSmall, 16, channelPitchRadius);
-
-      // Tapa plana: brida exterior + junta + placa circular.
-      const coverJoint = p.channelBodyLeft;
-      cylinderX(channel, coverJoint - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
-      const outerGasket = new THREE.Group();
-      outerGasket.scale.set(1, gasketScale, gasketScale);
-      channel.add(outerGasket);
-      spiralGasket(outerGasket, coverJoint - T_FLANGE - GASKET_T / 2);
-      const coverThickness = 0.10;
-      cylinderX(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness / 2,
-        channelFlangeRadius, coverThickness, flangeMatBase);
-      studCircle(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness,
-        coverJoint, 16, channelPitchRadius);
-    }
-    const dimensionControls = {
-      shellLength: ['shell-length', 'shell-length-value'],
-      reducerLength: ['reducer-length', 'reducer-length-value'],
-      channelLength: ['channel-length', 'channel-length-value'],
-      bonnetLength: ['bonnet-length', 'bonnet-length-value'],
-      shellDiameter: ['shell-diameter', 'shell-diameter-value'],
-      channelDiameter: ['channel-diameter', 'channel-diameter-value'],
-      bonnetDiameter: ['bonnet-diameter', 'bonnet-diameter-value']
-    };
-    function updateDimensionControls() {
-      for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
-        document.getElementById(inputId).value = currentDimensions[field];
-        document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
-      }
-    }
-    function loadDimensions(dimensions = {}, model = 'A') {
-      const defaults = model === 'B'
-        ? {shellLength: 4.5, reducerLength: 0.9, channelLength: 0.65, bonnetLength: 0.40,
-           shellDiameter: 1.44, channelDiameter: 0.72, bonnetDiameter: 1.44}
-        : {shellLength: 4.275, reducerLength: 0.9, channelLength: 1.20, bonnetLength: 0.80,
-           shellDiameter: 1.098, channelDiameter: 1.098, bonnetDiameter: 1.098};
-      currentDimensions = {...defaults};
-      const legacyModelA = model !== 'B' && dimensions.modelALengthsEnabled !== true;
-      for (const [field, [inputId]] of Object.entries(dimensionControls)) {
-        if (legacyModelA && field.endsWith('Length')) continue;
-        const input = document.getElementById(inputId);
-        const proposed = Number(dimensions[field]);
-        if (Number.isFinite(proposed)) {
-          currentDimensions[field] = Math.min(Number(input.max), Math.max(Number(input.min), proposed));
-        }
-      }
-      updateDimensionControls();
-      buildModelB();
-    }
-    buildModelB();
-    updateDimensionControls();
-    function rebuildModelAChannel() {
-      channelGroup.traverse(object => {
-        if (object.geometry && object.geometry !== flangeGeo) object.geometry.dispose();
-      });
-      channelGroup.clear();
-      const length = currentDimensions.channelLength;
-      const bodyRight = -0.12;
-      const bodyLeft = bodyRight - length;
-      const bodyCenter = (bodyLeft + bodyRight) / 2;
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, length, 96), shellMat);
-      body.rotation.z = Math.PI / 2;
-      body.position.x = bodyCenter;
-      channelGroup.add(body);
-      const innerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
-      innerFlange.rotation.z = Math.PI / 2;
-      innerFlange.position.x = -0.06;
-      channelGroup.add(innerFlange);
-      const outerFlangeX = -(length + 0.18);
-      const outerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
-      outerFlange.rotation.z = Math.PI / 2;
-      outerFlange.position.x = outerFlangeX;
-      channelGroup.add(outerFlange);
-      const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
-      coverPlate.rotation.z = Math.PI / 2;
-      coverPlate.position.x = -(length + 0.29 + GASKET_T);
-      channelGroup.add(coverPlate);
-      spiralGasket(channelGroup, -(length + 0.24 + GASKET_T / 2));
-      studCircle(channelGroup, -(length + 0.34 + GASKET_T), -(length + 0.12));
-      studCircle(channelGroup, -T_FLANGE, T_FLANGE + GASKET_T);
-      spiralGasket(channelGroup, GASKET_T / 2);
-      ringX(channelGroup, -(length + 0.11), R, 0.009, weldMat);
-      ringX(channelGroup, -0.13, R, 0.009, weldMat);
-      ringX(channelGroup, -(length + 0.342 + GASKET_T), R_FLANGE - 0.02, 0.003, nutMat);
-      const partition = new THREE.Mesh(new THREE.BoxGeometry(length, 0.02, 1.09), partitionMat);
-      partition.position.x = bodyCenter;
-      channelGroup.add(partition);
-    }
-    function applyModelADimensions() {
-      const shellScale = currentDimensions.shellDiameter / (2 * R);
-      const channelScale = currentDimensions.channelDiameter / (2 * R);
-      const bonnetScale = currentDimensions.bonnetDiameter / (2 * R);
-      const shellLengthScale = currentDimensions.shellLength / L_SHELL;
-      const bonnetLengthScale = currentDimensions.bonnetLength / MODEL_A_BONNET_LENGTH;
-      modelAShellGroup.scale.set(1, shellScale, shellScale);
-      shell.scale.y = shellLengthScale;
-      flangeRight.position.x = currentDimensions.shellLength / 2 + T_FLANGE / 2;
-      flangeLeft.position.x = -currentDimensions.shellLength / 2 - T_FLANGE / 2;
-      shellWeldRings.forEach(ring => {
-        ring.position.x = ring.userData.modelABaseX * shellLengthScale;
-      });
-      shellFlangeRings.forEach(ring => {
-        ring.position.x = ring.userData.modelASide *
-          (currentDimensions.shellLength / 2 + T_FLANGE / 2) + ring.userData.modelAOffset;
-      });
-      const jointOffset = 0.132;
-      channelGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
-      rearBonnetGroup.position.x = currentDimensions.shellLength / 2 + jointOffset;
-      leftBonnetGroup.position.x = -currentDimensions.shellLength / 2;
-      rebuildModelAChannel();
-      channelGroup.scale.set(1, channelScale, channelScale);
-      bonnetBody.scale.y = bonnetLengthScale;
-      rearBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
-      if (leftBonnetBody) leftBonnetBody.scale.y = bonnetLengthScale;
-      leftBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
-      weldedBonnetGroup.position.x = currentDimensions.shellLength / 2;
-      weldedBonnetBody.scale.y = bonnetLengthScale;
-      weldedBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
-    }
-    function componentRadius(bodyPart) {
-      if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
-      if (bodyPart === 'bonnet' || bodyPart === 'bonnetLeft') return currentDimensions.bonnetDiameter / 2;
-      return currentDimensions.shellDiameter / 2;
-    }
-    function sectionAt(x, bodyPart = 'shell') {
-      if (currentModel !== 'B') {
-        return {centerY: 0, radius: componentRadius(bodyPart)};
-      }
-      const p = modelBLayout();
-      if (bodyPart === 'channel' || x < p.reducerSmall) {
-        return {centerY: p.channelY, radius: p.channelRadius};
-      }
-      if (bodyPart === 'transition' || x < p.shellLeft) {
-        const radius = p.channelRadius + (x - p.reducerSmall) /
-          currentDimensions.reducerLength * (p.shellRadius - p.channelRadius);
-        return {centerY: -p.shellRadius + radius, radius};
-      }
-      if (bodyPart === 'bonnet' || x > p.shellRight) {
-        const radius = p.bonnetRadius * Math.sqrt(Math.max(0.05,
-          1 - ((x - p.shellRight) / currentDimensions.bonnetLength) ** 2));
-        return {centerY: 0, radius};
-      }
-      return {centerY: 0, radius: p.shellRadius};
-    }
-    const POSITION_ANGLES = {superior: 0, front: 90, inferior: 180, rear: 270};
-    const POSITION_LABELS = {
-      superior: 'Arriba', front: 'Frente / NS', inferior: 'Abajo', rear: 'Posterior / FS'
-    };
-    function syncPositionAnglesToNameplate() {
-      const frontAngle = currentNameplateSide === 'rear' ? 270 : 90;
-      POSITION_ANGLES.front = frontAngle;
-      POSITION_ANGLES.rear = (frontAngle + 180) % 360;
-    }
-    function nameplateGlobalSide() {
-      return currentNameplateSide === 'rear' ? -1 : 1;
-    }
-    syncPositionAnglesToNameplate();
-    function normalizedPerimeterAngle(angleDeg, fallbackPos = 'superior') {
-      const hasAngle = angleDeg !== null && angleDeg !== undefined && angleDeg !== '';
-      const raw = Number(angleDeg);
-      return hasAngle && Number.isFinite(raw) ? ((raw % 360) + 360) % 360
-        : (POSITION_ANGLES[fallbackPos] ?? 0);
-    }
-    function closestPerimeterPosition(angleDeg) {
-      const angle = normalizedPerimeterAngle(angleDeg);
-      return Object.keys(POSITION_ANGLES).reduce((best, key) => {
-        const delta = Math.abs(((angle - POSITION_ANGLES[key] + 180) % 360) - 180);
-        return delta < best.delta ? {key, delta} : best;
-      }, {key: 'superior', delta: Infinity}).key;
-    }
-    function updatePerimeterAngleOutput(elementId, angleDeg) {
-      const angle = Math.round(normalizedPerimeterAngle(angleDeg));
-      const position = closestPerimeterPosition(angle);
-      document.getElementById(elementId).value = `${angle}° · ${POSITION_LABELS[position]}`;
-    }
-    function localSubNozzleSide(angleDeg, globalSide) {
-      // La rama vive dentro del sistema local de la boquilla madre. Al pasar por
-      // la mitad inferior, su +Z local apunta a -Z global; se compensa aquí para
-      // conservar la cara global solicitada alrededor de todo el equipo.
-      const cosine = Math.cos(THREE.MathUtils.degToRad(normalizedPerimeterAngle(angleDeg)));
-      const orientation = Math.abs(cosine) < 1e-6 ? 1 : Math.sign(cosine);
-      return globalSide * orientation;
-    }
-    function orientSubNozzleBranch(branch, localSide) {
-      if (!branch) return;
-      branch.position.z = localSide * Math.abs(branch.position.z);
-      branch.rotation.x = localSide > 0 ? Math.PI / 2 : -Math.PI / 2;
-    }
-    function orientSubNozzlesGlobally(nozzle, angleDeg) {
-      const frontSide = nameplateGlobalSide();
-      orientSubNozzleBranch(nozzle.userData.subFrontGroup,
-        localSubNozzleSide(angleDeg, frontSide));
-      orientSubNozzleBranch(nozzle.userData.subRearGroup,
-        localSubNozzleSide(angleDeg, -frontSide));
-      orientSubNozzleBranch(nozzle.userData.plugNS,
-        localSubNozzleSide(angleDeg, frontSide));
-      orientSubNozzleBranch(nozzle.userData.plugFS,
-        localSubNozzleSide(angleDeg, -frontSide));
-    }
-    function placeNozzle(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
-      const section = sectionAt(x, bodyPart);
-      const radius = Math.max(0.05, section.radius - 0.01);
-      const angle = normalizedPerimeterAngle(angleDeg, pos);
-      const radians = THREE.MathUtils.degToRad(angle);
-      nozzle.userData.angleDeg = angle;
-      nozzle.position.set(x, section.centerY + Math.cos(radians) * radius,
-        Math.sin(radians) * radius);
-      nozzle.rotation.set(radians, 0, 0);
-      orientSubNozzlesGlobally(nozzle, angle);
-    }
-    function applyModel(model, reposition = false) {
-      currentModel = ['A', 'B', 'C', 'D', 'E'].includes(model) ? model : 'A';
-      document.getElementById('equipment-model').value = currentModel;
-      modelAShellGroup.visible = currentModel !== 'B';
-      channelGroup.visible = currentModel === 'A' || currentModel === 'C';
-      rearBonnetGroup.visible = currentModel === 'A' || currentModel === 'E';
-      leftBonnetGroup.visible = currentModel === 'D' || currentModel === 'E';
-      weldedBonnetGroup.visible = currentModel === 'C' || currentModel === 'D';
-      modelB.visible = currentModel === 'B';
-      flangeRight.visible = currentModel !== 'C' && currentModel !== 'D';
-      flangeLeft.visible = currentModel !== 'D' && currentModel !== 'E';
-      shellFlangeRings.forEach(ring => {
-        ring.visible = currentModel !== 'D' &&
-          !(currentModel === 'C' && ring.userData.modelASide > 0) &&
-          !(currentModel === 'E' && ring.userData.modelASide < 0);
-      });
-      document.getElementById('transition-length-control').style.display = currentModel === 'B' ? '' : 'none';
-      document.getElementById('model-d-note').style.display = currentModel === 'D' ? 'block' : 'none';
-      document.getElementById('model-e-note').style.display = currentModel === 'E' ? 'block' : 'none';
-      document.getElementById('channel-diameter').disabled = currentModel === 'D' || currentModel === 'E';
-      document.getElementById('channel-length').disabled = currentModel === 'D' || currentModel === 'E';
-      applyModelADimensions();
-      const p = modelBLayout();
-      BODY_BOUNDS.shell = currentModel === 'B'
-        ? {min: p.shellLeft + 0.15, max: p.shellRight - 0.15, center: 0}
-        : {min: -currentDimensions.shellLength / 2 + 0.15,
-          max: currentDimensions.shellLength / 2 - 0.15, center: 0};
-      BODY_BOUNDS.transition = currentModel === 'B'
-        ? {min: p.reducerSmall + 0.05, max: p.shellLeft - 0.05,
-          center: (p.reducerSmall + p.shellLeft) / 2}
-        : {...BODY_BOUNDS.shell};
-      BODY_BOUNDS.bonnetLeft = {
-        min: leftBonnetGroup.position.x - Math.max(0.10, currentDimensions.bonnetLength - 0.05),
-        max: leftBonnetGroup.position.x - 0.05,
-        center: leftBonnetGroup.position.x - currentDimensions.bonnetLength * 0.45
-      };
-      BODY_BOUNDS.channel = currentModel === 'D' || currentModel === 'E'
-        ? {...BODY_BOUNDS.bonnetLeft}
-        : currentModel === 'B'
-        ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
-          center: (p.channelBodyLeft + p.channelBodyRight) / 2}
-        : {min: channelGroup.position.x - currentDimensions.channelLength - 0.04,
-          max: channelGroup.position.x - 0.20,
-          center: channelGroup.position.x - 0.12 - currentDimensions.channelLength / 2};
-      const bonnetBaseX = currentModel === 'C' || currentModel === 'D'
-        ? weldedBonnetGroup.position.x : rearBonnetGroup.position.x;
-      BODY_BOUNDS.bonnet = currentModel === 'B'
-        ? {min: p.shellRight + 0.05, max: p.bonnetTip - 0.05,
-          center: p.shellRight + currentDimensions.bonnetLength * 0.45}
-        : {min: bonnetBaseX + 0.05,
-          max: bonnetBaseX + Math.max(0.10, currentDimensions.bonnetLength - 0.05),
-          center: bonnetBaseX + currentDimensions.bonnetLength * 0.45};
-      document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
-        .forEach(option => { option.disabled = currentModel !== 'B'; });
-      document.querySelectorAll('#edit-nz-body option[value="channel"], #new-nz-body option[value="channel"]')
-        .forEach(option => { option.disabled = currentModel === 'D' || currentModel === 'E'; });
-      document.querySelectorAll('#edit-nz-body option[value="bonnetLeft"], #new-nz-body option[value="bonnetLeft"]')
-        .forEach(option => { option.disabled = currentModel !== 'D' && currentModel !== 'E'; });
-      nozzlesList.forEach(nozzle => {
-        const data = nozzle.userData;
-        if ((currentModel === 'D' || currentModel === 'E') && data.bodyPart === 'channel') data.bodyPart = 'bonnetLeft';
-        if (currentModel !== 'D' && currentModel !== 'E' && data.bodyPart === 'bonnetLeft') data.bodyPart = 'channel';
-        const bounds = BODY_BOUNDS[data.bodyPart];
-        if (reposition && bounds && (data.valX < bounds.min || data.valX > bounds.max)) data.valX = bounds.center;
-        placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
-      });
-      updateNameplatePlacement();
-      if (reposition && selectedNozzle) {
-        const activeNozzle = selectedNozzle;
-        deselectNozzle();
-        selectNozzle(activeNozzle);
-      }
-    }
-
-    function createNozzlePlug(colorMat, tagText = '', rating = '3000#') {
-      const plugGroup = new THREE.Group();
-      const classFactor = rating === '6000#' ? 1.16 : 1.0;
-      const couplingH = 0.06 * classFactor;
-      const threadH = 0.02 * classFactor;
-      const headH = 0.08 * classFactor;
-      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(
-        0.04 * classFactor, 0.04 * classFactor, couplingH, 24), colorMat);
-      coupling.position.y = couplingH / 2;
-      plugGroup.add(coupling);
-      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(
-        0.025 * classFactor, 0.025 * classFactor, threadH, 24), plugMat);
-      threadedBody.position.y = couplingH + threadH / 2;
-      plugGroup.add(threadedBody);
-      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(
-        0.025 * classFactor, 0.025 * classFactor, headH, 24), plugMat);
-      elongatedHead.position.y = couplingH + threadH + headH / 2;
-      plugGroup.add(elongatedHead);
-      const tagSprite = createTextSprite(tagText, 'white', 34);
-      attachNozzleLabel(plugGroup, tagSprite, couplingH + threadH + headH,
-        0.08 * classFactor);
-      plugGroup.userData.tagSprite = tagSprite;
-      return plugGroup;
-    }
-    function scaleNozzlePlug(plugGroup, size) {
-      const scale = sideConnectionScale(size);
-      plugGroup.scale.setScalar(scale);
-      const tagSprite = plugGroup.userData.tagSprite;
-      if (tagSprite) {
-        tagSprite.position.multiplyScalar(1 / scale);
-        tagSprite.scale.multiplyScalar(1 / scale);
-        tagSprite.userData.labelLeader?.scale.setScalar(1 / scale);
-      }
-    }
-
-    function createFlangedSubNozzle(config, side, parentPipeR, parentNippleLength,
-      rating, face, nzMat, flMat, rfMat) {
-      const branch = new THREE.Group();
-      const dim = flangeDimensions(config.diaIndex, rating);
-      const pipeR = dim.OD / 2;
-      const pInner = Math.max(dim.OD * 0.40, pipeR - Math.min(0.012, dim.OD * 0.08));
-      const hubR = dim.A / 2;
-      const rfHeight = face === 'RF' ? raisedFaceHeight(rating) : 0;
-      const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
-      const stubLength = Math.max(0.10, Math.min(0.28, dim.OD * 1.35));
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, stubLength, 40), nzMat);
-      stem.position.y = stubLength / 2;
-      branch.add(stem);
-      const hubProfile = [[pInner, stubLength], [pipeR, stubLength],
-        [hubR, stubLength + hubHeight], [pInner, stubLength + hubHeight],
-        [pInner, stubLength]].map(([x, y]) => new THREE.Vector2(x, y));
-      branch.add(new THREE.Mesh(new THREE.LatheGeometry(hubProfile, 48), nzMat));
-
-      const flangeShape = new THREE.Shape();
-      flangeShape.absarc(0, 0, dim.D / 2, 0, Math.PI * 2, false);
-      const bore = new THREE.Path();
-      bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
-      flangeShape.holes.push(bore);
-      for (let i = 0; i < dim.bolts; i++) {
-        const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
-        const boltHole = new THREE.Path();
-        boltHole.absarc(Math.cos(angle) * dim.K / 2, Math.sin(angle) * dim.K / 2,
-          dim.L / 2, 0, Math.PI * 2, true);
-        flangeShape.holes.push(boltHole);
-      }
-      const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
-        depth: dim.B, bevelEnabled: true, bevelThickness: Math.min(0.0012, dim.B * 0.05),
-        bevelSize: Math.min(0.0012, dim.B * 0.05), bevelSegments: 1, steps: 1, curveSegments: 40
-      }), flMat);
-      flange.rotation.x = -Math.PI / 2;
-      flange.position.y = stubLength + hubHeight;
-      branch.add(flange);
-
-      const totalH = stubLength + dim.H;
-      const faceOuter = dim.R / 2;
-      const faceProfile = [[pInner, totalH - rfHeight], [faceOuter, totalH - rfHeight],
-        [faceOuter, totalH], [pInner, totalH], [pInner, totalH - rfHeight]]
-        .map(([x, y]) => new THREE.Vector2(x, y));
-      const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 48), rfMat);
-      faceMesh.visible = face === 'RF';
-      branch.add(faceMesh);
-      const opening = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
-      opening.rotation.x = -Math.PI / 2;
-      opening.position.y = totalH + 0.0003;
-      branch.add(opening);
-      const weld = new THREE.Mesh(new THREE.TorusGeometry(pipeR,
-        Math.max(0.0012, dim.OD * 0.028), 8, 40), weldMat);
-      weld.rotation.x = Math.PI / 2;
-      branch.add(weld);
-      const label = createTextSprite(config.tag, 'white', 34);
-      attachNozzleLabel(branch, label, totalH, dim.D);
-
-      branch.position.set(0, Math.max(0.05, parentNippleLength * 0.52),
-        side * parentPipeR * 0.72);
-      branch.rotation.x = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-      branch.visible = config.enabled;
-      return branch;
-    }
-
-    function normalizeBodyPartForCurrentModel(bodyPart) {
-      if ((currentModel === 'D' || currentModel === 'E') && bodyPart === 'channel') return 'bonnetLeft';
-      if (currentModel !== 'D' && currentModel !== 'E' && bodyPart === 'bonnetLeft') return 'channel';
-      return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
-    }
-
-    function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
-      hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#') {
-      const group = new THREE.Group();
-      const requestedBodyPart = bodyPart;
-      bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
-      const bodyBounds = BODY_BOUNDS[bodyPart];
-      const numericX = Number(posX);
-      posX = requestedBodyPart === bodyPart && Number.isFinite(numericX) &&
-        numericX >= bodyBounds.min && numericX <= bodyBounds.max ? numericX : bodyBounds.center;
-      const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
-      const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
-      const normalizedRating = type === 'threaded'
-        ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
-        : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
-      const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
-      
-      const visualNeckLength = type === 'flanged'
-        ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
-      group.userData = {
-        isNozzle: true, idName: internalName, tagName: tagText,
-        diaIndex: dIndex, connectionType: type, rating: normalizedRating, service: service,
-        flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
-        pos: closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
-        valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
-        hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
-        ratingNS: ['3000#', '6000#'].includes(ratingNS) ? ratingNS : '3000#',
-        hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS,
-        ratingFS: ['3000#', '6000#'].includes(ratingFS) ? ratingFS : '3000#',
-        subFront: normalizeSubNozzle(subFront, dIndex),
-        subRear: normalizeSubNozzle(subRear, dIndex)
-      };
-
-      const nzMat = nozzleMatBase.clone();
-      const flMat = flangeMatBase.clone();
-      const rfMat = flangeMatBase.clone();
-      rfMat.color.setHex(0x9ba7b1);
-      rfMat.roughness = 0.22;
-      group.userData.materials = [nzMat, flMat, rfMat]; 
-      let totalH, plugNS, plugFS;
-      if (type === 'threaded') {
-        const pipeOD = flangeDimensions(dIndex, '150#').OD;
-        const classFactor = normalizedRating === '6000#' ? 1.16 : 1.0;
-        const couplingR = pipeOD * 0.72 * classFactor;
-        const couplingH = Math.max(0.018, pipeOD * 0.72);
-        const threadR = pipeOD * 0.54;
-        const threadH = Math.max(0.018, pipeOD * 0.65);
-        const headH = Math.max(0.018, pipeOD * 0.55);
-        const coupling = new THREE.Mesh(new THREE.CylinderGeometry(couplingR, couplingR, couplingH, 32), nzMat);
-        coupling.position.y = couplingH / 2;
-        group.add(coupling);
-        const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(threadR, threadR, threadH, 32), flMat);
-        threadedBody.position.y = couplingH + threadH / 2;
-        group.add(threadedBody);
-        for (let i = 0; i < 5; i++) {
-          const thread = new THREE.Mesh(new THREE.TorusGeometry(threadR * 1.03, Math.max(0.0008, pipeOD * 0.025), 5, 32), nutMat);
-          thread.rotation.x = Math.PI / 2;
-          thread.position.y = couplingH + threadH * (0.15 + i * 0.17);
-          group.add(thread);
-        }
-        const headR = pipeOD * 0.78 * classFactor;
-        const hexHead = new THREE.Mesh(new THREE.CylinderGeometry(headR, headR, headH, 6), plugMat);
-        hexHead.position.y = couplingH + threadH + headH / 2;
-        group.add(hexHead);
-        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(couplingR, Math.max(0.0012, pipeOD * 0.035), 8, 48), weldMat);
-        baseWeld.rotation.x = Math.PI / 2;
-        baseWeld.position.y = 0.002;
-        group.add(baseWeld);
-        totalH = couplingH + threadH + headH;
-        plugNS = new THREE.Group();
-        plugFS = new THREE.Group();
-        group.add(plugNS, plugFS);
-      } else {
-        const dim = flangeDimensions(dIndex, normalizedRating);
-        const pipeR = dim.OD / 2;
-        const pInner = Math.max(dim.OD * 0.40, pipeR - Math.min(0.012, dim.OD * 0.08));
-        const hubR = dim.A / 2;
-        const fOuter = dim.D / 2;
-        const rfHeight = group.userData.face === 'RF' ? raisedFaceHeight(normalizedRating) : 0;
-        const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
-        const nippleLength = visualNeckLength;
-        const nipple = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, nippleLength, 48), nzMat);
-        nipple.position.y = nippleLength / 2;
-        group.add(nipple);
-        const tubeProfile = [
-          [pInner, nippleLength], [pipeR, nippleLength], [hubR, nippleLength + hubHeight],
-          [pInner, nippleLength + hubHeight], [pInner, nippleLength]
-        ].map(([x, y]) => new THREE.Vector2(x, y));
-        group.add(new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat));
-        const flangeShape = new THREE.Shape();
-        flangeShape.absarc(0, 0, fOuter, 0, Math.PI * 2, false);
-        const bore = new THREE.Path();
-        bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
-        flangeShape.holes.push(bore);
-        for (let i = 0; i < dim.bolts; i++) {
-          const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
-          const boltHole = new THREE.Path();
-          boltHole.absarc(Math.cos(angle) * dim.K / 2, Math.sin(angle) * dim.K / 2,
-            dim.L / 2, 0, Math.PI * 2, true);
-          flangeShape.holes.push(boltHole);
-        }
-        const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
-          depth: dim.B, bevelEnabled: true, bevelThickness: Math.min(0.0015, dim.B * 0.06),
-          bevelSize: Math.min(0.0015, dim.B * 0.06), bevelSegments: 1, steps: 1, curveSegments: 48
-        }), flMat);
-        flange.rotation.x = -Math.PI / 2;
-        flange.position.y = nippleLength + hubHeight;
-        group.add(flange);
-        totalH = nippleLength + dim.H;
-        const faceOuter = dim.R / 2;
-        const faceProfile = [[pInner, totalH - rfHeight], [faceOuter, totalH - rfHeight],
-          [faceOuter, totalH], [pInner, totalH], [pInner, totalH - rfHeight]]
-          .map(([x, y]) => new THREE.Vector2(x, y));
-        const faceMesh = new THREE.Mesh(new THREE.LatheGeometry(faceProfile, 64), rfMat);
-        faceMesh.visible = group.userData.face === 'RF';
-        group.add(faceMesh);
-        group.userData.faceMesh = faceMesh;
-        const hole = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
-        hole.rotation.x = -Math.PI / 2;
-        hole.position.y = 0.003;
-        group.add(hole);
-        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pipeR, Math.max(0.0012, dim.OD * 0.028), 8, 48), weldMat);
-        baseWeld.rotation.x = Math.PI / 2;
-        baseWeld.position.y = 0.002;
-        group.add(baseWeld);
-        const neckWeld = new THREE.Mesh(new THREE.TorusGeometry(pipeR * 1.015,
-          Math.max(0.0010, dim.OD * 0.018), 8, 48), weldMat);
-        neckWeld.rotation.x = Math.PI / 2;
-        neckWeld.position.y = nippleLength;
-        group.add(neckWeld);
-        plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS);
-        scaleNozzlePlug(plugNS, sizeNS);
-        plugNS.rotation.x = Math.PI / 2;
-        plugNS.position.set(0, nippleLength * 0.55, pipeR + 0.008);
-        plugNS.visible = hasNS;
-        group.add(plugNS);
-        plugFS = createNozzlePlug(flMat, tagFS, group.userData.ratingFS);
-        scaleNozzlePlug(plugFS, sizeFS);
-        plugFS.rotation.x = -Math.PI / 2;
-        plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
-        plugFS.visible = hasFS;
-        group.add(plugFS);
-        const frontSide = nameplateGlobalSide();
-        const frontLocalSide = localSubNozzleSide(group.userData.angleDeg, frontSide);
-        const rearLocalSide = localSubNozzleSide(group.userData.angleDeg, -frontSide);
-        const subFrontGroup = createFlangedSubNozzle(group.userData.subFront, frontLocalSide,
-          pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
-        const subRearGroup = createFlangedSubNozzle(group.userData.subRear, rearLocalSide,
-          pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
-        group.userData.subFrontGroup = subFrontGroup;
-        group.userData.subRearGroup = subRearGroup;
-        group.add(subFrontGroup, subRearGroup);
-      }
-      group.userData.plugNS = plugNS;
-      group.userData.plugFS = plugFS;
-
-      const nozzleSprite = createTextSprite(tagText, 'white', 40);
-      const referenceOD = flangeDimensions(dIndex, type === 'flanged' ? normalizedRating : '150#').D;
-      attachNozzleLabel(group, nozzleSprite, totalH, referenceOD, posX < 0 ? -1 : 1);
-      group.userData.nozzleSprite = nozzleSprite;
-
-      placeNozzle(group, posX, pos, bodyPart, group.userData.angleDeg);
-
-      heatExchanger.add(group);
-      return group;
-    }
-
-    function loadExchangerData(data) {
-      loadDimensions(data.dimensions, data.model);
-      currentNameplateSide = data.nameplateSide === 'rear' ? 'rear' : 'front';
-      document.getElementById('nameplate-side').value = currentNameplateSide;
-      syncPositionAnglesToNameplate();
-      applyModel(data.model);
-      currentNameplate = data.nameplate || "";
-      document.getElementById("nameplate-input").value = currentNameplate;
-      updateNameplateText(currentNameplate);
-      
-      nozzlesList.forEach(nz => heatExchanger.remove(nz));
-      nozzlesList = [];
-      customNozzleCount = 0;
-
-      const sourceNozzles = Array.isArray(data.nozzles) ? data.nozzles.map(n => ({...n})) : [];
-      // Los diseños anteriores guardaban venteo y drenaje fuera de la lista.
-      for (const [service, legacySize, pos, defaultTag] of [
-        ['vent', data.vent, 'superior', 'VENT'], ['drain', data.drain, 'inferior', 'DRAIN']
-      ]) {
-        if (legacySize && !sourceNozzles.some(n => n.service === service)) {
-          const diaIndex = DIAMETERS.indexOf(legacySize);
-          sourceNozzles.push({
-            tagName: defaultTag, service, diaIndex: diaIndex >= 0 ? diaIndex : 1,
-            connectionType: 'threaded', rating: '3000#', bodyPart: 'bonnet', pos,
-            valX: BODY_BOUNDS.bonnet.center, hasNS: false, sizeNS: '', tagNS: '',
-            hasFS: false, sizeFS: '', tagFS: '', face: 'RF'
-          });
-        }
-      }
-
-      if(sourceNozzles.length) {
-        sourceNozzles.forEach(n => {
-          customNozzleCount++;
-          const internalName = `Nozzle_${customNozzleCount}`;
-          // Compatibilidad: en diseños antiguos tagNS/tagFS guardaban la medida.
-          const legacyNS = n.sizeNS === undefined;
-          const legacyFS = n.sizeFS === undefined;
-          const newNz = buildNozzle(
-            internalName, n.tagName, n.diaIndex, n.connectionType || 'flanged',
-            n.rating, n.bodyPart, n.pos, n.valX,
-            n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
-            n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
-            n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#'
-          );
-          nozzlesList.push(newNz);
-        });
-      }
-      deselectNozzle();
-      syncStateToParent();
-    }
-
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    let selectedNozzle = null;
-
-    window.addEventListener('pointerdown', (event) => {
-      if (readOnly || saving) return;
-      if (event.target.closest('#ui-container, #toggle-equipment-panel')) return;
-
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-
-      const intersects = raycaster.intersectObjects(heatExchanger.children, true);
-      let clickedNozzle = null;
-
-      for (let i = 0; i < intersects.length; i++) {
-        let obj = intersects[i].object;
-        while (obj && obj !== heatExchanger) {
-          if (obj.userData && obj.userData.isNozzle) {
-            clickedNozzle = obj;
-            break;
-          }
-          obj = obj.parent;
-        }
-        if (clickedNozzle) break;
-      }
-
-      if (clickedNozzle) selectNozzle(clickedNozzle);
-      else deselectNozzle();
-    });
-
-    function selectNozzle(nozzle) {
-      if (selectedNozzle === nozzle) return;
-      deselectNozzle();
-      selectedNozzle = nozzle;
-      selectedNozzle.userData.materials.forEach(mat => mat.emissive.setHex(0x1a4b6e));
-
-      const data = selectedNozzle.userData;
-      document.getElementById('editor-panel').style.display = 'block';
-      document.getElementById('edit-nz-name').value = data.tagName;
-      document.getElementById('edit-nz-service').value = data.service || 'process';
-      document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
-      populateDiameterSelect(document.getElementById('edit-nz-dia'), data.connectionType, data.diaIndex);
-      document.getElementById('edit-nz-body').value = data.bodyPart;
-      updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
-      document.getElementById('edit-nz-face').value = data.face || 'RF';
-      updateAsmeInfo('edit-asme-info', data.diaIndex, data.rating, data.connectionType, data.face);
-      const editNeckLength = document.getElementById('edit-neck-length');
-      editNeckLength.value = data.neckLength || defaultNozzleNeckLength(data.diaIndex);
-      document.getElementById('edit-neck-length-value').value = Number(editNeckLength.value).toFixed(2);
-      
-      const bounds = BODY_BOUNDS[data.bodyPart];
-      const editX = document.getElementById('edit-nz-x');
-      editX.min = bounds.min;
-      editX.max = bounds.max;
-      editX.value = data.valX;
-      
-      document.getElementById('edit-nz-pos').value = data.pos;
-      const editAngle = document.getElementById('edit-nz-angle');
-      editAngle.value = Math.round(normalizedPerimeterAngle(data.angleDeg, data.pos));
-      updatePerimeterAngleOutput('edit-nz-angle-value', editAngle.value);
-      document.getElementById('edit-ns-check').checked = data.hasNS;
-      document.getElementById('edit-ns-size').value = data.sizeNS || "";
-      document.getElementById('edit-ns-tag').value = data.tagNS || "";
-      document.getElementById('edit-ns-rating').value = data.ratingNS || "3000#";
-      document.getElementById('edit-ns-size').disabled = !data.hasNS;
-      document.getElementById('edit-ns-tag').disabled = !data.hasNS;
-      document.getElementById('edit-ns-rating').disabled = !data.hasNS;
-      document.getElementById('edit-fs-check').checked = data.hasFS;
-      document.getElementById('edit-fs-size').value = data.sizeFS || "";
-      document.getElementById('edit-fs-tag').value = data.tagFS || "";
-      document.getElementById('edit-fs-rating').value = data.ratingFS || "3000#";
-      document.getElementById('edit-fs-size').disabled = !data.hasFS;
-      document.getElementById('edit-fs-tag').disabled = !data.hasFS;
-      document.getElementById('edit-fs-rating').disabled = !data.hasFS;
-      for (const [side, config] of [['front', data.subFront], ['rear', data.subRear]]) {
-        const normalized = normalizeSubNozzle(config, data.diaIndex);
-        const check = document.getElementById(`edit-sub-${side}-check`);
-        const dia = document.getElementById(`edit-sub-${side}-dia`);
-        const tag = document.getElementById(`edit-sub-${side}-tag`);
-        check.checked = normalized.enabled;
-        populateSubNozzleDiameterSelect(dia, data.diaIndex, normalized.diaIndex);
-        tag.value = normalized.tag;
-        dia.disabled = !normalized.enabled;
-        tag.disabled = !normalized.enabled;
-      }
-    }
-
-    function deselectNozzle() {
-      if (selectedNozzle) {
-        selectedNozzle.userData.materials.forEach(mat => mat.emissive.setHex(0x000000));
-        selectedNozzle = null;
-      }
-      document.getElementById('editor-panel').style.display = 'none';
-    }
-
-    const editName = document.getElementById('edit-nz-name');
-    const editService = document.getElementById('edit-nz-service');
-    const editType = document.getElementById('edit-nz-type');
-    const editDia = document.getElementById('edit-nz-dia');
-    const editRating = document.getElementById('edit-nz-rating');
-    const editFace = document.getElementById('edit-nz-face');
-    const editNeckLength = document.getElementById('edit-neck-length');
-    const editBody = document.getElementById('edit-nz-body');
-    const editPos = document.getElementById('edit-nz-pos');
-    const editAngle = document.getElementById('edit-nz-angle');
-    const editX = document.getElementById('edit-nz-x');
-    
-    const editNsCheck = document.getElementById('edit-ns-check');
-    const editNsSize = document.getElementById('edit-ns-size');
-    const editNsTag = document.getElementById('edit-ns-tag');
-    const editNsRating = document.getElementById('edit-ns-rating');
-    const editFsCheck = document.getElementById('edit-fs-check');
-    const editFsSize = document.getElementById('edit-fs-size');
-    const editFsTag = document.getElementById('edit-fs-tag');
-    const editFsRating = document.getElementById('edit-fs-rating');
-    const editSubFrontCheck = document.getElementById('edit-sub-front-check');
-    const editSubFrontDia = document.getElementById('edit-sub-front-dia');
-    const editSubFrontTag = document.getElementById('edit-sub-front-tag');
-    const editSubRearCheck = document.getElementById('edit-sub-rear-check');
-    const editSubRearDia = document.getElementById('edit-sub-rear-dia');
-    const editSubRearTag = document.getElementById('edit-sub-rear-tag');
-
-    function populateRatingSelect(select, type, preferred) {
-      const allowed = type === 'threaded' ? ['3000#', '6000#'] : ['150#', '300#', '600#'];
-      select.replaceChildren(...allowed.map(value => {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = value;
-        return option;
-      }));
-      select.value = allowed.includes(preferred) ? preferred : allowed[0];
-    }
-
-    function updateConnectionTypeUI(type, preferredRating) {
-      const threaded = type === 'threaded';
-      populateRatingSelect(editRating, type, preferredRating);
-      document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
-      document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
-      document.getElementById('edit-neck-control').style.display = threaded ? 'none' : '';
-      document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
-      document.getElementById('sub-nozzles-editor').style.display = threaded ? 'none' : '';
-    }
-
-    editName.addEventListener('input', (e) => {
-      if(!selectedNozzle) return;
-      const val = e.target.value;
-      selectedNozzle.userData.tagName = val;
-      selectedNozzle.userData.nozzleSprite.updateText(val);
-      syncStateToParent();
-    });
-
-    editService.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      selectedNozzle.userData.service = e.target.value;
-      if ((e.target.value === 'vent' || e.target.value === 'drain') &&
-          selectedNozzle.userData.connectionType !== 'threaded') {
-        editType.value = 'threaded';
-        editType.dispatchEvent(new Event('change'));
-        return;
-      }
-      syncStateToParent();
-    });
-
-    function rebuildSelectedNozzle(overrides = {}) {
-      if (!selectedNozzle) return null;
-      const old = selectedNozzle;
-      const data = {...old.userData, ...overrides};
-      const type = data.connectionType === 'threaded' ? 'threaded' : 'flanged';
-      const allowed = type === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
-      const diaIndex = allowed.includes(Number(data.diaIndex)) ? Number(data.diaIndex) : (type === 'threaded' ? 0 : 6);
-      const replacement = buildNozzle(
-        data.idName, data.tagName, diaIndex, type, data.rating,
-        data.bodyPart, data.pos, data.valX,
-        type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
-        type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
-        data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS
-      );
-      const index = nozzlesList.indexOf(old);
-      if (index >= 0) nozzlesList[index] = replacement;
-      heatExchanger.remove(old);
-      selectedNozzle = null;
-      selectNozzle(replacement);
-      syncStateToParent();
-      return replacement;
-    }
-
-    editType.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      const type = e.target.value === 'threaded' ? 'threaded' : 'flanged';
-      rebuildSelectedNozzle({
-        connectionType: type,
-        rating: type === 'threaded' ? '3000#' : '150#'
-      });
-    });
-
-    editDia.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({diaIndex: Number(e.target.value)});
-    });
-
-    editRating.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({rating: e.target.value});
-    });
-
-    editFace.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({face: e.target.value});
-    });
-
-    editNeckLength.addEventListener('input', (e) => {
-      document.getElementById('edit-neck-length-value').value = Number(e.target.value).toFixed(2);
-    });
-    editNeckLength.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({neckLength: Number(e.target.value)});
-    });
-
-    editBody.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      const newBody = e.target.value;
-      selectedNozzle.userData.bodyPart = newBody;
-      const bounds = BODY_BOUNDS[newBody];
-      editX.min = bounds.min;
-      editX.max = bounds.max;
-      editX.value = bounds.center; 
-      selectedNozzle.userData.valX = bounds.center;
-      updateTransform();
-      syncStateToParent();
-    });
-
-    const updateTransform = () => {
-      if(!selectedNozzle) return;
-      const angleDeg = normalizedPerimeterAngle(editAngle.value, editPos.value);
-      const pos = closestPerimeterPosition(angleDeg);
-      const vx = parseFloat(editX.value);
-      selectedNozzle.userData.pos = pos;
-      selectedNozzle.userData.angleDeg = angleDeg;
-      selectedNozzle.userData.valX = vx;
-      editPos.value = pos;
-      updatePerimeterAngleOutput('edit-nz-angle-value', angleDeg);
-      placeNozzle(selectedNozzle, vx, pos, selectedNozzle.userData.bodyPart, angleDeg);
-      syncStateToParent();
-    };
-    
-    editPos.addEventListener('change', () => {
-      editAngle.value = POSITION_ANGLES[editPos.value] ?? 0;
-      updateTransform();
-    });
-    editAngle.addEventListener('input', updateTransform);
-    editX.addEventListener('input', updateTransform);
-
-    editNsCheck.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      const isChecked = e.target.checked;
-      selectedNozzle.userData.hasNS = isChecked;
-      selectedNozzle.userData.plugNS.visible = isChecked;
-      editNsSize.disabled = !isChecked;
-      editNsTag.disabled = !isChecked;
-      editNsRating.disabled = !isChecked;
-      syncStateToParent();
-    });
-    editNsSize.addEventListener('input', (e) => {
-      if(!selectedNozzle) return;
-      selectedNozzle.userData.sizeNS = e.target.value;
-      syncStateToParent();
-    });
-    editNsSize.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({sizeNS: e.target.value});
-    });
-    editNsTag.addEventListener('input', (e) => {
-      if(!selectedNozzle) return;
-      selectedNozzle.userData.tagNS = e.target.value;
-      selectedNozzle.userData.plugNS.userData.tagSprite?.updateText(e.target.value);
-      syncStateToParent();
-    });
-    editNsRating.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({ratingNS: e.target.value});
-    });
-
-    editFsCheck.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      const isChecked = e.target.checked;
-      selectedNozzle.userData.hasFS = isChecked;
-      selectedNozzle.userData.plugFS.visible = isChecked;
-      editFsSize.disabled = !isChecked;
-      editFsTag.disabled = !isChecked;
-      editFsRating.disabled = !isChecked;
-      syncStateToParent();
-    });
-    editFsSize.addEventListener('input', (e) => {
-      if(!selectedNozzle) return;
-      selectedNozzle.userData.sizeFS = e.target.value;
-      syncStateToParent();
-    });
-    editFsSize.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({sizeFS: e.target.value});
-    });
-    editFsTag.addEventListener('input', (e) => {
-      if(!selectedNozzle) return;
-      selectedNozzle.userData.tagFS = e.target.value;
-      selectedNozzle.userData.plugFS.userData.tagSprite?.updateText(e.target.value);
-      syncStateToParent();
-    });
-    editFsRating.addEventListener('change', (e) => {
-      if(!selectedNozzle) return;
-      rebuildSelectedNozzle({ratingFS: e.target.value});
-    });
-
-    function bindSubNozzleEditor(side, check, dia, tag) {
-      const field = side === 'front' ? 'subFront' : 'subRear';
-      const readValue = enabled => ({
-        enabled, diaIndex: Number(dia.value), tag: tag.value.trim()
-      });
-      check.addEventListener('change', () => {
-        if (!selectedNozzle) return;
-        dia.disabled = !check.checked;
-        tag.disabled = !check.checked;
-        const value = readValue(check.checked);
-        selectedNozzle.userData[field] = value;
-        const branch = selectedNozzle.userData[field + 'Group'];
-        if (branch) branch.visible = value.enabled;
-        syncStateToParent();
-      });
-      dia.addEventListener('change', () => {
-        if (!selectedNozzle) return;
-        rebuildSelectedNozzle({[field]: readValue(check.checked)});
-      });
-      tag.addEventListener('change', () => {
-        if (!selectedNozzle) return;
-        rebuildSelectedNozzle({[field]: readValue(check.checked)});
-      });
-    }
-    bindSubNozzleEditor('front', editSubFrontCheck, editSubFrontDia, editSubFrontTag);
-    bindSubNozzleEditor('rear', editSubRearCheck, editSubRearDia, editSubRearTag);
-
-    document.getElementById('btn-delete-nz').addEventListener('click', () => {
-      if(!selectedNozzle) return;
-      heatExchanger.remove(selectedNozzle);
-      nozzlesList = nozzlesList.filter(nz => nz !== selectedNozzle);
-      deselectNozzle();
-      syncStateToParent();
-    });
-
-    const newType = document.getElementById('new-nz-type');
-    const newDia = document.getElementById('new-nz-dia');
-    const newPos = document.getElementById('new-nz-pos');
-    const newAngle = document.getElementById('new-nz-angle');
-    function updateNewConnectionUI(preferred) {
-      const type = newType.value;
-      populateDiameterSelect(newDia, type, preferred);
-      populateRatingSelect(document.getElementById('new-nz-rating'), type,
-        type === 'threaded' ? '3000#' : '150#');
-      document.getElementById('new-flange-details').style.display = type === 'threaded' ? 'none' : 'flex';
-      document.getElementById('new-neck-control').style.display = type === 'threaded' ? 'none' : '';
-      if (type === 'flanged') {
-        const neck = defaultNozzleNeckLength(newDia.value);
-        document.getElementById('new-neck-length').value = neck;
-        document.getElementById('new-neck-length-value').value = neck.toFixed(2);
-      }
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
-        type, document.getElementById('new-nz-face').value);
-    }
-    newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
-    newDia.addEventListener('change', () => {
-      if (newType.value === 'flanged') {
-        const neck = defaultNozzleNeckLength(newDia.value);
-        document.getElementById('new-neck-length').value = neck;
-        document.getElementById('new-neck-length-value').value = neck.toFixed(2);
-      }
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
-        newType.value, document.getElementById('new-nz-face').value);
-    });
-    document.getElementById('new-nz-rating').addEventListener('change', () =>
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
-        newType.value, document.getElementById('new-nz-face').value));
-    document.getElementById('new-nz-face').addEventListener('change', event =>
-      updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
-        newType.value, event.target.value));
-    document.getElementById('new-nz-service').addEventListener('change', (event) => {
-      if (event.target.value === 'vent' || event.target.value === 'drain') {
-        newType.value = 'threaded';
-        updateNewConnectionUI(1);
-      }
-    });
-    document.getElementById('new-neck-length').addEventListener('input', event => {
-      document.getElementById('new-neck-length-value').value = Number(event.target.value).toFixed(2);
-    });
-    newPos.addEventListener('change', () => {
-      newAngle.value = POSITION_ANGLES[newPos.value] ?? 0;
-      updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
-    });
-    newAngle.addEventListener('input', () => {
-      const angle = normalizedPerimeterAngle(newAngle.value);
-      newPos.value = closestPerimeterPosition(angle);
-      updatePerimeterAngleOutput('new-nz-angle-value', angle);
-    });
-    updateNewConnectionUI(6);
-    updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
-
-    document.getElementById('btn-add-nz').addEventListener('click', () => {
-      customNozzleCount++;
-      const connectionType = newType.value === 'threaded' ? 'threaded' : 'flanged';
-      const diaIndex = Number(newDia.value);
-      const rating = document.getElementById('new-nz-rating').value;
-      const bodyPart = document.getElementById('new-nz-body').value;
-      const service = document.getElementById('new-nz-service').value;
-      const face = document.getElementById('new-nz-face').value;
-      const neckLength = Number(document.getElementById('new-neck-length').value);
-      const pos = newPos.value;
-      const angleDeg = normalizedPerimeterAngle(newAngle.value, pos);
-      const internalName = `Custom_Nozzle_${customNozzleCount}`;
-      const startX = BODY_BOUNDS[bodyPart].center;
-
-      const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
-      const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg);
-      nozzlesList.push(newNz);
-      selectNozzle(newNz);
-      syncStateToParent();
-    });
-
-    const nameCanvas = document.createElement('canvas');
-    nameCanvas.width = 1024;
-    nameCanvas.height = 384; 
-    const ctx = nameCanvas.getContext('2d');
-    let plateTexture = new THREE.CanvasTexture(nameCanvas);
-
-    function updateNameplateText(text) {
-      ctx.clearRect(0, 0, nameCanvas.width, nameCanvas.height);
-      if(!text || text.trim() === "") {
-        plateTexture.needsUpdate = true;
-        return; 
-      }
-
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(0, 0, nameCanvas.width, nameCanvas.height);
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 24;
-      ctx.strokeRect(0, 0, nameCanvas.width, nameCanvas.height);
-      
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath(); ctx.arc(45, 45, 15, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(nameCanvas.width-45, 45, 15, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(45, nameCanvas.height-45, 15, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(nameCanvas.width-45, nameCanvas.height-45, 15, 0, Math.PI*2); ctx.fill();
-
-      ctx.font = 'bold 120px sans-serif'; 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      
-      ctx.lineWidth = 10;
-      ctx.strokeStyle = '#ffffff';
-      ctx.strokeText(text, nameCanvas.width / 2, nameCanvas.height / 2);
-      ctx.fillStyle = '#000000';
-      ctx.fillText(text, nameCanvas.width / 2, nameCanvas.height / 2);
-      
-      plateTexture.needsUpdate = true;
-    }
-
-    const plateMat = new THREE.MeshStandardMaterial({ map: plateTexture, metalness: 0.5, roughness: 0.3, transparent: true });
-    const nameplate = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.34, 0.018), plateMat);
-    function updateNameplatePlacement() {
-      const side = currentNameplateSide === 'rear' ? -1 : 1;
-      nameplate.position.set(0, 0, side * (currentDimensions.shellDiameter / 2 + 0.012));
-      nameplate.rotation.set(0, side < 0 ? Math.PI : 0, 0);
-    }
-    updateNameplatePlacement();
-    heatExchanger.add(nameplate);
+    # Los diseños antiguos guardan estos plugs fuera de la lista nozzles.
+    servicios = {n.get("service") for n in config.get("nozzles", [])}
+    for campo, servicio, tag, posicion in (
+        ("vent", "VENTEO", "VENT", "SUPERIOR"),
+        ("drain", "DRENAJE", "DRAIN", "INFERIOR"),
+    ):
+        medida = config.get(campo, "")
+        if campo not in servicios and informado(medida):
+            filas.append({
+                "MK": tag, "QT": 1, "SERVICIO": servicio,
+                "DIÁMETRO": medida, "RATING": "3000#", "TIPO": "ROSCADA",
+                "CUERPO": nombre_cuerpo("bonnet"), "POSICIÓN": posicion,
+                "NS": "—", "FS": "—",
+            })
+    return filas
 
 
-    function animate() {
-      requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-    document.getElementById('equipment-model').addEventListener('change', event => {
-      applyModel(event.target.value, true);
-      syncStateToParent();
-    });
-    for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
-      document.getElementById(inputId).addEventListener('input', event => {
-        currentDimensions[field] = Number(event.target.value);
-        document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
-        buildModelB();
-        applyModel(currentModel, true);
-        syncStateToParent();
-      });
-    }
-    document.getElementById('nameplate-input').addEventListener('input', event => {
-      currentNameplate = event.target.value;
-      updateNameplateText(currentNameplate);
-      syncStateToParent();
-    });
-    document.getElementById('nameplate-side').addEventListener('change', event => {
-      currentNameplateSide = event.target.value === 'rear' ? 'rear' : 'front';
-      syncPositionAnglesToNameplate();
-      updateNameplatePlacement();
-      nozzlesList.forEach(nozzle => {
-        const data = nozzle.userData;
-        data.pos = closestPerimeterPosition(data.angleDeg);
-        placeNozzle(nozzle, data.valX, data.pos, data.bodyPart, data.angleDeg);
-      });
-      newPos.value = closestPerimeterPosition(newAngle.value);
-      updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
-      if (selectedNozzle) {
-        editPos.value = selectedNozzle.userData.pos;
-        updatePerimeterAngleOutput('edit-nz-angle-value', selectedNozzle.userData.angleDeg);
-      }
-      syncStateToParent();
-    });
-    document.getElementById('save-equipment').addEventListener('click', () => {
-      if (saving || !initialized) return;
-      if (!currentNameplate.trim()) {
-        document.getElementById('save-status').textContent = 'Debes ingresar el TAG del equipo.';
-        return;
-      }
-      currentNameplate = currentNameplate.trim();
-      document.getElementById('nameplate-input').value = currentNameplate;
-      updateNameplateText(currentNameplate);
-      saving = true;
-      document.querySelectorAll('#ui-container input, #ui-container select, #ui-container button').forEach(el => el.disabled = true);
-      document.getElementById('save-status').textContent = 'Guardando y verificando en Sheets...';
-      syncStateToParent('save');
-    });
-    window.exchangerBridge.attach(args => {
-      readOnly = Boolean(args.readonly);
-      window.exchangerBridge.setReadOnly(readOnly);
-      document.getElementById('save-equipment').style.display = args.demo ? 'none' : '';
-      if (!initialized) {
-        loading = true;
-        loadExchangerData(args.initial_data);
-        loading = false;
-        initialized = true;
-        document.getElementById('save-equipment').disabled = readOnly || Boolean(args.demo);
-        clearTimeout(window.exchangerBridge.timer);
-        document.getElementById('save-status').textContent = 'Visor listo.';
-      }
-      if (args.ack && args.ack.event_id === pendingSave) {
-        saving = false;
-        pendingSave = null;
-        document.querySelectorAll('#ui-container input, #ui-container select, #ui-container button').forEach(el => el.disabled = false);
-        editNsSize.disabled = !editNsCheck.checked;
-        editNsTag.disabled = !editNsCheck.checked;
-        editFsSize.disabled = !editFsCheck.checked;
-        editFsTag.disabled = !editFsCheck.checked;
-        document.getElementById('save-status').textContent = args.ack.message;
-      }
-      send('streamlit:setFrameHeight', {height: args.height || 720});
-    });
+def cantidad_entera(valor):
+    if not informado(valor):
+        return None
+    try:
+        n = float(str(valor).strip().replace(",", "."))
+        return int(n) if math.isfinite(n) and n >= 0 and n.is_integer() else None
+    except (ValueError, TypeError):
+        return None
 
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-    } catch (error) {
-      window.exchangerBridge.fail(error);
-    }
-  </script>
-</body>
-</html>
+
+def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
+    n = cantidad_entera(registro[col_roscadas]) if col_roscadas else None
+    if n is not None:
+        return n, "Total declarado en planilla"
+    if config is None:
+        return None, "Sin cantidad válida ni diseño disponible"
+    n = sum(
+        1 if noz.get("connectionType", "flanged") == "threaded"
+        else int(noz.get("hasNS", False)) + int(noz.get("hasFS", False))
+        for noz in config.get("nozzles", [])
+    )
+    if incluir_bonete:
+        servicios = {noz.get("service") for noz in config.get("nozzles", [])}
+        # Compatibilidad con diseños antiguos que aún no migraron ambos plugs a nozzles.
+        n += int("vent" not in servicios and informado(config.get("vent", "")))
+        n += int("drain" not in servicios and informado(config.get("drain", "")))
+    return n, "Calculado del diseño: conexiones de la lista + NS/FS"
+
+
+def extraer_coordenadas(valor):
+    texto = str(valor).strip()
+    # Decimales con punto separados por coma/espacio; con coma, separar por ;.
+    if ";" in texto:
+        partes = [x.strip().replace(",", ".") for x in texto.split(";")]
+    else:
+        partes = re.split(r"\s*,\s*|\s+", texto.strip("()[] "))
+    if len(partes) != 2:
+        return None
+    try:
+        lat, lon = map(float, partes)
+        return (lat, lon) if -90 <= lat <= 90 and -180 <= lon <= 180 else None
+    except ValueError:
+        return None
+
+
+def ir_editor(tag, como_plantilla=False):
+    for nombre in ("diseno.py", "Diseño.py", "diseño.py", "Diseno.py", "editor_3d.py"):
+        destino = ROOT / "pages" / nombre
+        if destino.is_file():
+            clave = "tag_para_plantilla" if como_plantilla else "tag_para_diseño"
+            st.session_state[clave] = str(tag).strip()
+            st.switch_page(str(destino))
+            return
+    st.error("No se encontró la página del editor dentro de pages/.")
+
+
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
+    salida = BytesIO()
+    doc = SimpleDocTemplate(
+        salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=14 * mm, bottomMargin=17 * mm,
+        title=f"Ficha de conexiones roscadas - {tag}", author="Control de Intercambiadores",
+    )
+    navy, teal, pale, line, ink, muted = (
+        colors.HexColor("#173247"), colors.HexColor("#0F9385"), colors.HexColor("#E8F4F2"),
+        colors.HexColor("#C9D5DE"), colors.HexColor("#1F2D38"), colors.HexColor("#647585"),
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("hx_title", parent=styles["Title"], fontName="Helvetica-Bold",
+                                 fontSize=17, leading=20, textColor=colors.white, alignment=TA_LEFT)
+    eyebrow = ParagraphStyle("hx_eye", parent=styles["Normal"], fontName="Helvetica-Bold",
+                              fontSize=7, leading=9, textColor=colors.HexColor("#7FE0D1"), spaceAfter=3)
+    section_style = ParagraphStyle("hx_section", parent=styles["Heading2"], fontName="Helvetica-Bold",
+                                   fontSize=10, leading=13, textColor=navy, spaceBefore=4, spaceAfter=6)
+    body = ParagraphStyle("hx_body", parent=styles["BodyText"], fontName="Helvetica",
+                          fontSize=8, leading=10, textColor=ink)
+    small = ParagraphStyle("hx_small", parent=body, fontSize=7, leading=9, textColor=muted)
+    cell = ParagraphStyle("hx_cell", parent=body, fontSize=7, leading=8.5)
+    cell_center = ParagraphStyle("hx_cell_center", parent=cell, alignment=TA_CENTER)
+    cell_header = ParagraphStyle("hx_cell_header", parent=cell_center, fontName="Helvetica-Bold",
+                                 textColor=colors.white)
+    status_text = ParagraphStyle("hx_status", parent=body, fontName="Helvetica-Bold",
+                                 textColor=colors.white)
+
+    def p(valor, estilo=cell):
+        return Paragraph(escape(str(valor)), estilo)
+
+    def pie(canvas, documento):
+        canvas.saveState()
+        canvas.setStrokeColor(line)
+        canvas.line(15 * mm, 12 * mm, 195 * mm, 12 * mm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(muted)
+        canvas.drawString(15 * mm, 7.5 * mm, "CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
+        canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {documento.page}")
+        canvas.restoreState()
+
+    elementos = []
+    cabecera = Table([
+        [Paragraph("REGISTRO DE INSPECCIÓN", eyebrow)],
+        [Paragraph(f"Conexiones roscadas · {escape(str(tag))}", title_style)],
+        [p(f"Emitido {datetime.now():%d-%m-%Y %H:%M} · hora del servidor", small)],
+    ], colWidths=[180 * mm])
+    cabecera.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), navy), ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 1), ("TOPPADDING", (0, 1), (-1, 1), 1),
+        ("BOTTOMPADDING", (0, 1), (-1, 1), 2), ("TOPPADDING", (0, 2), (-1, 2), 1),
+        ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
+    ]))
+    elementos += [cabecera, Spacer(1, 7 * mm)]
+
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    col_unidad = buscar_columna(columnas, ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
+    col_estado = buscar_columna(columnas, ("STATUS", "ESTATUS", "ESTADO"), ("STATUS", "ESTATUS"))
+    unidad = registro[col_unidad] if col_unidad and informado(registro[col_unidad]) else "Sin información"
+    estado = registro[col_estado] if col_estado and informado(registro[col_estado]) else "Sin información"
+    modelo = config.get("model", "A") if config else "Sin diseño"
+    datos = [
+        [p("EQUIPO", small), p("UNIDAD / ÁREA", small), p("ESTADO", small), p("MODELO 3D", small)],
+        [p(tag, body), p(unidad, body), p(estado, body), p(modelo, body)],
+    ]
+    tabla_datos = Table(datos, colWidths=[45 * mm] * 4)
+    tabla_datos.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EFF3F6")),
+        ("GRID", (0, 0), (-1, -1), .45, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elementos += [tabla_datos, Spacer(1, 6 * mm)]
+
+    filas = filas_boquillas(config) if config else []
+    conexiones = []
+    if config:
+        for n in config.get("nozzles", []):
+            posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
+                        "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
+            if n.get("connectionType", "flanged") == "threaded":
+                servicio = {"process": "DIRECTA", "vent": "VENTEO", "drain": "DRENAJE"}.get(
+                    n.get("service", "process"), "DIRECTA")
+                conexiones.append([
+                    n.get("tagName") or "Sin TAG", servicio,
+                    f"{DIAMETROS[n['diaIndex']]} · {n.get('rating') or '3000#'}",
+                    "—", nombre_cuerpo(n.get("bodyPart")), posicion,
+                ])
+                continue
+            for lado in ("NS", "FS"):
+                if n.get("has" + lado, False):
+                    legacy = ("size" + lado) not in n
+                    medida = (n.get("tag" + lado) if legacy else n.get("size" + lado)) or "Sin medida"
+                    tag_plug = "" if legacy else (n.get("tag" + lado) or "")
+                    rating_plug = n.get("rating" + lado) or "3000#"
+                    conexiones.append([
+                        n.get("tagName") or "Sin TAG", lado,
+                        f"{medida} · {rating_plug}", tag_plug or "—",
+                        nombre_cuerpo(n.get("bodyPart")), posicion,
+                    ])
+        servicios = {n.get("service") for n in config.get("nozzles", [])}
+        for servicio, campo in (("VENTEO", "vent"), ("DRENAJE", "drain")):
+            if campo not in servicios and informado(config.get(campo, "")):
+                conexiones.append(["LEGACY", servicio, config.get(campo), "—", "BONNET", "—"])
+    detectadas = len(conexiones)
+    if cantidad is None:
+        verificacion, estado_color = "SIN TOTAL DECLARADO", colors.HexColor("#A26918")
+    elif cantidad == detectadas:
+        verificacion, estado_color = "COINCIDENTE", teal
+    else:
+        verificacion, estado_color = f"REVISAR · DIFERENCIA {cantidad - detectadas:+d}", colors.HexColor("#B54A4A")
+    resumen = Table([
+        [p("TOTAL DECLARADO", small), p("IDENTIFICADAS EN 3D", small), p("VERIFICACIÓN", small)],
+        [p(cantidad if cantidad is not None else "—", body), p(detectadas, body), p(verificacion, status_text)],
+        [p(origen, small), p("Lista 3D + conexiones NS/FS", small), p(estado_diseno, small)],
+    ], colWidths=[60 * mm] * 3)
+    resumen.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), pale), ("BOX", (0, 0), (-1, -1), .8, teal),
+        ("INNERGRID", (0, 0), (-1, -1), .35, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (2, 1), (2, 1), estado_color), ("TEXTCOLOR", (2, 1), (2, 1), colors.white),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elementos += [Paragraph("CONTROL DE CONEXIONES ROSCADAS", section_style), resumen, Spacer(1, 6 * mm)]
+
+    elementos.append(Paragraph("NOZZLE SCHEDULE", section_style))
+    if filas:
+        encabezado = ["MK", "SERVICIO", "QT", "DIÁMETRO", "TIPO / RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
+        datos_nozzle = [[p(x, cell_header) for x in encabezado]] + [
+            [p(
+                f"{fila['TIPO']} · {fila['RATING']}" if k == "TIPO / RATING" else fila[k],
+                cell_center if k in {"SERVICIO", "QT", "DIÁMETRO", "TIPO / RATING", "NS", "FS"} else cell,
+            ) for k in encabezado]
+            for fila in filas
+        ]
+        tabla_nozzle = Table(datos_nozzle, repeatRows=1,
+                             colWidths=[17*mm, 20*mm, 8*mm, 18*mm, 25*mm, 20*mm, 22*mm, 25*mm, 25*mm])
+        tabla_nozzle.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), navy), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F8FA")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elementos.append(tabla_nozzle)
+    else:
+        elementos.append(p("No hay boquillas registradas en el diseño.", body))
+    elementos += [Spacer(1, 6 * mm), Paragraph("REGISTRO DE ROSCAS", section_style)]
+    if conexiones:
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA / CLASE", "TAG PLUG", "CUERPO", "POSICIÓN"]
+        datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
+            [p(x, cell_center if i in (1, 2, 3) else cell) for i, x in enumerate(fila)] for fila in conexiones
+        ]
+        tabla_roscas = Table(datos_roscas, repeatRows=1,
+                             colWidths=[35*mm, 18*mm, 31*mm, 30*mm, 34*mm, 32*mm])
+        tabla_roscas.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), teal), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elementos.append(tabla_roscas)
+    else:
+        elementos.append(p("No hay conexiones roscadas identificadas en el diseño 3D.", body))
+    elementos += [Spacer(1, 5 * mm), p(
+        "Criterio: venteo y drenaje forman parte del mismo listado de boquillas y pueden ubicarse en cualquier componente. "
+        "Las dimensiones longitudinales de los componentes se excluyen de esta ficha.", small)]
+    doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
+    return salida.getvalue()
+
+
+def main():
+    aplicar_diseno()
+    st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">HX</div>'
+                        '<div><strong>Control de equipos</strong><small>INSPECCIÓN Y MANTENIMIENTO</small></div></div>',
+                        unsafe_allow_html=True)
+    st.markdown('''<div class="hx-hero"><div><div class="hx-eyebrow">Gestión de activos / Intercambiadores de calor</div>
+    <h1>Control e inspección<br>de intercambiadores</h1>
+    <p>Consulta el estado de los equipos, revisa sus conexiones y accede a la documentación técnica y al modelo 3D.</p></div>
+    <svg viewBox="0 0 240 140" fill="none" aria-hidden="true">
+      <g stroke="#88b2c8" stroke-width="1.5"><rect x="46" y="45" width="141" height="54" rx="4"/>
+      <path d="M46 51H30V93H46M187 48H203Q230 72 203 96H187M60 45V99M174 45V99M70 60H164M70 70H164M70 80H164"/>
+      <path d="M76 45V25H94V45M141 99V118H159V99M64 99L58 114H85L80 99M164 99L170 114H143"/>
+      <path d="M28 41V103M41 41V103M191 41V103" stroke="#40c7b0" stroke-width="3"/>
+      <path d="M71 25H99M136 118H164" stroke="#40c7b0" stroke-width="3"/>
+      <path d="M15 127H226M16 128V133M225 128V133" stroke-dasharray="3 4" opacity=".45"/></g>
+    </svg></div>''', unsafe_allow_html=True)
+    st.sidebar.subheader("Filtrar equipos")
+    # El editor incrementa esta revisión solo después de verificar una escritura.
+    revision = st.session_state.get("design_revision", 0)
+    if st.session_state.get("principal_design_revision") != revision:
+        cargar_disenos.clear()
+        st.session_state["principal_design_revision"] = revision
+    if st.sidebar.button("Actualizar datos", use_container_width=True):
+        cargar_datos.clear()
+        cargar_disenos.clear()
+    try:
+        df = cargar_datos()
+    except Exception as exc:
+        st.error(f"No se pudo leer {NOMBRE_HOJA}: {exc}")
+        st.stop()
+    try:
+        db, errores = cargar_disenos()
+        disenos_disponibles = True
+    except Exception as exc:
+        db, errores, disenos_disponibles = {}, {}, False
+        st.warning(f"No se pudieron consultar los diseños 3D: {exc}. No se marcarán como pendientes.")
+    if errores:
+        with st.expander(f"Revisar {len(errores)} diseños con datos inválidos"):
+            for error in errores.values():
+                st.write(error)
+
+    def estado(tag):
+        clave = normalizar(tag)
+        if not disenos_disponibles:
+            return "No disponible"
+        if clave in errores:
+            return "Revisar datos"
+        return "Registrado" if clave in db else "Pendiente"
+
+    col_equipo = buscar_columna(df.columns, ("EQUIPO", "TAG", "TAG EQUIPO"), ("EQUIPO",))
+    col_unidad = buscar_columna(df.columns, ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
+    col_status = buscar_columna(df.columns, ("STATUS", "ESTATUS", "ESTADO"), ("STATUS", "ESTATUS"))
+    col_comentario = buscar_columna(df.columns, ("COMENTARIO", "COMENTARIOS"), ("COMENTARIO",))
+    col_roscadas = buscar_columna(df.columns, ("CONEXIONES ROSCADAS", "CANTIDAD PLUGS"), ("ROSCAD", "PLUG"))
+    col_geo = buscar_columna(df.columns, ("GEORREFERENCIA", "COORDENADAS"), ("GEORREFER", "COORD"))
+    col_lat = buscar_columna(df.columns, ("LATITUD", "LAT"))
+    col_lon = buscar_columna(df.columns, ("LONGITUD", "LON", "LNG"))
+    if not col_equipo:
+        st.error("No se encontró una columna EQUIPO o TAG. Revisa los encabezados de Hoja 1.")
+        st.stop()
+    if col_status:
+        df[col_status] = df[col_status].map(lambda v: "SIN INFORMACIÓN" if not informado(v) else v.upper())
+
+    filtrado = df.copy()
+    busqueda = st.sidebar.text_input("Buscar equipo", placeholder="TAG, unidad o comentario…").strip()
+    if busqueda:
+        columnas_busqueda = [c for c in (col_equipo, col_unidad, col_comentario) if c]
+        coincidencias = pd.Series(False, index=filtrado.index)
+        for c in columnas_busqueda:
+            coincidencias |= filtrado[c].str.contains(busqueda, case=False, regex=False, na=False)
+        filtrado = filtrado[coincidencias]
+    selecciones = []
+    for label, col in (("Estatus", col_status), ("Unidad / Área", col_unidad), ("Equipo / TAG", col_equipo)):
+        if col:
+            opciones = [None] + sorted(filtrado[col].unique())
+            elegido = st.sidebar.selectbox(label, opciones, format_func=lambda v: "Todos" if v is None else v)
+            selecciones.append(elegido)
+            if elegido is not None:
+                filtrado = filtrado[filtrado[col] == elegido]
+    with st.sidebar.expander("Criterio de conteo"):
+        incluir_bonete = st.checkbox("Incluir venteo y drenaje de diseños antiguos", value=True)
+        st.caption("Los diseños nuevos ya los incluyen en la lista general. Un total válido en la planilla tiene prioridad.")
+    cantidades = []
+    for _, row in filtrado.iterrows():
+        cfg = db.get(normalizar(row[col_equipo]), {}).get("data")
+        cantidades.append(contar_conexiones(row, col_roscadas, cfg, incluir_bonete)[0])
+    conocidos = [n for n in cantidades if n is not None]
+    st.sidebar.divider()
+    st.sidebar.caption("Las consultas reflejan los filtros seleccionados. Usa Actualizar datos para volver a consultar la planilla.")
+    for nombre in ("logojn.png", "logo.png"):
+        if (ROOT / nombre).is_file():
+            st.sidebar.image(str(ROOT / nombre), use_container_width=True)
+            break
+
+    chequeados = int((filtrado[col_status] == "CHEQUEADO").sum()) if col_status else None
+    registrados = int(filtrado[col_equipo].map(normalizar).isin(db).sum()) if disenos_disponibles else None
+    indicadores([
+        ("Registros filtrados", len(filtrado), f"De {len(df)} registros en la planilla"),
+        ("Inspección chequeada", chequeados if chequeados is not None else "—",
+         f"{chequeados / len(filtrado):.0%} de los registros filtrados" if col_status and len(filtrado) else "Sin registros evaluables"),
+        ("Diseños 3D", registrados if registrados is not None else "—", "Registros filtrados con diseño válido" if disenos_disponibles else "Consulta 3D no disponible"),
+        ("Conexiones roscadas", sum(conocidos) if conocidos else "—", f"Conteo conocido en {len(conocidos)} de {len(filtrado)} registros"),
+    ])
+    if df[col_equipo].map(normalizar).duplicated().any():
+        st.warning("Hay TAG repetidos en Hoja 1. Los gráficos y totales cuentan filas; revisa duplicados si cada equipo debe ocupar una sola fila.")
+    columnas_inventario = [c for c in df.columns if not es_columna_conn(c)]
+    tabla, stats = st.tabs(["Inventario de equipos", "Análisis de inspección"])
+    registro = None
+    with tabla:
+        seccion("Inventario de equipos", "Selecciona un registro para consultar su ficha técnica y documentación.", f"{len(filtrado)} registros")
+        defaults = list(dict.fromkeys(
+            c for c in (col_equipo, col_unidad, col_status, col_roscadas)
+            if c and c in columnas_inventario
+        ))
+        with st.expander("Personalizar columnas"):
+            visibles = st.multiselect("Campos de la planilla", columnas_inventario, default=defaults)
+            st.caption("Las columnas auxiliares Conn, Conn1, Conn2, etc. se ocultan del inventario.")
+        mostrar = filtrado[visibles].copy()
+        mostrar.insert(0, "Diseño 3D", filtrado[col_equipo].map(estado))
+        firma = hashlib.sha256(json.dumps([selecciones, visibles, filtrado.index.tolist(), filtrado[col_equipo].tolist()], ensure_ascii=False).encode()).hexdigest()[:16]
+        evento = st.dataframe(mostrar, hide_index=True, use_container_width=True,
+                              selection_mode="single-row", on_select="rerun", key="tabla_" + firma)
+        filas = evento.selection.rows
+        if filas and 0 <= filas[0] < len(filtrado):
+            registro = filtrado.iloc[filas[0]]
+    with stats:
+        seccion("Estado de la inspección", "Distribución de los registros según los filtros actuales.")
+        if filtrado.empty:
+            st.info("No hay registros con estos filtros.")
+        else:
+            for panel, col, label in zip(st.columns(2), (col_status, col_unidad), ("Estatus", "Unidad")):
+                with panel:
+                    if col:
+                        conteos = filtrado[col].value_counts().rename_axis(label).reset_index(name="Cantidad")
+                        fig = px.bar(conteos, x=label, y="Cantidad", color=label, text="Cantidad",
+                                     color_discrete_map=COLORES if col == col_status else None,
+                                     color_discrete_sequence=["#0f9385", "#256b91", "#7993aa", "#b59454", "#64748b"])
+                        fig.update_layout(showlegend=False, title=f"Registros por {label.lower()}",
+                                          yaxis_title="Registros", xaxis_title=None, height=340,
+                                          margin=dict(l=12, r=12, t=55, b=24),
+                                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                                          font=dict(family="Arial, sans-serif"), bargap=.4)
+                        fig.update_traces(textposition="outside", cliponaxis=False)
+                        fig.update_yaxes(gridcolor="rgba(128,145,165,.15)", rangemode="tozero")
+                        st.plotly_chart(fig, use_container_width=True)
+
+    if registro is None:
+        titulo_vacio = "No hay equipos con estos filtros" if filtrado.empty else "Consulta una ficha técnica"
+        mensaje_vacio = "Ajusta la búsqueda o los filtros de la barra lateral." if filtrado.empty else "Selecciona una fila del inventario para ver sus conexiones, documentos y ubicación."
+        st.markdown(f'<div class="hx-empty"><strong>{titulo_vacio}</strong><span>{mensaje_vacio}</span></div>', unsafe_allow_html=True)
+
+    if registro is not None:
+        tag = str(registro[col_equipo]).strip()
+        config = db.get(normalizar(tag), {}).get("data")
+        cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
+        st.divider()
+        unidad = str(registro[col_unidad]) if col_unidad else "Unidad no registrada"
+        estatus = str(registro[col_status]) if col_status else "Estado no registrado"
+        st.markdown(f'<div class="hx-detail"><div class="hx-eyebrow">Ficha técnica / Equipo seleccionado</div>'
+                    f'<h2>{escape(tag)}</h2><div class="hx-detail-meta"><span>{escape(unidad)}</span>'
+                    f'<span class="hx-pill">{escape(estatus)}</span>'
+                    f'<span class="hx-pill">3D · {escape(estado(tag))}</span></div></div>', unsafe_allow_html=True)
+        detalles, enlaces = st.columns([2, 1])
+        with detalles:
+            seccion("Información del equipo", "Datos registrados en la planilla de inspección.")
+            resumen = {c: registro[c] for c in (col_equipo, col_unidad, col_status, col_comentario) if c}
+            st.table(pd.DataFrame(resumen.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
+            with st.expander("Todos los datos técnicos de la planilla"):
+                datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_conn(k)]
+                st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
+            seccion("Conexiones y boquillas", "Nozzle schedule del diseño guardado.")
+            if config is None:
+                st.info(estado(tag) + ": no hay una configuración válida disponible para mostrar boquillas.")
+            else:
+                st.caption(f"Modelo del intercambiador: {config.get('model', 'A')}")
+                dims = config.get("dimensions", {})
+                modelo = config.get("model", "A")
+                largos = [f"Shell {dims.get('shellLength', 4.5 if modelo == 'B' else 4.275):.2f} m"]
+                if modelo == "B":
+                    largos.append(f"Transición {dims.get('reducerLength', 0.9):.2f} m")
+                if modelo in {"D", "E"}:
+                    largo_bonete = dims.get("bonnetLength", 0.80)
+                    largos.extend([f"Bonete izquierdo {largo_bonete:.2f} m",
+                                   f"Bonete derecho {largo_bonete:.2f} m"])
+                else:
+                    largos.extend([
+                        f"Channel {dims.get('channelLength', 0.65 if modelo == 'B' else 1.20):.2f} m",
+                        f"Bonete {dims.get('bonnetLength', 0.40 if modelo == 'B' else 0.80):.2f} m",
+                    ])
+                st.caption("Largos: " + " · ".join(largos))
+                boquillas = filas_boquillas(config)
+                if boquillas:
+                    st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
+                else:
+                    st.info("Sin boquillas registradas.")
+            abrir, copiar = st.columns(2)
+            with abrir:
+                if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag),
+                             use_container_width=True):
+                    ir_editor(tag)
+            with copiar:
+                if st.button("Usar como plantilla", disabled=config is None,
+                             help="Copia el modelo para crear otro TAG sin modificar este equipo.",
+                             use_container_width=True):
+                    ir_editor(tag, como_plantilla=True)
+        with enlaces:
+            seccion("Documentación", "Recursos y evidencia del equipo.")
+            st.metric("Conexiones roscadas", cantidad if cantidad is not None else "No disponible")
+            st.caption(origen)
+            st.link_button("Abrir carpeta del proyecto", GDRIVE_FOLDER_URL, use_container_width=True)
+            termino = tag if informado(tag) else (registro[col_unidad] if col_unidad else "")
+            if informado(termino):
+                url = "https://drive.google.com/drive/u/0/search?q=" + urllib.parse.quote(str(termino), safe="")
+                st.link_button(f"Buscar {termino} en Drive", url, use_container_width=True)
+                st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
+            try:
+                pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen)
+                nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
+                st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
+                                   mime="application/pdf", use_container_width=True)
+            except Exception as exc:
+                st.error(f"No se pudo generar el PDF: {exc}")
+            st.divider()
+            foto = st.file_uploader("Evidencia fotográfica", type=["png", "jpg", "jpeg"],
+                                    key="foto_" + hashlib.sha256(normalizar(tag).encode()).hexdigest()[:16])
+            st.caption("Vista temporal: la fotografía no se guarda en Drive ni se incorpora al PDF.")
+            if foto is not None:
+                st.image(foto, caption=f"Equipo {tag}", use_container_width=True)
+            coords = extraer_coordenadas(registro[col_geo]) if col_geo else None
+            if coords is None and col_lat and col_lon:
+                coords = extraer_coordenadas(f"{registro[col_lat]};{registro[col_lon]}")
+            if coords:
+                lat, lon = coords
+                st.link_button("Abrir ubicación en Google Maps", f"https://www.google.com/maps/search/?api=1&query={lat},{lon}")
+                st.map(pd.DataFrame([{"lat": lat, "lon": lon}]), zoom=15)
+
+    # La vista 3D solo se crea después de una selección explícita en la tabla.
+    if registro is not None:
+        st.divider()
+        seccion("Modelo del intercambiador", "Explora la geometría y las conexiones del equipo seleccionado.",
+                "VISTA 3D · SOLO LECTURA")
+        clave = normalizar(registro[col_equipo])
+        if not disenos_disponibles:
+            st.warning("Vista previa no disponible hasta recuperar la lectura de Diseño3D.")
+        elif clave in errores:
+            st.warning(errores[clave])
+        elif clave not in db:
+            st.info("El equipo seleccionado todavía no tiene un diseño 3D guardado.")
+        elif not (ROOT / "visor_3d" / "index.html").is_file():
+            st.error("Falta visor_3d/index.html en el repositorio.")
+        else:
+            cfg = db[clave]["data"]
+            digest = hashlib.sha256(json.dumps([clave, cfg], sort_keys=True).encode()).hexdigest()[:20]
+            declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
+                             key="preview_" + digest, default=None)
+
+
+if __name__ == "__main__":
+    main()
