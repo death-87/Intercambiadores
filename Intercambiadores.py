@@ -206,11 +206,15 @@ def validar_diseno(data):
             raise ValueError("servicio de conexión inválido")
         if n.get("face", "RF") not in {"RF", "FF"}:
             raise ValueError("cara de brida inválida")
-        if n.get("pos") not in {"superior", "inferior", "front", "rear"}:
+        if n.get("pos") not in {"superior", "inferior", "front", "rear", "axialMinus", "axialPlus"}:
             raise ValueError("posición de boquilla inválida")
         x = n.get("valX")
         if type(x) not in (int, float) or not math.isfinite(x):
             raise ValueError("posición X inválida")
+        for field in ("offsetY", "offsetZ"):
+            value = n.get(field, 0)
+            if type(value) not in (int, float) or not math.isfinite(value):
+                raise ValueError(f"{field} debe ser numérico y finito")
         angle = n.get("angleDeg")
         if angle is not None and (
             type(angle) not in (int, float) or not math.isfinite(angle)
@@ -300,7 +304,8 @@ def filas_boquillas(config):
         servicio = {"process": "PROCESO", "vent": "VENTEO", "drain": "DRENAJE"}.get(
             n.get("service", "process"), "PROCESO")
         posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
-                    "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
+                    "front": "FRENTE", "rear": "POSTERIOR",
+                    "axialMinus": "AXIAL −X", "axialPlus": "AXIAL +X"}.get(n.get("pos"), n.get("pos", ""))
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
             "SERVICIO": servicio,
@@ -464,7 +469,8 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     if config:
         for n in config.get("nozzles", []):
             posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
-                        "front": "FRENTE", "rear": "POSTERIOR"}.get(n.get("pos"), n.get("pos", ""))
+                        "front": "FRENTE", "rear": "POSTERIOR",
+                        "axialMinus": "AXIAL −X", "axialPlus": "AXIAL +X"}.get(n.get("pos"), n.get("pos", ""))
             if n.get("connectionType", "flanged") == "threaded":
                 servicio = {"process": "DIRECTA", "vent": "VENTEO", "drain": "DRENAJE"}.get(
                     n.get("service", "process"), "DIRECTA")
