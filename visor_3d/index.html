@@ -113,13 +113,18 @@
         <div class="input-group" style="flex:1;">
           <label>Diámetro:</label>
           <select id="edit-nz-dia"></select>
+        <small>Diámetro de la brida / salida.</small>
         </div>
         <div class="input-group" id="edit-rating-group" style="flex:1;">
           <label>Clase:</label>
           <select id="edit-nz-rating"></select>
         </div>
       </div>
-      <div id="edit-flange-details" style="display:flex;gap:4px">
+      <div class="input-group" id="edit-reducer-control">
+      <label>Diámetro en el equipo (entrada):</label><select id="edit-base-dia"></select>
+      <small>Mayor que la brida: niple con reducción concéntrica. Igual: niple recto.</small>
+    </div>
+    <div id="edit-flange-details" style="display:flex;gap:4px">
         <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
         <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
       </div>
@@ -225,11 +230,16 @@
       <div class="input-group" style="flex:1;">
         <label>Diámetro:</label>
         <select id="new-nz-dia"></select>
+        <small>Diámetro de la brida / salida.</small>
       </div>
       <div class="input-group" id="new-rating-group" style="flex:1;">
         <label>Clase:</label>
         <select id="new-nz-rating"></select>
       </div>
+    </div>
+    <div class="input-group" id="new-reducer-control">
+      <label>Diámetro en el equipo (entrada):</label><select id="new-base-dia"></select>
+      <small>Mayor que la brida: niple con reducción concéntrica. Igual: niple recto.</small>
     </div>
     <div id="new-flange-details" style="display:flex;gap:4px">
       <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
@@ -449,6 +459,19 @@
       select.value = String(desired);
     }
 
+    function normalizeBaseDiameter(baseIndex, outletIndex, type) {
+      const index = Number(baseIndex);
+      return type === 'flanged' && Number.isInteger(index) &&
+        FLANGED_DIAMETER_INDEXES.includes(index) && DIAMETER_INCHES[index] >= DIAMETER_INCHES[outletIndex]
+        ? index : outletIndex;
+    }
+    function populateBaseDiameter(prefix, outletIndex, type, preferred) {
+      const select = document.getElementById(`${prefix}-base-dia`);
+      const allowed = FLANGED_DIAMETER_INDEXES.filter(i => DIAMETER_INCHES[i] >= DIAMETER_INCHES[outletIndex]);
+      select.replaceChildren(...allowed.map(i => new Option(DIAMETERS[i], String(i))));
+      select.value = String(normalizeBaseDiameter(preferred, outletIndex, type));
+      document.getElementById(`${prefix}-reducer-control`).hidden = type !== 'flanged';
+    }
     function normalizeSubNozzle(value, parentDiaIndex) {
       const source = value && typeof value === 'object' ? value : {};
       const allowed = FLANGED_DIAMETER_INDEXES.filter(index =>
@@ -485,6 +508,7 @@
           service: nz.userData.service || "process",
           connectionType: nz.userData.connectionType || "flanged",
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
+          baseDiaIndex: nz.userData.baseDiaIndex,
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           flangeType: "WN",
           face: nz.userData.face || "RF",
@@ -1347,7 +1371,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1365,7 +1389,7 @@
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
         isNozzle: true, idName: internalName, tagName: tagText,
-        diaIndex: dIndex, connectionType: type, rating: normalizedRating, service: service,
+        diaIndex: dIndex, baseDiaIndex: normalizeBaseDiameter(baseDiaIndex, dIndex, type), connectionType: type, rating: normalizedRating, service: service,
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
         pos: isAxial(pos) ? pos : closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
         offsetY: Number(offsetY) || 0, offsetZ: Number(offsetZ) || 0,
@@ -1426,8 +1450,26 @@
         const rfHeight = group.userData.face === 'RF' ? raisedFaceHeight(normalizedRating) : 0;
         const hubHeight = Math.max(0.012, dim.H - dim.B - rfHeight);
         const nippleLength = visualNeckLength;
-        const nipple = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, nippleLength, 48), nzMat);
-        nipple.position.y = nippleLength / 2;
+        const baseR = flangeDimensions(group.userData.baseDiaIndex, normalizedRating).OD / 2;
+        const baseInner = Math.max(baseR * 0.80, baseR - Math.min(0.012, baseR * 0.16));
+        const reduced = group.userData.baseDiaIndex !== dIndex;
+        const radiusAt = fraction => !reduced ? pipeR : fraction <= 0.3 ? baseR
+          : fraction >= 0.7 ? pipeR : baseR + (pipeR - baseR) * (fraction - 0.3) / 0.4;
+        const sidePipeR = radiusAt(0.55);
+        let nipple;
+        if (reduced) {
+          const profile = [[baseR,0],[baseR,nippleLength*0.3],
+            [pipeR,nippleLength*0.7],[pipeR,nippleLength],
+            [pInner,nippleLength],[pInner,nippleLength*0.7],
+            [baseInner,nippleLength*0.3],[baseInner,0],[baseR,0]];
+          nipple = new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r,y]) => new THREE.Vector2(r,y)), 64), nzMat);
+        } else {
+          nipple = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, nippleLength, 48), nzMat);
+          nipple.position.y = nippleLength / 2;
+        }
+        nipple.name = reduced ? 'Niple reductor concéntrico' : 'Niple recto';
+        nipple.userData.baseRadius = baseR;
+        nipple.userData.outletRadius = pipeR;
         group.add(nipple);
         const tubeProfile = [
           [pInner, nippleLength], [pipeR, nippleLength], [hubR, nippleLength + hubHeight],
@@ -1462,11 +1504,11 @@
         faceMesh.visible = group.userData.face === 'RF';
         group.add(faceMesh);
         group.userData.faceMesh = faceMesh;
-        const hole = new THREE.Mesh(new THREE.CircleGeometry(pInner, 32), holeMat);
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(baseInner, 32), holeMat);
         hole.rotation.x = -Math.PI / 2;
         hole.position.y = 0.003;
         group.add(hole);
-        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(pipeR, Math.max(0.0012, dim.OD * 0.028), 8, 48), weldMat);
+        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(baseR, Math.max(0.0012, baseR * 0.056), 8, 48), weldMat);
         baseWeld.rotation.x = Math.PI / 2;
         baseWeld.position.y = 0.002;
         group.add(baseWeld);
@@ -1478,22 +1520,22 @@
         plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS);
         scaleNozzlePlug(plugNS, sizeNS);
         plugNS.rotation.x = Math.PI / 2;
-        plugNS.position.set(0, nippleLength * 0.55, pipeR + 0.008);
+        plugNS.position.set(0, nippleLength * 0.55, sidePipeR + 0.008);
         plugNS.visible = hasNS;
         group.add(plugNS);
         plugFS = createNozzlePlug(flMat, tagFS, group.userData.ratingFS);
         scaleNozzlePlug(plugFS, sizeFS);
         plugFS.rotation.x = -Math.PI / 2;
-        plugFS.position.set(0, nippleLength * 0.55, -pipeR - 0.008);
+        plugFS.position.set(0, nippleLength * 0.55, -sidePipeR - 0.008);
         plugFS.visible = hasFS;
         group.add(plugFS);
         const frontSide = nameplateGlobalSide();
         const frontLocalSide = localSubNozzleSide(group.userData.angleDeg, frontSide);
         const rearLocalSide = localSubNozzleSide(group.userData.angleDeg, -frontSide);
         const subFrontGroup = createFlangedSubNozzle(group.userData.subFront, frontLocalSide,
-          pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
+          sidePipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
         const subRearGroup = createFlangedSubNozzle(group.userData.subRear, rearLocalSide,
-          pipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
+          sidePipeR, nippleLength, normalizedRating, group.userData.face, nzMat, flMat, rfMat);
         group.userData.subFrontGroup = subFrontGroup;
         group.userData.subRearGroup = subRearGroup;
         group.add(subFrontGroup, subRearGroup);
@@ -1555,7 +1597,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex
           );
           nozzlesList.push(newNz);
         });
@@ -1627,6 +1669,7 @@
       document.getElementById('edit-nz-service').value = data.service || 'process';
       document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
       populateDiameterSelect(document.getElementById('edit-nz-dia'), data.connectionType, data.diaIndex);
+      populateBaseDiameter('edit', data.diaIndex, data.connectionType, data.baseDiaIndex);
       document.getElementById('edit-nz-body').value = data.bodyPart;
       updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
       document.getElementById('edit-nz-face').value = data.face || 'RF';
@@ -1769,7 +1812,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1792,6 +1835,10 @@
     editDia.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
       rebuildSelectedNozzle({diaIndex: Number(e.target.value)});
+    });
+
+    document.getElementById('edit-base-dia').addEventListener('change', e => {
+      rebuildSelectedNozzle({baseDiaIndex: Number(e.target.value)});
     });
 
     editRating.addEventListener('change', (e) => {
@@ -1957,6 +2004,7 @@
     function updateNewConnectionUI(preferred) {
       const type = newType.value;
       populateDiameterSelect(newDia, type, preferred);
+      populateBaseDiameter('new', Number(newDia.value), type, Number(newDia.value));
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
         type === 'threaded' ? '3000#' : '150#');
       document.getElementById('new-flange-details').style.display = type === 'threaded' ? 'none' : 'flex';
@@ -1971,6 +2019,7 @@
     }
     newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
     newDia.addEventListener('change', () => {
+      populateBaseDiameter('new', Number(newDia.value), newType.value, Number(document.getElementById('new-base-dia').value));
       if (newType.value === 'flanged') {
         const neck = defaultNozzleNeckLength(newDia.value);
         document.getElementById('new-neck-length').value = neck;
@@ -2023,7 +2072,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg);
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
