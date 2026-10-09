@@ -198,6 +198,13 @@ def validar_diseno(data):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
+        base_idx = n.get("baseDiaIndex", idx)
+        if type(base_idx) is not int or not 0 <= base_idx < len(DIAMETROS):
+            raise ValueError("diámetro de entrada fuera de la tabla")
+        if DIAMETROS_PULGADAS[base_idx] < DIAMETROS_PULGADAS[idx]:
+            raise ValueError("el diámetro en el equipo no puede ser menor que el de la brida")
+        if n.get("connectionType", "flanged") == "threaded" and base_idx != idx:
+            raise ValueError("la reducción requiere una boquilla enflanchada")
         if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft"}:
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
@@ -309,7 +316,9 @@ def filas_boquillas(config):
         filas.append({
             "MK": n.get("tagName") or "Sin TAG", "QT": 1,
             "SERVICIO": servicio,
-            "DIÁMETRO": DIAMETROS[n["diaIndex"]],
+            "DIÁMETRO": (f'{DIAMETROS[n["baseDiaIndex"]]} → {DIAMETROS[n["diaIndex"]]}'
+                         if n.get("baseDiaIndex", n["diaIndex"]) != n["diaIndex"]
+                         else DIAMETROS[n["diaIndex"]]),
             "RATING": n.get("rating") or ("3000#" if roscada else "Sin información"),
             "TIPO": tipo,
             "CUERPO": nombre_cuerpo(n["bodyPart"]), "POSICIÓN": posicion,
@@ -558,6 +567,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         elementos.append(p("No hay conexiones roscadas identificadas en el diseño 3D.", body))
     elementos += [Spacer(1, 5 * mm), p(
         "Criterio: venteo y drenaje forman parte del mismo listado de boquillas y pueden ubicarse en cualquier componente. "
+        "En boquillas reducidas, el diámetro se indica como entrada en el equipo → salida hacia la brida. "
         "Las dimensiones longitudinales de los componentes se excluyen de esta ficha.", small)]
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
