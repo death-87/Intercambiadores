@@ -203,12 +203,19 @@ def validar_diseno(data):
             raise ValueError("diámetro de entrada fuera de la tabla")
         if DIAMETROS_PULGADAS[base_idx] < DIAMETROS_PULGADAS[idx]:
             raise ValueError("el diámetro en el equipo no puede ser menor que el de la brida")
-        if n.get("connectionType", "flanged") == "threaded" and base_idx != idx:
+        if n.get("connectionType", "flanged") in {"threaded", "sw"} and base_idx != idx:
             raise ValueError("la reducción requiere una boquilla enflanchada")
         if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft"}:
             raise ValueError("cuerpo de boquilla inválido")
-        if n.get("connectionType", "flanged") not in {"flanged", "threaded"}:
+        if n.get("connectionType", "flanged") not in {"flanged", "threaded", "sw"}:
             raise ValueError("tipo de conexión inválido")
+        if n.get("connectionType") == "sw":
+            if n.get("rating") not in {"3000#", "6000#"}:
+                raise ValueError("la clase SW debe ser 3000# o 6000#")
+            if n.get("swEnd", "none") not in {"none", "valve", "flange"}:
+                raise ValueError("terminación SW inválida")
+            if n.get("swFlangeRating", "150#") not in {"150#", "300#", "600#"}:
+                raise ValueError("clase del flange SW inválida")
         if n.get("service", "process") not in {"process", "vent", "drain"}:
             raise ValueError("servicio de conexión inválido")
         if n.get("face", "RF") not in {"RF", "FF"}:
@@ -308,6 +315,10 @@ def filas_boquillas(config):
         detalle_fs = medida_fs + f" · {rating_fs}" + (f" · TAG {tag_fs}" if tag_fs else "")
         roscada = n.get("connectionType", "flanged") == "threaded"
         tipo = "ROSCADA" if roscada else f"WN-{n.get('face', 'RF')}"
+        if n.get("connectionType") == "sw":
+            extremo = {"none": "sin accesorio", "valve": "válvula soldada",
+                       "flange": "flange soldado " + n.get("swFlangeRating", "150#")}.get(n.get("swEnd", "none"))
+            tipo = "SW · niple · " + extremo
         servicio = {"process": "PROCESO", "vent": "VENTEO", "drain": "DRENAJE"}.get(
             n.get("service", "process"), "PROCESO")
         posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
