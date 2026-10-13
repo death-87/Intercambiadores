@@ -127,6 +127,11 @@ def es_columna_conn(nombre):
     return re.fullmatch(r"CONN\d*", compacto) is not None
 
 
+def es_columna_auxiliar(nombre):
+    """Cantidad se conserva en la planilla para conteos, pero no es un dato técnico."""
+    return es_columna_conn(nombre) or normalizar(nombre) == "CANTIDAD"
+
+
 def buscar_columna(columnas, exactas, fragmentos=()):
     for nombre in exactas:
         for col in columnas:
@@ -689,7 +694,7 @@ def main():
     ])
     if df[col_equipo].map(normalizar).duplicated().any():
         st.warning("Hay TAG repetidos en Hoja 1. Los gráficos y totales cuentan filas; revisa duplicados si cada equipo debe ocupar una sola fila.")
-    columnas_inventario = [c for c in df.columns if not es_columna_conn(c)]
+    columnas_inventario = [c for c in df.columns if not es_columna_auxiliar(c)]
     tabla, stats = st.tabs(["Inventario de equipos", "Análisis de inspección"])
     registro = None
     with tabla:
@@ -700,7 +705,7 @@ def main():
         ))
         with st.expander("Personalizar columnas"):
             visibles = st.multiselect("Campos de la planilla", columnas_inventario, default=defaults)
-            st.caption("Las columnas auxiliares Conn, Conn1, Conn2, etc. se ocultan del inventario.")
+            st.caption("Las columnas auxiliares Cantidad, Conn, Conn1, Conn2, etc. se ocultan del inventario.")
         mostrar = filtrado[visibles].copy()
         mostrar.insert(0, "Diseño 3D", filtrado[col_equipo].map(estado))
         firma = hashlib.sha256(json.dumps([selecciones, visibles, filtrado.index.tolist(), filtrado[col_equipo].tolist()], ensure_ascii=False).encode()).hexdigest()[:16]
@@ -752,7 +757,7 @@ def main():
             resumen = {c: registro[c] for c in (col_equipo, col_unidad, col_status, col_comentario) if c}
             st.table(pd.DataFrame(resumen.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             with st.expander("Todos los datos técnicos de la planilla"):
-                datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_conn(k)]
+                datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_auxiliar(k)]
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             seccion("Conexiones y boquillas", "Nozzle schedule del diseño guardado.")
             if config is None:
