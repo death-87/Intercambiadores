@@ -321,9 +321,7 @@ def filas_boquillas(config):
         roscada = n.get("connectionType", "flanged") == "threaded"
         tipo = "ROSCADA" if roscada else f"WN-{n.get('face', 'RF')}"
         if n.get("connectionType") == "sw":
-            extremo = {"none": "sin accesorio", "valve": "válvula soldada",
-                       "flange": "flange soldado " + n.get("swFlangeRating", "150#")}.get(n.get("swEnd", "none"))
-            tipo = "SW · niple · " + extremo
+            tipo = "SW"
         servicio = {"process": "PROCESO", "vent": "VENTEO", "drain": "DRENAJE"}.get(
             n.get("service", "process"), "PROCESO")
         posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
