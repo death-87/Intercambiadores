@@ -105,7 +105,7 @@
         <label>Tipo de conexión:</label>
         <select id="edit-nz-type">
           <option value="flanged">Bridada</option>
-          <option value="threaded">Roscada (plug)</option>
+          <option value="threaded">Roscada (plug)</option><option value="sw">SW (socket weld · soldada)</option>
         </select>
       </div>
 
@@ -113,7 +113,7 @@
         <div class="input-group" style="flex:1;">
           <label>Diámetro:</label>
           <select id="edit-nz-dia"></select>
-        <small>Diámetro de la brida / salida.</small>
+        <small>Diámetro nominal de la conexión / salida.</small>
         </div>
         <div class="input-group" id="edit-rating-group" style="flex:1;">
           <label>Clase:</label>
@@ -128,7 +128,12 @@
         <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
         <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
       </div>
-      <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
+      <div id="edit-sw-controls" hidden>
+      <div class="input-group"><label>Terminación del niple:</label><select id="edit-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
+      <div class="input-group" id="edit-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="edit-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
+      <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
+    </div>
+    <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
       <div class="input-group" id="edit-neck-control">
         <label>Largo niple visual: <output id="edit-neck-length-value">0.30</output> m</label>
         <input type="range" id="edit-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
@@ -223,14 +228,14 @@
       <label>Tipo:</label>
       <select id="new-nz-type">
         <option value="flanged">Boquilla bridada</option>
-        <option value="threaded">Boquilla roscada (plug)</option>
+        <option value="threaded">Boquilla roscada (plug)</option><option value="sw">Boquilla SW (socket weld · soldada)</option>
       </select>
     </div>
     <div style="display:flex; gap:4px;">
       <div class="input-group" style="flex:1;">
         <label>Diámetro:</label>
         <select id="new-nz-dia"></select>
-        <small>Diámetro de la brida / salida.</small>
+        <small>Diámetro nominal de la conexión / salida.</small>
       </div>
       <div class="input-group" id="new-rating-group" style="flex:1;">
         <label>Clase:</label>
@@ -244,6 +249,11 @@
     <div id="new-flange-details" style="display:flex;gap:4px">
       <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
       <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
+    </div>
+    <div id="new-sw-controls" hidden>
+      <div class="input-group"><label>Terminación del niple:</label><select id="new-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
+      <div class="input-group" id="new-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="new-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
+      <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
     </div>
     <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
     <div class="input-group" id="new-neck-control">
@@ -434,6 +444,10 @@
 
     function updateAsmeInfo(elementId, diaIndex, rating, type, face = 'RF') {
       const element = document.getElementById(elementId);
+      if (type === 'sw') {
+        element.textContent = `SW (socket weld) · clase ${rating} · niple soldado · representación esquemática`;
+        element.style.display = 'block'; return;
+      }
       if (type === 'threaded') {
         element.style.display = 'none';
         return;
@@ -447,7 +461,7 @@
     }
 
     function populateDiameterSelect(select, connectionType, selectedIndex) {
-      const allowed = connectionType === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
+      const allowed = connectionType !== 'flanged' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
       select.replaceChildren(...allowed.map(index => {
         const option = document.createElement('option');
         option.value = String(index);
@@ -455,7 +469,7 @@
         return option;
       }));
       const desired = allowed.includes(Number(selectedIndex)) ? Number(selectedIndex)
-        : (connectionType === 'threaded' ? 0 : 6);
+        : (connectionType !== 'flanged' ? 0 : 6);
       select.value = String(desired);
     }
 
@@ -510,6 +524,7 @@
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
           baseDiaIndex: nz.userData.baseDiaIndex,
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
+          swEnd: nz.userData.swEnd, swFlangeRating: nz.userData.swFlangeRating,
           flangeType: "WN",
           face: nz.userData.face || "RF",
           neckLength: nz.userData.neckLength || undefined,
@@ -1371,7 +1386,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#') {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1379,15 +1394,17 @@
       const numericX = Number(posX);
       posX = Number.isFinite(numericX) ? numericX : (isAxial(pos) ? 0 : bodyBounds.center);
       const dIndex = diaIndex !== undefined ? parseInt(diaIndex) : 4;
-      const type = connectionType === 'threaded' ? 'threaded' : 'flanged';
-      const normalizedRating = type === 'threaded'
+      const type = ['threaded', 'sw'].includes(connectionType) ? connectionType : 'flanged';
+      const normalizedRating = type !== 'flanged'
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
       const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
       
-      const visualNeckLength = type === 'flanged'
+      const visualNeckLength = type !== 'threaded'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
+        swEnd: ['none', 'valve', 'flange'].includes(swEnd) ? swEnd : 'none',
+        swFlangeRating: ['150#', '300#', '600#'].includes(swFlangeRating) ? swFlangeRating : '150#',
         isNozzle: true, idName: internalName, tagName: tagText,
         diaIndex: dIndex, baseDiaIndex: normalizeBaseDiameter(baseDiaIndex, dIndex, type), connectionType: type, rating: normalizedRating, service: service,
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
@@ -1441,6 +1458,40 @@
         plugNS = new THREE.Group();
         plugFS = new THREE.Group();
         group.add(plugNS, plugFS);
+      } else if (type === 'sw') {
+        const pipeR = flangeDimensions(dIndex, '150#').OD / 2;
+        const socketR = pipeR * (normalizedRating === '6000#' ? 1.65 : 1.45);
+        const socketH = Math.max(0.025, pipeR * 1.6);
+        const cylinder = (radius, height, y, name) => {
+          const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 32), nzMat);
+          mesh.position.y = y + height / 2; mesh.name = name; group.add(mesh);
+        };
+        const weld = (radius, y) => {
+          const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, Math.max(0.0012, pipeR * 0.07), 8, 48), weldMat);
+          mesh.rotation.x = Math.PI / 2; mesh.position.y = y; group.add(mesh);
+        };
+        cylinder(socketR, socketH, 0, 'Boquilla SW ' + normalizedRating);
+        weld(socketR, 0.002);
+        cylinder(pipeR, visualNeckLength, socketH, 'Niple SW');
+        weld(pipeR, socketH);
+        totalH = socketH + visualNeckLength;
+        if (group.userData.swEnd === 'valve') {
+          const valveH = Math.max(0.08, pipeR * 4);
+          cylinder(pipeR * 1.8, valveH, totalH, 'Válvula soldada');
+          weld(pipeR, totalH);
+          const wheel = new THREE.Mesh(new THREE.TorusGeometry(pipeR * 2.5, Math.max(0.003, pipeR * 0.15), 8, 32), flMat);
+          wheel.position.set(pipeR * 3, totalH + valveH / 2, 0);
+          wheel.rotation.y = Math.PI / 2; group.add(wheel);
+          totalH += valveH;
+        } else if (group.userData.swEnd === 'flange') {
+          const dim = flangeDimensions(dIndex, group.userData.swFlangeRating);
+          const profile = [[pipeR * 0.8,0],[pipeR,0],[dim.A/2,dim.H-dim.B],
+            [dim.D/2,dim.H-dim.B],[dim.D/2,dim.H],[pipeR*0.8,dim.H],[pipeR*0.8,0]];
+          const flange = new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r,y]) => new THREE.Vector2(r,y)),48), flMat);
+          flange.position.y = totalH; flange.name = 'Flange soldado ' + group.userData.swFlangeRating;
+          group.add(flange); weld(pipeR, totalH); totalH += dim.H;
+        }
+        plugNS = new THREE.Group(); plugFS = new THREE.Group(); group.add(plugNS, plugFS);
       } else {
         const dim = flangeDimensions(dIndex, normalizedRating);
         const pipeR = dim.OD / 2;
@@ -1597,7 +1648,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating
           );
           nozzlesList.push(newNz);
         });
@@ -1668,6 +1719,8 @@
       document.getElementById('edit-nz-name').value = data.tagName;
       document.getElementById('edit-nz-service').value = data.service || 'process';
       document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
+      document.getElementById('edit-sw-end').value = data.swEnd || 'none';
+      document.getElementById('edit-sw-flange-rating').value = data.swFlangeRating || '150#';
       populateDiameterSelect(document.getElementById('edit-nz-dia'), data.connectionType, data.diaIndex);
       populateBaseDiameter('edit', data.diaIndex, data.connectionType, data.baseDiaIndex);
       document.getElementById('edit-nz-body').value = data.bodyPart;
@@ -1757,8 +1810,23 @@
     const editSubRearDia = document.getElementById('edit-sub-rear-dia');
     const editSubRearTag = document.getElementById('edit-sub-rear-tag');
 
+    function updateSwControls(prefix, type) {
+      document.getElementById(`${prefix}-sw-controls`).hidden = type !== 'sw';
+      document.getElementById(`${prefix}-sw-flange-control`).hidden = document.getElementById(`${prefix}-sw-end`).value !== 'flange';
+    }
+    for (const prefix of ['new', 'edit']) {
+      for (const field of ['sw-end', 'sw-flange-rating']) {
+        document.getElementById(`${prefix}-${field}`).addEventListener('change', () => {
+          updateSwControls(prefix, document.getElementById(`${prefix}-nz-type`).value);
+          if (prefix === 'edit') rebuildSelectedNozzle({
+            swEnd: document.getElementById('edit-sw-end').value,
+            swFlangeRating: document.getElementById('edit-sw-flange-rating').value
+          });
+        });
+      }
+    }
     function populateRatingSelect(select, type, preferred) {
-      const allowed = type === 'threaded' ? ['3000#', '6000#'] : ['150#', '300#', '600#'];
+      const allowed = type !== 'flanged' ? ['3000#', '6000#'] : ['150#', '300#', '600#'];
       select.replaceChildren(...allowed.map(value => {
         const option = document.createElement('option');
         option.value = value;
@@ -1769,11 +1837,12 @@
     }
 
     function updateConnectionTypeUI(type, preferredRating) {
-      const threaded = type === 'threaded';
+      const threaded = type !== 'flanged';
+      updateSwControls('edit', type);
       populateRatingSelect(editRating, type, preferredRating);
       document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
       document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
-      document.getElementById('edit-neck-control').style.display = threaded ? 'none' : '';
+      document.getElementById('edit-neck-control').style.display = type === 'threaded' ? 'none' : '';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
       document.getElementById('sub-nozzles-editor').style.display = threaded ? 'none' : '';
     }
@@ -1791,7 +1860,7 @@
       if(!selectedNozzle) return;
       selectedNozzle.userData.service = e.target.value;
       if ((e.target.value === 'vent' || e.target.value === 'drain') &&
-          selectedNozzle.userData.connectionType !== 'threaded') {
+          selectedNozzle.userData.connectionType === 'flanged') {
         editType.value = 'threaded';
         editType.dispatchEvent(new Event('change'));
         return;
@@ -1803,16 +1872,16 @@
       if (!selectedNozzle) return null;
       const old = selectedNozzle;
       const data = {...old.userData, ...overrides};
-      const type = data.connectionType === 'threaded' ? 'threaded' : 'flanged';
-      const allowed = type === 'threaded' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
-      const diaIndex = allowed.includes(Number(data.diaIndex)) ? Number(data.diaIndex) : (type === 'threaded' ? 0 : 6);
+      const type = ['threaded', 'sw'].includes(data.connectionType) ? data.connectionType : 'flanged';
+      const allowed = type !== 'flanged' ? THREADED_DIAMETER_INDEXES : FLANGED_DIAMETER_INDEXES;
+      const diaIndex = allowed.includes(Number(data.diaIndex)) ? Number(data.diaIndex) : (type !== 'flanged' ? 0 : 6);
       const replacement = buildNozzle(
         data.idName, data.tagName, diaIndex, type, data.rating,
         data.bodyPart, data.pos, data.valX,
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1825,10 +1894,10 @@
 
     editType.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
-      const type = e.target.value === 'threaded' ? 'threaded' : 'flanged';
+      const type = e.target.value;
       rebuildSelectedNozzle({
         connectionType: type,
-        rating: type === 'threaded' ? '3000#' : '150#'
+        rating: type !== 'flanged' ? '3000#' : '150#'
       });
     });
 
@@ -2003,11 +2072,12 @@
     const newAngle = document.getElementById('new-nz-angle');
     function updateNewConnectionUI(preferred) {
       const type = newType.value;
+      updateSwControls('new', type);
       populateDiameterSelect(newDia, type, preferred);
       populateBaseDiameter('new', Number(newDia.value), type, Number(newDia.value));
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
-        type === 'threaded' ? '3000#' : '150#');
-      document.getElementById('new-flange-details').style.display = type === 'threaded' ? 'none' : 'flex';
+        type !== 'flanged' ? '3000#' : '150#');
+      document.getElementById('new-flange-details').style.display = type !== 'flanged' ? 'none' : 'flex';
       document.getElementById('new-neck-control').style.display = type === 'threaded' ? 'none' : '';
       if (type === 'flanged') {
         const neck = defaultNozzleNeckLength(newDia.value);
@@ -2017,7 +2087,7 @@
       updateAsmeInfo('new-asme-info', newDia.value, document.getElementById('new-nz-rating').value,
         type, document.getElementById('new-nz-face').value);
     }
-    newType.addEventListener('change', () => updateNewConnectionUI(newType.value === 'threaded' ? 0 : 6));
+    newType.addEventListener('change', () => updateNewConnectionUI(newType.value !== 'flanged' ? 0 : 6));
     newDia.addEventListener('change', () => {
       populateBaseDiameter('new', Number(newDia.value), newType.value, Number(document.getElementById('new-base-dia').value));
       if (newType.value === 'flanged') {
@@ -2036,7 +2106,7 @@
         newType.value, event.target.value));
     document.getElementById('new-nz-service').addEventListener('change', (event) => {
       if (event.target.value === 'vent' || event.target.value === 'drain') {
-        newType.value = 'threaded';
+        if (newType.value !== 'sw') newType.value = 'threaded';
         updateNewConnectionUI(1);
       }
     });
@@ -2058,7 +2128,7 @@
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
       customNozzleCount++;
-      const connectionType = newType.value === 'threaded' ? 'threaded' : 'flanged';
+      const connectionType = newType.value;
       const diaIndex = Number(newDia.value);
       const rating = document.getElementById('new-nz-rating').value;
       const bodyPart = document.getElementById('new-nz-body').value;
@@ -2072,7 +2142,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value));
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value);
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
