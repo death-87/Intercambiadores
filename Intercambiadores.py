@@ -434,7 +434,7 @@ def filas_roscas(config):
     servicios = {n.get("service") for n in config.get("nozzles", [])}
     for campo, lado in (("vent", "VENTEO"), ("drain", "DRENAJE")):
         if campo not in servicios and informado(config.get(campo, "")):
-            agregar("LEGACY", lado, config[campo], "3000#", "", "bonnet")
+            agregar("—", lado, config[campo], "3000#", "", "bonnet")
     return filas
 
 
