@@ -301,7 +301,7 @@ def cargar_disenos():
 def nombre_cuerpo(valor):
     return {
         "shell": "SHELL", "transition": "TRANSICIÓN", "channel": "CHANNEL",
-        "bonnet": "BONETE DERECHO", "bonnetLeft": "BONETE IZQUIERDO",
+        "bonnet": "BONETE", "bonnetLeft": "BONETE IZQUIERDO",
     }.get(valor, str(valor or "").upper())
 
 
@@ -477,11 +477,15 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {documento.page}")
         canvas.restoreState()
 
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    col_unidad = buscar_columna(columnas, ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
+    unidad = registro[col_unidad] if col_unidad and informado(registro[col_unidad]) else "Sin información"
+    unidad_style = ParagraphStyle("hx_unidad", parent=body, textColor=colors.white)
     elementos = []
     cabecera = Table([
         [Paragraph("REGISTRO DE INSPECCIÓN", eyebrow)],
         [Paragraph(f"Ficha técnica de boquillas · {escape(str(tag))}", title_style)],
-        [p(f"Emitido {datetime.now():%d-%m-%Y %H:%M} · hora del servidor", small)],
+        [p(f"UNIDAD: {unidad}", unidad_style)],
     ], colWidths=[180 * mm])
     cabecera.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), navy), ("LEFTPADDING", (0, 0), (-1, -1), 10),
@@ -491,24 +495,6 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
     ]))
     elementos += [cabecera, Spacer(1, 7 * mm)]
-
-    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
-    col_unidad = buscar_columna(columnas, ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
-    col_estado = buscar_columna(columnas, ("STATUS", "ESTATUS", "ESTADO"), ("STATUS", "ESTATUS"))
-    unidad = registro[col_unidad] if col_unidad and informado(registro[col_unidad]) else "Sin información"
-    estado = registro[col_estado] if col_estado and informado(registro[col_estado]) else "Sin información"
-    datos = [
-        [p("EQUIPO", small), p("UNIDAD / ÁREA", small), p("ESTADO", small)],
-        [p(tag, body), p(unidad, body), p(estado, body)],
-    ]
-    tabla_datos = Table(datos, colWidths=[60 * mm] * 3)
-    tabla_datos.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EFF3F6")),
-        ("GRID", (0, 0), (-1, -1), .45, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
-    elementos += [tabla_datos, Spacer(1, 6 * mm)]
 
     conexiones = filas_roscas(config) if config else []
     total = cantidad if cantidad is not None else "No disponible"
@@ -710,22 +696,6 @@ def main():
             if config is None:
                 st.info(estado(tag) + ": no hay una configuración válida disponible para mostrar boquillas.")
             else:
-                st.caption(f"Modelo del intercambiador: {config.get('model', 'A')}")
-                dims = config.get("dimensions", {})
-                modelo = config.get("model", "A")
-                largos = [f"Shell {dims.get('shellLength', 4.5 if modelo == 'B' else 4.275):.2f} m"]
-                if modelo == "B":
-                    largos.append(f"Transición {dims.get('reducerLength', 0.9):.2f} m")
-                if modelo in {"D", "E"}:
-                    largo_bonete = dims.get("bonnetLength", 0.80)
-                    largos.extend([f"Bonete izquierdo {largo_bonete:.2f} m",
-                                   f"Bonete derecho {largo_bonete:.2f} m"])
-                else:
-                    largos.extend([
-                        f"Channel {dims.get('channelLength', 0.65 if modelo == 'B' else 1.20):.2f} m",
-                        f"Bonete {dims.get('bonnetLength', 0.40 if modelo == 'B' else 0.80):.2f} m",
-                    ])
-                st.caption("Largos: " + " · ".join(largos))
                 boquillas = filas_roscas(config)
                 if boquillas:
                     st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
