@@ -412,6 +412,32 @@ def ir_editor(tag, como_plantilla=False):
     st.error("No se encontró la página del editor dentro de pages/.")
 
 
+def filas_roscas(config):
+    """Registro técnico de conexiones roscadas, compartido por pantalla y PDF."""
+    filas = []
+    def agregar(origen, lado, medida, rating, tag, cuerpo):
+        filas.append({"BOQUILLA / ORIGEN": origen or "Sin TAG", "LADO": lado,
+                      "MEDIDA": re.sub(r"\s*NPT\s*", "", str(medida), flags=re.I).strip() or "Sin medida",
+                      "TIPO": "NPT", "RATING": rating or "3000#",
+                      "TAG PLUG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo)})
+    for n in config.get("nozzles", []):
+        if n.get("connectionType", "flanged") == "threaded":
+            lado = {"process": "DIRECTA", "vent": "VENTEO", "drain": "DRENAJE"}.get(n.get("service", "process"), "DIRECTA")
+            agregar(n.get("tagName"), lado, DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
+            continue
+        for lado in ("NS", "FS"):
+            if n.get("has" + lado, False):
+                legacy = "size" + lado not in n
+                medida = n.get("tag" + lado) if legacy else n.get("size" + lado)
+                tag = "" if legacy else n.get("tag" + lado)
+                agregar(n.get("tagName"), lado, medida or "Sin medida", n.get("rating" + lado), tag, n.get("bodyPart"))
+    servicios = {n.get("service") for n in config.get("nozzles", [])}
+    for campo, lado in (("vent", "VENTEO"), ("drain", "DRENAJE")):
+        if campo not in servicios and informado(config.get(campo, "")):
+            agregar("LEGACY", lado, config[campo], "3000#", "", "bonnet")
+    return filas
+
+
 def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     salida = BytesIO()
     doc = SimpleDocTemplate(
@@ -436,8 +462,6 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     cell = ParagraphStyle("hx_cell", parent=body, fontSize=7, leading=8.5)
     cell_center = ParagraphStyle("hx_cell_center", parent=cell, alignment=TA_CENTER)
     cell_header = ParagraphStyle("hx_cell_header", parent=cell_center, fontName="Helvetica-Bold",
-                                 textColor=colors.white)
-    status_text = ParagraphStyle("hx_status", parent=body, fontName="Helvetica-Bold",
                                  textColor=colors.white)
 
     def p(valor, estilo=cell):
@@ -473,12 +497,11 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     col_estado = buscar_columna(columnas, ("STATUS", "ESTATUS", "ESTADO"), ("STATUS", "ESTATUS"))
     unidad = registro[col_unidad] if col_unidad and informado(registro[col_unidad]) else "Sin información"
     estado = registro[col_estado] if col_estado and informado(registro[col_estado]) else "Sin información"
-    modelo = config.get("model", "A") if config else "Sin diseño"
     datos = [
-        [p("EQUIPO", small), p("UNIDAD / ÁREA", small), p("ESTADO", small), p("MODELO 3D", small)],
-        [p(tag, body), p(unidad, body), p(estado, body), p(modelo, body)],
+        [p("EQUIPO", small), p("UNIDAD / ÁREA", small), p("ESTADO", small)],
+        [p(tag, body), p(unidad, body), p(estado, body)],
     ]
-    tabla_datos = Table(datos, colWidths=[45 * mm] * 4)
+    tabla_datos = Table(datos, colWidths=[60 * mm] * 3)
     tabla_datos.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EFF3F6")),
         ("GRID", (0, 0), (-1, -1), .45, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -487,88 +510,18 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
     ]))
     elementos += [tabla_datos, Spacer(1, 6 * mm)]
 
-    filas = filas_boquillas(config) if config else []
-    conexiones = []
-    if config:
-        for n in config.get("nozzles", []):
-            posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
-                        "front": "FRENTE", "rear": "POSTERIOR",
-                        "axialMinus": "AXIAL −X", "axialPlus": "AXIAL +X"}.get(n.get("pos"), n.get("pos", ""))
-            if n.get("connectionType", "flanged") == "threaded":
-                servicio = {"process": "DIRECTA", "vent": "VENTEO", "drain": "DRENAJE"}.get(
-                    n.get("service", "process"), "DIRECTA")
-                conexiones.append([
-                    n.get("tagName") or "Sin TAG", servicio,
-                    f"{DIAMETROS[n['diaIndex']]} · {n.get('rating') or '3000#'}",
-                    "—", nombre_cuerpo(n.get("bodyPart")), posicion,
-                ])
-                continue
-            for lado in ("NS", "FS"):
-                if n.get("has" + lado, False):
-                    legacy = ("size" + lado) not in n
-                    medida = (n.get("tag" + lado) if legacy else n.get("size" + lado)) or "Sin medida"
-                    tag_plug = "" if legacy else (n.get("tag" + lado) or "")
-                    rating_plug = n.get("rating" + lado) or "3000#"
-                    conexiones.append([
-                        n.get("tagName") or "Sin TAG", lado,
-                        f"{medida} · {rating_plug}", tag_plug or "—",
-                        nombre_cuerpo(n.get("bodyPart")), posicion,
-                    ])
-        servicios = {n.get("service") for n in config.get("nozzles", [])}
-        for servicio, campo in (("VENTEO", "vent"), ("DRENAJE", "drain")):
-            if campo not in servicios and informado(config.get(campo, "")):
-                conexiones.append(["LEGACY", servicio, config.get(campo), "—", "BONNET", "—"])
-    detectadas = len(conexiones)
-    if cantidad is None:
-        verificacion, estado_color = "SIN TOTAL DECLARADO", colors.HexColor("#A26918")
-    elif cantidad == detectadas:
-        verificacion, estado_color = "COINCIDENTE", teal
-    else:
-        verificacion, estado_color = f"REVISAR · DIFERENCIA {cantidad - detectadas:+d}", colors.HexColor("#B54A4A")
-    resumen = Table([
-        [p("TOTAL DECLARADO", small), p("IDENTIFICADAS EN 3D", small), p("VERIFICACIÓN", small)],
-        [p(cantidad if cantidad is not None else "—", body), p(detectadas, body), p(verificacion, status_text)],
-        [p(origen, small), p("Lista 3D + conexiones NS/FS", small), p(estado_diseno, small)],
-    ], colWidths=[60 * mm] * 3)
-    resumen.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), pale), ("BOX", (0, 0), (-1, -1), .8, teal),
-        ("INNERGRID", (0, 0), (-1, -1), .35, line), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (2, 1), (2, 1), estado_color), ("TEXTCOLOR", (2, 1), (2, 1), colors.white),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
-    elementos += [Paragraph("CONTROL DE CONEXIONES ROSCADAS", section_style), resumen, Spacer(1, 6 * mm)]
-
-    elementos.append(Paragraph("NOZZLE SCHEDULE", section_style))
-    if filas:
-        encabezado = ["MK", "SERVICIO", "QT", "DIÁMETRO", "TIPO / RATING", "CUERPO", "POSICIÓN", "NS", "FS"]
-        datos_nozzle = [[p(x, cell_header) for x in encabezado]] + [
-            [p(
-                f"{fila['TIPO']} · {fila['RATING']}" if k == "TIPO / RATING" else fila[k],
-                cell_center if k in {"SERVICIO", "QT", "DIÁMETRO", "TIPO / RATING", "NS", "FS"} else cell,
-            ) for k in encabezado]
-            for fila in filas
-        ]
-        tabla_nozzle = Table(datos_nozzle, repeatRows=1,
-                             colWidths=[17*mm, 20*mm, 8*mm, 18*mm, 25*mm, 20*mm, 22*mm, 25*mm, 25*mm])
-        tabla_nozzle.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), navy), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F8FA")]),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        elementos.append(tabla_nozzle)
-    else:
-        elementos.append(p("No hay boquillas registradas en el diseño.", body))
-    elementos += [Spacer(1, 6 * mm), Paragraph("REGISTRO DE ROSCAS", section_style)]
+    conexiones = filas_roscas(config) if config else []
+    total = cantidad if cantidad is not None else "No disponible"
+    elementos += [Paragraph("TOTAL DE CONEXIONES ROSCADAS", section_style),
+                  p(total, body), Spacer(1, 6 * mm),
+                  Paragraph("REGISTRO DE ROSCAS", section_style)]
     if conexiones:
-        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA / CLASE", "TAG PLUG", "CUERPO", "POSICIÓN"]
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
-            [p(x, cell_center if i in (1, 2, 3) else cell) for i, x in enumerate(fila)] for fila in conexiones
+            [p(fila[k], cell_center if k in {"LADO", "MEDIDA", "TIPO", "RATING"} else cell) for k in encabezado] for fila in conexiones
         ]
         tabla_roscas = Table(datos_roscas, repeatRows=1,
-                             colWidths=[35*mm, 18*mm, 31*mm, 30*mm, 34*mm, 32*mm])
+                             colWidths=[37*mm, 20*mm, 23*mm, 17*mm, 22*mm, 29*mm, 32*mm])
         tabla_roscas.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), teal), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
@@ -578,11 +531,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         ]))
         elementos.append(tabla_roscas)
     else:
-        elementos.append(p("No hay conexiones roscadas identificadas en el diseño 3D.", body))
-    elementos += [Spacer(1, 5 * mm), p(
-        "Criterio: venteo y drenaje forman parte del mismo listado de boquillas y pueden ubicarse en cualquier componente. "
-        "En boquillas reducidas, el diámetro se indica como entrada en el equipo → salida hacia la brida. "
-        "Las dimensiones longitudinales de los componentes se excluyen de esta ficha.", small)]
+        elementos.append(p("No hay conexiones roscadas registradas.", body))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
@@ -757,7 +706,7 @@ def main():
             with st.expander("Todos los datos técnicos de la planilla"):
                 datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_auxiliar(k)]
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
-            seccion("Conexiones y boquillas", "Nozzle schedule del diseño guardado.")
+            seccion("Registro de roscas", "Conexiones roscadas y su boquilla de origen.")
             if config is None:
                 st.info(estado(tag) + ": no hay una configuración válida disponible para mostrar boquillas.")
             else:
@@ -777,11 +726,11 @@ def main():
                         f"Bonete {dims.get('bonnetLength', 0.40 if modelo == 'B' else 0.80):.2f} m",
                     ])
                 st.caption("Largos: " + " · ".join(largos))
-                boquillas = filas_boquillas(config)
+                boquillas = filas_roscas(config)
                 if boquillas:
                     st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
                 else:
-                    st.info("Sin boquillas registradas.")
+                    st.info("Sin conexiones roscadas registradas.")
             abrir, copiar = st.columns(2)
             with abrir:
                 if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag),
@@ -807,7 +756,7 @@ def main():
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
-                st.caption("Incluye el nozzle schedule de las boquillas enflanchadas y roscadas, incluso con cero conexiones roscadas.")
+                st.caption("Incluye el registro de roscas y el total de conexiones roscadas.")
             except Exception as exc:
                 st.error(f"No se pudo generar el PDF: {exc}")
             st.divider()
