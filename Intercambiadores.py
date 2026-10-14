@@ -498,8 +498,21 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
 
     conexiones = filas_roscas(config) if config else []
     total = cantidad if cantidad is not None else "No disponible"
-    elementos += [Paragraph("TOTAL DE CONEXIONES ROSCADAS", section_style),
-                  p(total, body), Spacer(1, 6 * mm),
+    total_label_style = ParagraphStyle("hx_total_label", parent=body,
+                                      fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=navy)
+    total_number_style = ParagraphStyle("hx_total_number", parent=body,
+                                       fontName="Helvetica-Bold", fontSize=28 if cantidad is not None else 12,
+                                       leading=32 if cantidad is not None else 16,
+                                       alignment=TA_CENTER, textColor=colors.white)
+    recuadro_total = Table([[p("TOTAL DE CONEXIONES ROSCADAS", total_label_style),
+                            p(total, total_number_style)]], colWidths=[140 * mm, 40 * mm])
+    recuadro_total.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), pale), ("BACKGROUND", (1, 0), (1, 0), teal),
+        ("BOX", (0, 0), (-1, -1), 1.2, teal), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    elementos += [recuadro_total, Spacer(1, 6 * mm),
                   Paragraph("REGISTRO DE ROSCAS", section_style)]
     if conexiones:
         encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
