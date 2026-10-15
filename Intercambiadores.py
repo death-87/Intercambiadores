@@ -591,8 +591,15 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
         ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
-    elementos += [recuadro_total, Spacer(1, 6 * mm),
-                  Paragraph("DATOS OPERACIONALES", section_style)]
+    recuadro_operacion = Table([[p("DATOS OPERACIONALES", total_label_style)]],
+                              colWidths=[180 * mm])
+    recuadro_operacion.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), pale), ("BOX", (0, 0), (-1, -1), 1.2, teal),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    elementos += [recuadro_operacion, Spacer(1, 2 * mm)]
     encabezado_operacion = ["PARÁMETRO", "TUBOS", "CARCAZA"]
     datos_operacion = [[p(k, cell_header) for k in encabezado_operacion]] + [
         [p(fila[k]) for k in ("Parámetro", "Tubos", "Carcaza")]
@@ -606,8 +613,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
-    elementos += [tabla_operacion, Spacer(1, 6 * mm),
-                  Paragraph("REGISTRO DE ROSCAS", section_style)]
+    elementos += [tabla_operacion, Spacer(1, 6 * mm), recuadro_total, Spacer(1, 2 * mm)]
     if conexiones:
         encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
