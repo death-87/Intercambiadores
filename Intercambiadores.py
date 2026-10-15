@@ -493,7 +493,7 @@ def filas_roscas(config):
     return filas
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -605,6 +605,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
             Paragraph("VISTA DEL EQUIPO · LADO NAMEPLATE", section_style), imagen]))
+    if imagen_posterior:
+        imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
+        elementos.append(KeepTogether([Spacer(1, 6 * mm),
+            Paragraph("VISTA DEL EQUIPO · LADO POSTERIOR", section_style), imagen]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
@@ -779,8 +783,9 @@ def main():
         tag = str(registro[col_equipo]).strip()
         config = db.get(normalizar(tag), {}).get("data")
         cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v3"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
+        imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
         st.divider()
         unidad = str(registro[col_unidad]) if col_unidad else "Unidad no registrada"
@@ -836,7 +841,7 @@ def main():
             try:
                 pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen,
                                   registro_operacional=operacionales.get(normalizar(tag)),
-                                  imagen_modelo=imagen_modelo)
+                                  imagen_modelo=imagen_modelo, imagen_posterior=imagen_posterior)
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
@@ -875,21 +880,27 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v3"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
                     and captura.get("capture_key") == digest
                     and "captura_pdf_" + digest not in st.session_state):
-                imagen = captura.get("image", "")
-                if isinstance(imagen, str) and imagen.startswith("data:image/png;base64,") and len(imagen) < 8_000_000:
-                    try:
+                try:
+                    imagenes = {}
+                    for campo, prefijo in (("image", "captura_pdf_"), ("rear_image", "captura_posterior_pdf_")):
+                        imagen = captura.get(campo, "")
+                        if not (isinstance(imagen, str) and imagen.startswith("data:image/png;base64,")
+                                and len(imagen) < 8_000_000):
+                            raise ValueError("Captura no válida")
                         contenido = base64.b64decode(imagen.split(",", 1)[1], validate=True)
-                        if contenido.startswith(b"\x89PNG\r\n\x1a\n"):
-                            st.session_state["captura_pdf_" + digest] = contenido
-                            st.rerun()
-                    except ValueError:
-                        st.warning("No se pudo preparar la imagen del modelo para el PDF.")
+                        if not contenido.startswith(b"\x89PNG\r\n\x1a\n"):
+                            raise ValueError("PNG no válido")
+                        imagenes[prefijo + digest] = contenido
+                    st.session_state.update(imagenes)
+                    st.rerun()
+                except ValueError:
+                    st.warning("No se pudieron preparar las vistas del modelo para el PDF.")
 
 
 if __name__ == "__main__":
