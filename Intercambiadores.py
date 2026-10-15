@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parent
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
 HOJA_3D = "Diseño3D"
+HOJA_OPERACION = "Datos Operacionales"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 # Los primeros 11 índices se conservan para no alterar diseños históricos.
 DIAMETROS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"', '6"',
@@ -140,6 +141,26 @@ def buscar_columna(columnas, exactas, fragmentos=()):
     return next((c for c in columnas if any(x in normalizar(c) for x in fragmentos)), None)
 
 
+def datos_operacionales(registro):
+    """Separa tubos y carcaza; conserva los valores y unidades de la planilla."""
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    filas = []
+    for etiqueta, campo in (("Temperatura (°C)", "TEMPERATURA"),
+                            ("Presión (kg/cm²g)", "PRESION"), ("Producto", "PRODUCTO")):
+        fila = {"Parámetro": etiqueta}
+        for lado, variantes in (("Tubos", ("TUBOS",)), ("Carcaza", ("CARCAZA", "CARCASA"))):
+            nombres = tuple(campo + " " + v for v in variantes)
+            columna = buscar_columna(columnas, nombres)
+            if columna is None:
+                columna = next((c for c in columnas if any(
+                    normalizar(c).startswith(n + " (") or normalizar(c).startswith(n + " [")
+                    for n in nombres)), None)
+            valor = registro[columna] if columna is not None else None
+            fila[lado] = valor if informado(valor) else "Sin información"
+        filas.append(fila)
+    return filas
+
+
 def leer_csv(hoja):
     response = requests.get(
         f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq",
@@ -149,6 +170,39 @@ def leer_csv(hoja):
     if response.text.lstrip().startswith("<"):
         raise ValueError("Google devolvió HTML en lugar de CSV. Revisa permisos y nombre de la hoja.")
     return pd.read_csv(StringIO(response.text), dtype=str, keep_default_na=False)
+
+
+def vincular_operacionales(filas, tags, columna_denominacion):
+    """Relaciona TAG completos del inventario y rechaza asignaciones ambiguas."""
+    patrones = {normalizar(tag): re.compile(r"(?<![A-Z0-9])" + re.escape(normalizar(tag)) + r"(?![A-Z0-9])")
+                for tag in tags if informado(tag)}
+    candidatos, avisos = {}, []
+    for numero, fila in enumerate(filas, start=2):
+        texto = normalizar(fila.get(columna_denominacion, ""))
+        coincidencias = [tag for tag, patron in patrones.items() if patron.search(texto)]
+        if len(coincidencias) != 1:
+            if any(informado(v) for v in fila.values()):
+                motivo = "varios equipos: " + ", ".join(coincidencias) if coincidencias else "ningún equipo de Hoja 1"
+                avisos.append(f"Fila {numero}: {motivo} ({fila.get(columna_denominacion, '')}).")
+            continue
+        candidatos.setdefault(coincidencias[0], []).append(fila)
+    resultado = {}
+    for tag, registros in candidatos.items():
+        if len(registros) == 1:
+            resultado[tag] = registros[0]
+        else:
+            avisos.append(f"{tag}: aparece en {len(registros)} filas; no se asignaron valores.")
+    return resultado, avisos
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def cargar_operacionales():
+    data = leer_csv(HOJA_OPERACION)
+    data.columns = [" ".join(str(c).split()) for c in data.columns]
+    denominacion = buscar_columna(data.columns, ("DENOMINACION",))
+    if denominacion is None:
+        raise ValueError("La hoja Datos Operacionales necesita una columna Denominación (columna E).")
+    return data.to_dict("records"), denominacion
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -559,6 +613,7 @@ def main():
         st.session_state["principal_design_revision"] = revision
     if st.sidebar.button("Actualizar datos", use_container_width=True):
         cargar_datos.clear()
+        cargar_operacionales.clear()
         cargar_disenos.clear()
     try:
         df = cargar_datos()
@@ -595,6 +650,20 @@ def main():
     if not col_equipo:
         st.error("No se encontró una columna EQUIPO o TAG. Revisa los encabezados de Hoja 1.")
         st.stop()
+    operacionales, avisos_operacionales = {}, []
+    error_operacionales = None
+    try:
+        filas_operacionales, columna_denominacion = cargar_operacionales()
+        operacionales, avisos_operacionales = vincular_operacionales(
+            filas_operacionales, df[col_equipo], columna_denominacion)
+    except Exception as exc:
+        error_operacionales = str(exc)
+        st.warning(f"No se pudo leer {HOJA_OPERACION}: {exc}")
+    if avisos_operacionales:
+        with st.expander(f"Revisar {len(avisos_operacionales)} coincidencias de datos operacionales"):
+            for aviso in avisos_operacionales:
+                st.write(aviso)
+
     if col_status:
         df[col_status] = df[col_status].map(lambda v: "SIN INFORMACIÓN" if not informado(v) else v.upper())
 
@@ -702,6 +771,13 @@ def main():
             seccion("Información del equipo", "Datos registrados en la planilla de inspección.")
             resumen = {c: registro[c] for c in (col_equipo, col_unidad, col_status, col_comentario) if c}
             st.table(pd.DataFrame(resumen.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
+            seccion("Datos operacionales", "Temperatura, presión y producto registrados para este equipo.")
+            registro_operacional = operacionales.get(normalizar(tag))
+            if registro_operacional is None:
+                st.caption("Datos operacionales no disponibles." if error_operacionales else
+                           "Sin una coincidencia única en Datos Operacionales para este equipo.")
+            operacion = datos_operacionales(registro_operacional or {})
+            st.table(pd.DataFrame(operacion).set_index("Parámetro"))
             with st.expander("Todos los datos técnicos de la planilla"):
                 datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_auxiliar(k)]
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
