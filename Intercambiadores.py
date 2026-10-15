@@ -604,11 +604,11 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     if imagen_modelo:
         imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
-            Paragraph("VISTA DEL EQUIPO · LADO NAMEPLATE", section_style), imagen]))
+            Paragraph("VISTA DEL EQUIPO · NS (NEAR SIDE)", section_style), imagen]))
     if imagen_posterior:
         imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
-            Paragraph("VISTA DEL EQUIPO · LADO POSTERIOR", section_style), imagen]))
+            Paragraph("VISTA DEL EQUIPO · FS (FAR SIDE)", section_style), imagen]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
@@ -783,7 +783,7 @@ def main():
         tag = str(registro[col_equipo]).strip()
         config = db.get(normalizar(tag), {}).get("data")
         cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v3"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v4"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -880,7 +880,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v3"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v4"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"

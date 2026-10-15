@@ -765,11 +765,11 @@
           texture.needsUpdate = true;
           return;
         }
-        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.font = `bold ${reportLabel ? Math.round(fontSize * 1.25) : fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = reportLabel ? 'white' : 'black';
+        ctx.lineWidth = reportLabel ? 2 : 5;
+        ctx.strokeStyle = 'black';
         ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
         ctx.fillStyle = reportLabel ? 'black' : color;
         ctx.fillText(text, canvas.width / 2, canvas.height / 2);
