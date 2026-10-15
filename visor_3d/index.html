@@ -2274,6 +2274,29 @@
       reportCamera.lookAt(center);
       reportCamera.updateMatrixWorld(true);
       const reportRenderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+      const labels = [];
+      heatExchanger.traverse(obj => {
+        if (obj.setReportStyle && obj.userData.labelLeader) {
+          labels.push({sprite: obj, visible: obj.visible,
+            leaderVisible: obj.userData.labelLeader.visible});
+        }
+      });
+      function showLabelsForSide(viewSide) {
+        for (const saved of labels) {
+          const sprite = saved.sprite;
+          const parent = sprite.parent;
+          const origin = parent.localToWorld(new THREE.Vector3(0, 0, 0));
+          const tip = parent.localToWorld(new THREE.Vector3(0, 1, 0));
+          const directionZ = tip.z - origin.z;
+          // Radiales: dirección hacia la cámara. Superiores/inferiores y
+          // axiales: posición real respecto del plano central del equipo.
+          const depth = Math.abs(directionZ) > 0.01 ? directionZ : origin.z;
+          const visible = saved.visible && viewSide * depth >= -0.01;
+          sprite.visible = visible;
+          sprite.userData.labelLeader.visible = visible && saved.leaderVisible;
+        }
+      }
+
       try {
         heatExchanger.traverse(obj => obj.setReportStyle?.(true));
         reportRenderer.setSize(width, height);
@@ -2281,11 +2304,13 @@
         reportRenderer.outputColorSpace = renderer.outputColorSpace;
         reportRenderer.toneMapping = renderer.toneMapping;
         reportRenderer.toneMappingExposure = renderer.toneMappingExposure;
+        showLabelsForSide(side);
         reportRenderer.render(scene, reportCamera);
         const image = reportRenderer.domElement.toDataURL('image/png');
         reportCamera.position.set(center.x, center.y, center.z - side * (size.z + 20));
         reportCamera.lookAt(center);
         reportCamera.updateMatrixWorld(true);
+        showLabelsForSide(-side);
         reportRenderer.render(scene, reportCamera);
         const rearImage = reportRenderer.domElement.toDataURL('image/png');
         send('streamlit:setComponentValue', {dataType: 'json', value: {
@@ -2293,6 +2318,10 @@
         }});
       } finally {
         heatExchanger.traverse(obj => obj.setReportStyle?.(false));
+        for (const saved of labels) {
+          saved.sprite.visible = saved.visible;
+          saved.sprite.userData.labelLeader.visible = saved.leaderVisible;
+        }
         reportRenderer.dispose();
         reportRenderer.forceContextLoss();
       }
