@@ -140,6 +140,22 @@ def buscar_columna(columnas, exactas, fragmentos=()):
     return next((c for c in columnas if any(x in normalizar(c) for x in fragmentos)), None)
 
 
+def datos_operacionales(registro):
+    """Lee los datos de operación sin imponer unidades ni convertir los valores."""
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    datos = {}
+    for etiqueta, nombre in (("Temperatura", "TEMPERATURA"), ("Presión", "PRESION"), ("Producto", "PRODUCTO")):
+        columna = buscar_columna(columnas, (nombre, nombre + " DE OPERACION", nombre + " OPERACION"))
+        if columna is None:
+            columna = next((c for c in columnas if normalizar(c).startswith(nombre + " (")
+                            or normalizar(c).startswith(nombre + " [")), None)
+        valor = registro[columna] if columna is not None else None
+        # Conserva las unidades indicadas en el encabezado de la planilla.
+        campo = str(columna) if columna is not None else etiqueta
+        datos[campo] = valor if informado(valor) else "Sin información"
+    return datos
+
+
 def leer_csv(hoja):
     response = requests.get(
         f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq",
@@ -702,6 +718,9 @@ def main():
             seccion("Información del equipo", "Datos registrados en la planilla de inspección.")
             resumen = {c: registro[c] for c in (col_equipo, col_unidad, col_status, col_comentario) if c}
             st.table(pd.DataFrame(resumen.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
+            seccion("Datos operacionales", "Temperatura, presión y producto registrados para este equipo.")
+            operacion = datos_operacionales(registro)
+            st.table(pd.DataFrame(operacion.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             with st.expander("Todos los datos técnicos de la planilla"):
                 datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_auxiliar(k)]
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
