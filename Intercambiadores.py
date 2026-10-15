@@ -492,7 +492,7 @@ def filas_roscas(config):
     return filas
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -567,6 +567,21 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen):
         ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
     elementos += [recuadro_total, Spacer(1, 6 * mm),
+                  Paragraph("DATOS OPERACIONALES", section_style)]
+    encabezado_operacion = ["PARÁMETRO", "TUBOS", "CARCAZA"]
+    datos_operacion = [[p(k, cell_header) for k in encabezado_operacion]] + [
+        [p(fila[k]) for k in ("Parámetro", "Tubos", "Carcaza")]
+        for fila in datos_operacionales(registro_operacional or {})
+    ]
+    tabla_operacion = Table(datos_operacion, colWidths=[60 * mm] * 3, repeatRows=1)
+    tabla_operacion.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), teal), ("GRID", (0, 0), (-1, -1), .4, line),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elementos += [tabla_operacion, Spacer(1, 6 * mm),
                   Paragraph("REGISTRO DE ROSCAS", section_style)]
     if conexiones:
         encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
@@ -811,11 +826,12 @@ def main():
                 st.link_button(f"Buscar {termino} en Drive", url, use_container_width=True)
                 st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
             try:
-                pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen)
+                pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen,
+                                  registro_operacional=operacionales.get(normalizar(tag)))
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
-                st.caption("Incluye el registro de roscas y el total de conexiones roscadas.")
+                st.caption("Incluye los datos operacionales, el registro de roscas y el total de conexiones roscadas.")
             except Exception as exc:
                 st.error(f"No se pudo generar el PDF: {exc}")
             st.divider()
