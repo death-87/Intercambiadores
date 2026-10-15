@@ -2275,8 +2275,13 @@
         reportRenderer.toneMappingExposure = renderer.toneMappingExposure;
         reportRenderer.render(scene, reportCamera);
         const image = reportRenderer.domElement.toDataURL('image/png');
+        reportCamera.position.set(center.x, center.y, center.z - side * (size.z + 20));
+        reportCamera.lookAt(center);
+        reportCamera.updateMatrixWorld(true);
+        reportRenderer.render(scene, reportCamera);
+        const rearImage = reportRenderer.domElement.toDataURL('image/png');
         send('streamlit:setComponentValue', {dataType: 'json', value: {
-          action: 'report_capture', capture_key: captureKey, image
+          action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage
         }});
       } finally {
         reportRenderer.dispose();
