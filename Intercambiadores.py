@@ -2,6 +2,7 @@
 from pathlib import Path
 from io import BytesIO, StringIO
 from datetime import datetime
+import base64
 import hashlib
 import json
 import math
@@ -20,7 +21,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, KeepTogether
 from visor_3d import declarar_visor
 
 st.set_page_config(page_title="Control de Intercambiadores de Calor", layout="wide")
@@ -492,7 +493,7 @@ def filas_roscas(config):
     return filas
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -600,6 +601,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         elementos.append(tabla_roscas)
     else:
         elementos.append(p("No hay conexiones roscadas registradas.", body))
+    if imagen_modelo:
+        imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
+        elementos.append(KeepTogether([Spacer(1, 6 * mm),
+            Paragraph("VISTA DEL EQUIPO · LADO NAMEPLATE", section_style), imagen]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
@@ -774,6 +779,9 @@ def main():
         tag = str(registro[col_equipo]).strip()
         config = db.get(normalizar(tag), {}).get("data")
         cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config], sort_keys=True).encode()).hexdigest()[:20]
+        imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
+
         st.divider()
         unidad = str(registro[col_unidad]) if col_unidad else "Unidad no registrada"
         estatus = str(registro[col_status]) if col_status else "Estado no registrado"
@@ -827,13 +835,16 @@ def main():
                 st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
             try:
                 pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen,
-                                  registro_operacional=operacionales.get(normalizar(tag)))
+                                  registro_operacional=operacionales.get(normalizar(tag)),
+                                  imagen_modelo=imagen_modelo)
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
                 st.caption("Incluye los datos operacionales, el registro de roscas y el total de conexiones roscadas.")
             except Exception as exc:
                 st.error(f"No se pudo generar el PDF: {exc}")
+            if config and imagen_modelo is None:
+                st.caption("La vista para el PDF se prepara al cargar el modelo 3D de abajo. Si no aparece, recarga la página.")
             st.divider()
             foto = st.file_uploader("Evidencia fotográfica", type=["png", "jpg", "jpeg"],
                                     key="foto_" + hashlib.sha256(normalizar(tag).encode()).hexdigest()[:16])
@@ -865,8 +876,20 @@ def main():
         else:
             cfg = db[clave]["data"]
             digest = hashlib.sha256(json.dumps([clave, cfg], sort_keys=True).encode()).hexdigest()[:20]
-            declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
-                             key="preview_" + digest, default=None)
+            captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
+                                      capture_key=digest, key="preview_" + digest, default=None)
+            if (isinstance(captura, dict) and captura.get("action") == "report_capture"
+                    and captura.get("capture_key") == digest
+                    and "captura_pdf_" + digest not in st.session_state):
+                imagen = captura.get("image", "")
+                if isinstance(imagen, str) and imagen.startswith("data:image/png;base64,") and len(imagen) < 8_000_000:
+                    try:
+                        contenido = base64.b64decode(imagen.split(",", 1)[1], validate=True)
+                        if contenido.startswith(b"\x89PNG\r\n\x1a\n"):
+                            st.session_state["captura_pdf_" + digest] = contenido
+                            st.rerun()
+                    except ValueError:
+                        st.warning("No se pudo preparar la imagen del modelo para el PDF.")
 
 
 if __name__ == "__main__":
