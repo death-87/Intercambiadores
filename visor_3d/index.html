@@ -757,6 +757,7 @@
       };
       sprite.updateText = function(text) {
         currentText = text;
+        sprite.userData.labelText = text;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const hasText = Boolean(text && text.trim());
         sprite.visible = hasText;
@@ -765,12 +766,12 @@
           texture.needsUpdate = true;
           return;
         }
-        ctx.font = `bold ${reportLabel ? Math.round(fontSize * 1.25) : fontSize}px sans-serif`;
+        ctx.font = `${reportLabel ? "normal" : "bold"} ${reportLabel ? Math.round(fontSize * 1.25) : fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.lineWidth = reportLabel ? 2 : 5;
         ctx.strokeStyle = 'black';
-        ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+        if (!reportLabel) ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
         ctx.fillStyle = reportLabel ? 'black' : color;
         ctx.fillText(text, canvas.width / 2, canvas.height / 2);
         texture.needsUpdate = true;
@@ -2277,8 +2278,17 @@
       const labels = [];
       heatExchanger.traverse(obj => {
         if (obj.setReportStyle && obj.userData.labelLeader) {
-          labels.push({sprite: obj, visible: obj.visible,
-            leaderVisible: obj.userData.labelLeader.visible});
+          const leader = obj.userData.labelLeader;
+          const ancestors = [];
+          for (let parent = obj.parent; parent; parent = parent.parent) ancestors.push(parent);
+          const owner = ancestors.find(parent => parent.userData.isNozzle);
+          const suffix = owner && ancestors.includes(owner.userData.plugNS) ? ' (NS)'
+            : owner && ancestors.includes(owner.userData.plugFS) ? ' (FS)' : '';
+          labels.push({sprite: obj, visible: obj.visible, text: obj.userData.labelText,
+            ancestorsVisible: ancestors.every(parent => parent.visible), suffix,
+            position: obj.position.clone(), scale: obj.scale.clone(),
+            line: leader.geometry.attributes.position.array.slice(),
+            leaderVisible: leader.visible});
         }
       });
       function showLabelsForSide(viewSide) {
@@ -2291,12 +2301,49 @@
           // Radiales: dirección hacia la cámara. Superiores/inferiores y
           // axiales: posición real respecto del plano central del equipo.
           const depth = Math.abs(directionZ) > 0.01 ? directionZ : origin.z;
-          const visible = saved.visible && viewSide * depth >= -0.01;
+          const visible = saved.visible && saved.ancestorsVisible && viewSide * depth >= -0.01;
+          sprite.position.copy(saved.position);
+          sprite.scale.copy(saved.scale);
+          sprite.updateText((saved.text || '') + saved.suffix);
           sprite.visible = visible;
           sprite.userData.labelLeader.visible = visible && saved.leaderVisible;
         }
       }
 
+      function layoutReportLabels() {
+        heatExchanger.updateMatrixWorld(true);
+        const placed = [];
+        const active = labels.filter(saved => saved.sprite.visible).map(saved => {
+          const point = saved.sprite.getWorldPosition(new THREE.Vector3()).project(reportCamera);
+          return {saved, point, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2};
+        }).sort((a,b) => a.y - b.y || a.x - b.x);
+        for (const item of active) {
+          const {saved, point} = item;
+          const labelWidth = Math.max(50, ((saved.text || '').length + saved.suffix.length) * 9);
+          const labelHeight = 24;
+          let x = Math.max(labelWidth / 2 + 8, Math.min(width - labelWidth / 2 - 8, item.x));
+          let y = Math.max(20, Math.min(height - 20, item.y));
+          // Busca una posición libre en pantalla conservando el anclaje real.
+          const candidates = [];
+          for (let ring=0; ring<30; ring++) {
+            for (const sign of ring ? [-1,1] : [1]) candidates.push({x, y: y + sign*ring*28});
+          }
+          const free = candidates.find(candidate => candidate.y >= 20 && candidate.y <= height-20 &&
+            placed.every(rect => Math.abs(candidate.x-rect.x) >= (labelWidth+rect.w)/2+8 ||
+              Math.abs(candidate.y-rect.y) >= (labelHeight+rect.h)/2+5));
+          if (free) { x=free.x; y=free.y; }
+          placed.push({x,y,w:labelWidth,h:labelHeight});
+          const world = new THREE.Vector3(x/width*2-1, 1-y/height*2, point.z).unproject(reportCamera);
+          saved.sprite.position.copy(saved.sprite.parent.worldToLocal(world.clone()));
+          const leader = saved.sprite.userData.labelLeader;
+          const endpoint = leader.parent.worldToLocal(world);
+          const positions = leader.geometry.attributes.position;
+          positions.setXYZ(1, endpoint.x, endpoint.y, endpoint.z);
+          positions.needsUpdate = true;
+          leader.geometry.computeBoundingSphere();
+        }
+        heatExchanger.updateMatrixWorld(true);
+      }
       try {
         heatExchanger.traverse(obj => obj.setReportStyle?.(true));
         reportRenderer.setSize(width, height);
@@ -2305,12 +2352,14 @@
         reportRenderer.toneMapping = renderer.toneMapping;
         reportRenderer.toneMappingExposure = renderer.toneMappingExposure;
         showLabelsForSide(side);
+        layoutReportLabels();
         reportRenderer.render(scene, reportCamera);
         const image = reportRenderer.domElement.toDataURL('image/png');
         reportCamera.position.set(center.x, center.y, center.z - side * (size.z + 20));
         reportCamera.lookAt(center);
         reportCamera.updateMatrixWorld(true);
         showLabelsForSide(-side);
+        layoutReportLabels();
         reportRenderer.render(scene, reportCamera);
         const rearImage = reportRenderer.domElement.toDataURL('image/png');
         send('streamlit:setComponentValue', {dataType: 'json', value: {
@@ -2319,8 +2368,15 @@
       } finally {
         heatExchanger.traverse(obj => obj.setReportStyle?.(false));
         for (const saved of labels) {
+          saved.sprite.updateText(saved.text);
+          saved.sprite.position.copy(saved.position);
+          saved.sprite.scale.copy(saved.scale);
           saved.sprite.visible = saved.visible;
-          saved.sprite.userData.labelLeader.visible = saved.leaderVisible;
+          const leader = saved.sprite.userData.labelLeader;
+          leader.visible = saved.leaderVisible;
+          leader.geometry.attributes.position.array.set(saved.line);
+          leader.geometry.attributes.position.needsUpdate = true;
+          leader.geometry.computeBoundingSphere();
         }
         reportRenderer.dispose();
         reportRenderer.forceContextLoss();
