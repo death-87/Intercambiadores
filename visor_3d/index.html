@@ -749,7 +749,14 @@
       sprite.userData.baseScaleY = 0.4;
       sprite.scale.set(sprite.userData.baseScaleX, sprite.userData.baseScaleY, 1);
 
+      let reportLabel = false;
+      let currentText = initialText;
+      sprite.setReportStyle = function(enabled) {
+        reportLabel = enabled;
+        sprite.updateText(currentText);
+      };
       sprite.updateText = function(text) {
+        currentText = text;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const hasText = Boolean(text && text.trim());
         sprite.visible = hasText;
@@ -762,9 +769,9 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.lineWidth = 5;
-        ctx.strokeStyle = 'black'; 
+        ctx.strokeStyle = reportLabel ? 'white' : 'black';
         ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
-        ctx.fillStyle = color;
+        ctx.fillStyle = reportLabel ? 'black' : color;
         ctx.fillText(text, canvas.width / 2, canvas.height / 2);
         texture.needsUpdate = true;
       };
@@ -2268,6 +2275,7 @@
       reportCamera.updateMatrixWorld(true);
       const reportRenderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
       try {
+        heatExchanger.traverse(obj => obj.setReportStyle?.(true));
         reportRenderer.setSize(width, height);
         reportRenderer.setClearColor(0xffffff, 1);
         reportRenderer.outputColorSpace = renderer.outputColorSpace;
@@ -2275,10 +2283,16 @@
         reportRenderer.toneMappingExposure = renderer.toneMappingExposure;
         reportRenderer.render(scene, reportCamera);
         const image = reportRenderer.domElement.toDataURL('image/png');
+        reportCamera.position.set(center.x, center.y, center.z - side * (size.z + 20));
+        reportCamera.lookAt(center);
+        reportCamera.updateMatrixWorld(true);
+        reportRenderer.render(scene, reportCamera);
+        const rearImage = reportRenderer.domElement.toDataURL('image/png');
         send('streamlit:setComponentValue', {dataType: 'json', value: {
-          action: 'report_capture', capture_key: captureKey, image
+          action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage
         }});
       } finally {
+        heatExchanger.traverse(obj => obj.setReportStyle?.(false));
         reportRenderer.dispose();
         reportRenderer.forceContextLoss();
       }
