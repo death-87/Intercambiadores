@@ -162,6 +162,30 @@ def datos_operacionales(registro):
     return filas
 
 
+def datos_tecnicos(registro, registro_operacional=None):
+    """Combina la ficha base con los datos operacionales vinculados al equipo."""
+    def es_operacional(nombre):
+        texto = normalizar(nombre)
+        return any(texto.startswith(campo + " " + lado) for campo in ("TEMPERATURA", "PRESION", "PRODUCTO")
+                   for lado in ("TUBOS", "CARCAZA", "CARCASA"))
+    datos = [(k, v) for k, v in registro.items()
+             if not es_columna_auxiliar(k)
+             and normalizar(k) not in {"DETALLE", "FOTO DE REFERENCIA", "DENOMINACION"}
+             and not es_operacional(k)]
+    fuente = registro_operacional or {}
+    denominacion = buscar_columna(list(fuente), ("DENOMINACION",))
+    if denominacion is not None and informado(fuente[denominacion]):
+        datos.append(("Denominación", fuente[denominacion]))
+    for fila in datos_operacionales(fuente):
+        for lado in ("Tubos", "Carcaza"):
+            etiqueta = fila["Parámetro"].split(" (", 1)
+            nombre = etiqueta[0] + " " + lado.lower()
+            if len(etiqueta) == 2:
+                nombre += " (" + etiqueta[1]
+            datos.append((nombre, fila[lado]))
+    return datos
+
+
 def leer_csv(hoja):
     response = requests.get(
         f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq",
@@ -807,7 +831,7 @@ def main():
             operacion = datos_operacionales(registro_operacional or {})
             st.table(pd.DataFrame(operacion).set_index("Parámetro"))
             with st.expander("Todos los datos técnicos de la planilla"):
-                datos_visibles = [(k, v) for k, v in registro.items() if not es_columna_auxiliar(k)]
+                datos_visibles = datos_tecnicos(registro, registro_operacional)
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             seccion("Registro de roscas", "Conexiones roscadas y su boquilla de origen.")
             if config is None:
