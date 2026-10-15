@@ -2252,6 +2252,37 @@
       document.getElementById('save-status').textContent = 'Guardando y verificando en Sheets...';
       syncStateToParent('save');
     });
+    let reportCaptureSent = false;
+    function captureReportView(captureKey) {
+      const width = 1600, height = 700, aspect = width / height;
+      heatExchanger.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(heatExchanger);
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const halfHeight = Math.max(size.y / 2, size.x / (2 * aspect), 0.5) * 1.20;
+      const reportCamera = new THREE.OrthographicCamera(-halfHeight * aspect,
+        halfHeight * aspect, halfHeight, -halfHeight, 0.01, 1000);
+      const side = currentNameplateSide === 'rear' ? -1 : 1;
+      reportCamera.position.set(center.x, center.y, center.z + side * (size.z + 20));
+      reportCamera.lookAt(center);
+      reportCamera.updateMatrixWorld(true);
+      const reportRenderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+      try {
+        reportRenderer.setSize(width, height);
+        reportRenderer.setClearColor(0xffffff, 1);
+        reportRenderer.outputColorSpace = renderer.outputColorSpace;
+        reportRenderer.toneMapping = renderer.toneMapping;
+        reportRenderer.toneMappingExposure = renderer.toneMappingExposure;
+        reportRenderer.render(scene, reportCamera);
+        const image = reportRenderer.domElement.toDataURL('image/png');
+        send('streamlit:setComponentValue', {dataType: 'json', value: {
+          action: 'report_capture', capture_key: captureKey, image
+        }});
+      } finally {
+        reportRenderer.dispose();
+        reportRenderer.forceContextLoss();
+      }
+    }
     window.exchangerBridge.attach(args => {
       readOnly = Boolean(args.readonly);
       window.exchangerBridge.setReadOnly(readOnly);
@@ -2276,6 +2307,13 @@
         editFsSize.disabled = !editFsCheck.checked;
         editFsTag.disabled = !editFsCheck.checked;
         document.getElementById('save-status').textContent = args.ack.message;
+      }
+      if (readOnly && args.capture_key && !reportCaptureSent) {
+        reportCaptureSent = true;
+        requestAnimationFrame(() => {
+          try { captureReportView(args.capture_key); }
+          catch (error) { console.warn('No se pudo capturar la vista para el PDF', error); }
+        });
       }
       send('streamlit:setFrameHeight', {height: args.height || 720});
     });
