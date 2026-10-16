@@ -166,6 +166,12 @@
         <label>Ángulo perimetral: <output id="edit-nz-angle-value">0° · Arriba</output></label>
         <input type="range" id="edit-nz-angle" min="0" max="359" step="1" value="0">
       </div>
+    <div class="input-group"><label>Dirección de la boquilla (independiente del ángulo):</label>
+      <select id="edit-nz-direction"><option value="radial">Radial · perpendicular al equipo</option>
+      <option value="+X">+X · longitudinal</option><option value="-X">−X · longitudinal</option>
+      <option value="+Y">+Y · vertical arriba</option><option value="-Y">−Y · vertical abajo</option>
+      <option value="+Z">+Z · horizontal lateral</option><option value="-Z">−Z · horizontal lateral</option></select>
+    </div>
       
       <div class="input-group">
         <label>Posición X:</label>
@@ -282,6 +288,12 @@
     <div class="input-group">
       <label>Ángulo perimetral: <output id="new-nz-angle-value">0° · Arriba</output></label>
       <input type="range" id="new-nz-angle" min="0" max="359" step="1" value="0">
+    </div>
+    <div class="input-group"><label>Dirección de la boquilla (independiente del ángulo):</label>
+      <select id="new-nz-direction"><option value="radial">Radial · perpendicular al equipo</option>
+      <option value="+X">+X · longitudinal</option><option value="-X">−X · longitudinal</option>
+      <option value="+Y">+Y · vertical arriba</option><option value="-Y">−Y · vertical abajo</option>
+      <option value="+Z">+Z · horizontal lateral</option><option value="-Z">−Z · horizontal lateral</option></select>
     </div>
 
     <div class="input-group"><label>Seleccionar boquilla por TAG:</label><select id="nozzle-picker"><option value="">Seleccionar…</option></select></div>
@@ -520,6 +532,7 @@
         nozzles: nozzlesList.map(nz => ({
           tagName: nz.userData.tagName || "",
           service: nz.userData.service || "process",
+          direction: nz.userData.direction || 'radial',
           connectionType: nz.userData.connectionType || "flanged",
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
           baseDiaIndex: nz.userData.baseDiaIndex,
@@ -1192,6 +1205,17 @@
       if (bodyPart === 'shell') return (positive ? 1 : -1) * currentDimensions.shellLength / 2;
       return positive ? bounds.max + 0.05 : bounds.min - 0.05;
     }
+    const NOZZLE_DIRECTIONS = ['radial', '+X', '-X', '+Y', '-Y', '+Z', '-Z'];
+    function applyNozzleDirection(nozzle, radialAngle = 0) {
+      const rotations = {
+        '+X': [0, 0, -Math.PI / 2], '-X': [0, 0, Math.PI / 2],
+        '+Y': [0, 0, 0], '-Y': [Math.PI, 0, 0],
+        '+Z': [Math.PI / 2, 0, 0], '-Z': [-Math.PI / 2, 0, 0]
+      };
+      const rotation = rotations[nozzle.userData.direction];
+      if (rotation) nozzle.rotation.set(...rotation);
+      orientSubNozzlesGlobally(nozzle, rotation ? THREE.MathUtils.radToDeg(rotation[0]) : radialAngle);
+    }
     function placeNozzle(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
       const offsetY = nozzle.userData.offsetY || 0;
       const offsetZ = nozzle.userData.offsetZ || 0;
@@ -1200,7 +1224,7 @@
         const section = sectionAt(faceX, bodyPart);
         nozzle.position.set(faceX + x, section.centerY + offsetY, offsetZ);
         nozzle.rotation.set(0, 0, pos === 'axialPlus' ? -Math.PI / 2 : Math.PI / 2);
-        orientSubNozzlesGlobally(nozzle, 0);
+        applyNozzleDirection(nozzle, 0);
         return;
       }
       const section = sectionAt(x, bodyPart);
@@ -1211,7 +1235,7 @@
       nozzle.position.set(x, section.centerY + Math.cos(radians) * radius + offsetY,
         Math.sin(radians) * radius + offsetZ);
       nozzle.rotation.set(radians, 0, 0);
-      orientSubNozzlesGlobally(nozzle, angle);
+      applyNozzleDirection(nozzle, angle);
     }
     function applyModel(model, reposition = false) {
       currentModel = ['A', 'B', 'C', 'D', 'E'].includes(model) ? model : 'A';
@@ -1398,7 +1422,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#') {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial') {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1415,6 +1439,7 @@
       const visualNeckLength = type !== 'threaded'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
+        direction: NOZZLE_DIRECTIONS.includes(direction) ? direction : 'radial',
         swEnd: ['none', 'valve', 'flange'].includes(swEnd) ? swEnd : 'none',
         swFlangeRating: ['150#', '300#', '600#'].includes(swFlangeRating) ? swFlangeRating : '150#',
         isNozzle: true, idName: internalName, tagName: tagText,
@@ -1676,7 +1701,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction
           );
           nozzlesList.push(newNz);
         });
@@ -1745,6 +1770,7 @@
       const data = selectedNozzle.userData;
       document.getElementById('editor-panel').style.display = 'block';
       document.getElementById('edit-nz-name').value = data.tagName;
+      document.getElementById('edit-nz-direction').value = data.direction || 'radial';
       document.getElementById('edit-nz-service').value = data.service || 'process';
       document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
       document.getElementById('edit-sw-end').value = data.swEnd || 'none';
@@ -1909,7 +1935,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -1929,6 +1955,9 @@
       });
     });
 
+    document.getElementById('edit-nz-direction').addEventListener('change', event => {
+      rebuildSelectedNozzle({direction: event.target.value});
+    });
     editDia.addEventListener('change', (e) => {
       if(!selectedNozzle) return;
       rebuildSelectedNozzle({diaIndex: Number(e.target.value)});
@@ -2170,7 +2199,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value);
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value);
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
