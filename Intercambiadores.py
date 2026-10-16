@@ -313,6 +313,8 @@ def validar_diseno(data):
             value = n.get(field, 0)
             if type(value) not in (int, float) or not math.isfinite(value):
                 raise ValueError(f"{field} debe ser numérico y finito")
+        if n.get("direction", "radial") not in {"radial", "+X", "-X", "+Y", "-Y", "+Z", "-Z"}:
+            raise ValueError("dirección de boquilla inválida")
         angle = n.get("angleDeg")
         if angle is not None and (
             type(angle) not in (int, float) or not math.isfinite(angle)
@@ -832,7 +834,7 @@ def main():
         tag = str(registro[col_equipo]).strip()
         config = db.get(normalizar(tag), {}).get("data")
         cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v7"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v8"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -929,7 +931,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v7"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v8"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
