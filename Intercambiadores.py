@@ -452,7 +452,9 @@ def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
     if n is not None:
         return n, "Total declarado en planilla"
     if config is None:
-        return None, "Sin cantidad válida ni diseño disponible"
+        conexiones = filas_roscas_planilla(registro)
+        return (len(conexiones), "Contado desde las columnas H–AC de Hoja 1") if conexiones else (
+            None, "Sin cantidad válida ni conexiones disponibles")
     n = sum(
         1 if noz.get("connectionType", "flanged") == "threaded"
         else int(noz.get("hasNS", False)) + int(noz.get("hasFS", False))
@@ -491,6 +493,50 @@ def ir_editor(tag, como_plantilla=False):
             st.switch_page(str(destino))
             return
     st.error("No se encontró la página del editor dentro de pages/.")
+
+
+def celdas_roscas_planilla(registro):
+    """H–AC de Hoja 1: una conexión por celda, conservando el orden original."""
+    return [(columna, str(valor).strip()) for columna, valor in list(registro.items())[7:29]
+            if informado(valor) and normalizar(valor) not in {"-", "—", "0", "NO", "NO APLICA"}]
+
+
+def filas_roscas_planilla(registro):
+    filas = []
+    for columna, texto in celdas_roscas_planilla(registro):
+        texto = texto.replace("″", '"').replace("“", '"').replace("”", '"')
+        limpio = normalizar(texto)
+        # Fracciones antes de enteros para no convertir 3/4 en 4.
+        medida = re.search(r'(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)\s*"', limpio)
+        rating = re.search(r'\b(150|300|600|900|1500|2500|3000|6000|9000)\s*(?:#|LB\b|"|$)', limpio)
+        lado = re.search(r'(?<![A-Z0-9])(NS|FS)(?![A-Z0-9])', limpio)
+        origen_boq = re.search(r'\bBOQ(?:UILLA)?\.?\s*([^),]+)', limpio)
+        if origen_boq:
+            origen = re.split(r'\b(?:NS|FS)\b', origen_boq[1])[0].strip(' ,.;')
+        else:
+            inicial = re.match(r'^[\s(]*([A-Z]+\d+[A-Z]?|V|D|VC|DC)(?![A-Z0-9])', limpio)
+            origen = inicial[1] if inicial else "—"
+        tag = re.search(r'(?<![A-Z0-9])((?:PI|TI|PT|TT|PG|TG|PC|TC|LC|LG)\d+[A-Z]?)(?![A-Z0-9])', limpio)
+        if not tag:
+            tag = re.search(r'\bTAG(?:\s+PLUG)?\s*[:=]\s*([A-Z0-9_-]+)', limpio)
+        cuerpo = "—"
+        if re.search(r'\b(?:BONETE|BONNET)\b', limpio):
+            cuerpo = "BONETE"
+        elif re.search(r'\b(?:CHANNEL|CHANN)\b', limpio):
+            cuerpo = "CHANNEL"
+        elif re.search(r'\b(?:SHELL|CARCAZA|CARCASA)\b', limpio):
+            cuerpo = "SHELL"
+        filas.append({"BOQUILLA / ORIGEN": origen or "—", "LADO": lado[1] if lado else "—",
+                      "MEDIDA": re.sub(r'\s+', ' ', medida[1]) + '\"' if medida else "—",
+                      "TIPO": "NPT" if re.search(r'\bNPT\b', limpio) else "ROSCADA",
+                      "RATING": rating[1] + "#" if rating else "—",
+                      "TAG PLUG": tag[1] if tag else "—", "CUERPO": cuerpo})
+    return filas
+
+
+def registro_roscas(config, registro):
+    # Un diseño existente conserva prioridad, incluso si no contiene roscas.
+    return filas_roscas(config) if config is not None else filas_roscas_planilla(registro)
 
 
 def filas_roscas(config):
@@ -596,7 +642,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     ]))
     elementos += [cabecera, Spacer(1, 7 * mm)]
 
-    conexiones = filas_roscas(config) if config else []
+    conexiones = registro_roscas(config, registro)
     total = cantidad if cantidad is not None else "No disponible"
     total_label_style = ParagraphStyle("hx_total_label", parent=body,
                                       fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=navy)
@@ -635,6 +681,9 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     elementos += [tabla_operacion, Spacer(1, 6 * mm), recuadro_total, Spacer(1, 2 * mm)]
+    if config is None and conexiones:
+        elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
+                      Spacer(1, 2 * mm)]
     if conexiones:
         encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
@@ -861,14 +910,16 @@ def main():
                 datos_visibles = datos_tecnicos(registro, registro_operacional)
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             seccion("Registro de roscas", "Conexiones roscadas y su boquilla de origen.")
-            if config is None:
-                st.info(estado(tag) + ": no hay una configuración válida disponible para mostrar boquillas.")
+            boquillas = registro_roscas(config, registro)
+            st.caption("Origen: modelo 3D guardado." if config is not None else
+                       "Origen: Hoja 1, columnas H–AC. Los campos no identificados se muestran con —.")
+            if boquillas:
+                st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
             else:
-                boquillas = filas_roscas(config)
-                if boquillas:
-                    st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
-                else:
-                    st.info("Sin conexiones roscadas registradas.")
+                st.info("Sin conexiones roscadas registradas.")
+            if config is None and celdas_roscas_planilla(registro):
+                with st.expander("Ver descripciones originales de las conexiones"):
+                    st.table(pd.DataFrame(celdas_roscas_planilla(registro), columns=["Columna", "Descripción"]))
             abrir, copiar = st.columns(2)
             with abrir:
                 if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag),
