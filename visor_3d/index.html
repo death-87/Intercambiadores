@@ -1287,7 +1287,7 @@
       }
     }
 
-    function createNozzlePlug(colorMat, tagText = '', rating = '3000#') {
+    function createNozzlePlug(colorMat, tagText = '', rating = '3000#', withLabel = true) {
       const plugGroup = new THREE.Group();
       const classFactor = rating === '6000#' ? 1.16 : 1.0;
       const couplingH = 0.06 * classFactor;
@@ -1305,10 +1305,14 @@
         0.025 * classFactor, 0.025 * classFactor, headH, 24), plugMat);
       elongatedHead.position.y = couplingH + threadH + headH / 2;
       plugGroup.add(elongatedHead);
-      const tagSprite = createTextSprite(tagText, 'white', 34);
-      attachNozzleLabel(plugGroup, tagSprite, couplingH + threadH + headH,
-        0.08 * classFactor);
-      plugGroup.userData.tagSprite = tagSprite;
+      plugGroup.userData.totalHeight = couplingH + threadH + headH;
+      plugGroup.userData.couplingRadius = 0.04 * classFactor;
+      if (withLabel) {
+        const tagSprite = createTextSprite(tagText, 'white', 34);
+        attachNozzleLabel(plugGroup, tagSprite, plugGroup.userData.totalHeight,
+          0.08 * classFactor);
+        plugGroup.userData.tagSprite = tagSprite;
+      }
       return plugGroup;
     }
     function scaleNozzlePlug(plugGroup, size) {
@@ -1434,7 +1438,23 @@
       rfMat.roughness = 0.22;
       group.userData.materials = [nzMat, flMat, rfMat]; 
       let totalH, plugNS, plugFS;
-      if (type === 'threaded') {
+      if (type === 'threaded' && ['vent', 'drain'].includes(service)) {
+        const elongatedPlug = createNozzlePlug(flMat, '', normalizedRating, false);
+        scaleNozzlePlug(elongatedPlug, DIAMETERS[dIndex]);
+        elongatedPlug.name = service === 'vent' ? 'Venteo con plug alargado' : 'Drenaje con plug alargado';
+        group.add(elongatedPlug);
+        const scale = elongatedPlug.scale.y;
+        totalH = elongatedPlug.userData.totalHeight * scale;
+        const baseR = elongatedPlug.userData.couplingRadius * scale;
+        const baseWeld = new THREE.Mesh(new THREE.TorusGeometry(baseR,
+          Math.max(0.0012, baseR * 0.05), 8, 48), weldMat);
+        baseWeld.rotation.x = Math.PI / 2;
+        baseWeld.position.y = 0.002;
+        group.add(baseWeld);
+        plugNS = new THREE.Group();
+        plugFS = new THREE.Group();
+        group.add(plugNS, plugFS);
+      } else if (type === 'threaded') {
         const pipeOD = flangeDimensions(dIndex, '150#').OD;
         const classFactor = normalizedRating === '6000#' ? 1.16 : 1.0;
         const couplingR = pipeOD * 0.72 * classFactor;
