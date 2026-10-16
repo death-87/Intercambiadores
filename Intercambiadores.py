@@ -525,14 +525,14 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         title=f"Ficha técnica de boquillas - {tag}", author="Control de Intercambiadores",
     )
     navy, teal, pale, line, ink, muted = (
-        colors.HexColor("#173247"), colors.HexColor("#0F9385"), colors.HexColor("#E8F4F2"),
-        colors.HexColor("#C9D5DE"), colors.HexColor("#1F2D38"), colors.HexColor("#647585"),
+        colors.HexColor("#24451E"), colors.HexColor("#4D9824"), colors.HexColor("#F0F6E9"),
+        colors.HexColor("#CAD8BF"), colors.HexColor("#253021"), colors.HexColor("#626E5A"),
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("hx_title", parent=styles["Title"], fontName="Helvetica-Bold",
                                  fontSize=17, leading=20, textColor=colors.white, alignment=TA_LEFT)
     eyebrow = ParagraphStyle("hx_eye", parent=styles["Normal"], fontName="Helvetica-Bold",
-                              fontSize=7, leading=9, textColor=colors.HexColor("#7FE0D1"), spaceAfter=3)
+                              fontSize=7, leading=9, textColor=colors.HexColor("#FFC321"), spaceAfter=3)
     section_style = ParagraphStyle("hx_section", parent=styles["Heading2"], fontName="Helvetica-Bold",
                                    fontSize=10, leading=13, textColor=navy, spaceBefore=4, spaceAfter=6)
     body = ParagraphStyle("hx_body", parent=styles["BodyText"], fontName="Helvetica",
@@ -552,7 +552,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         canvas.line(15 * mm, 12 * mm, 195 * mm, 12 * mm)
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(muted)
-        canvas.drawString(15 * mm, 7.5 * mm, "CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
+        canvas.drawString(15 * mm, 7.5 * mm, "INGEMARS · CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
         canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {documento.page}")
         canvas.restoreState()
 
@@ -561,6 +561,25 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     unidad = registro[col_unidad] if col_unidad and informado(registro[col_unidad]) else "Sin información"
     unidad_style = ParagraphStyle("hx_unidad", parent=body, textColor=colors.white)
     elementos = []
+    def logo_pdf(nombre, ancho, alto):
+        ruta = ROOT / nombre
+        if not ruta.is_file():
+            return p("INGEMARS" if "ingemar" in nombre else "ENAP", section_style)
+        logo = Image(str(ruta))
+        logo._restrictSize(ancho, alto)
+        logo.hAlign = "LEFT" if "ingemar" in nombre else "RIGHT"
+        return logo
+
+    logos = Table([[logo_pdf("logoingemar.png", 65 * mm, 22 * mm),
+                    logo_pdf("logoenap.png", 25 * mm, 25 * mm)]], colWidths=[140 * mm, 40 * mm])
+    logos.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LINEBELOW", (0, 0), (-1, -1), 2, colors.HexColor("#FFC321")),
+    ]))
+    elementos += [logos, Spacer(1, 4 * mm)]
     cabecera = Table([
         [Paragraph("REGISTRO DE INSPECCIÓN", eyebrow)],
         [Paragraph(f"Ficha técnica de boquillas · {escape(str(tag))}", title_style)],
