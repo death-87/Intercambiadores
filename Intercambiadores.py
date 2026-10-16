@@ -526,11 +526,26 @@ def filas_roscas_planilla(registro):
             cuerpo = "CHANNEL"
         elif re.search(r'\b(?:SHELL|CARCAZA|CARCASA)\b', limpio):
             cuerpo = "SHELL"
-        filas.append({"BOQUILLA / ORIGEN": origen or "—", "LADO": lado[1] if lado else "—",
+        tag_servicio = re.search(r'(?<![A-Z0-9])((?:SV|SD|CV|CD|VC|DC|V|D)\d*)(?![A-Z0-9])', limpio)
+        servicio = None
+        if re.search(r'\b(?:VENTEO|VENT|VENTING)\b', limpio):
+            servicio = "VENTEO"
+        elif re.search(r'\b(?:DRENAJE|DRAIN)\b', limpio):
+            servicio = "DRENAJE"
+        elif tag_servicio:
+            servicio = "VENTEO" if "V" in tag_servicio[1] else "DRENAJE"
+        tag_texto = tag[1] if tag else (tag_servicio[1] if tag_servicio else "—")
+        if tag_servicio and not origen_boq:
+            origen = "—"
+        lado_texto = lado[1] if lado else "—"
+        if servicio:
+            descripcion = servicio + (" " + cuerpo if cuerpo != "—" else "")
+            lado_texto = descripcion + (" · " + lado[1] if lado else "")
+        filas.append({"BOQUILLA / ORIGEN": origen or "—", "LADO": lado_texto,
                       "MEDIDA": re.sub(r'\s+', ' ', medida[1]) + '\"' if medida else "—",
                       "TIPO": "NPT" if re.search(r'\bNPT\b', limpio) else "ROSCADA",
                       "RATING": rating[1] + "#" if rating else "—",
-                      "TAG PLUG": tag[1] if tag else "—", "CUERPO": cuerpo})
+                      "TAG PLUG": tag_texto, "CUERPO": cuerpo})
     return filas
 
 
@@ -549,8 +564,12 @@ def filas_roscas(config):
                       "TAG PLUG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo)})
     for n in config.get("nozzles", []):
         if n.get("connectionType", "flanged") == "threaded":
-            lado = {"process": "DIRECTA", "vent": "VENTEO", "drain": "DRENAJE"}.get(n.get("service", "process"), "DIRECTA")
-            agregar(n.get("tagName"), lado, DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
+            servicio = {"vent": "VENTEO", "drain": "DRENAJE"}.get(n.get("service"))
+            if servicio:
+                lado = servicio + " " + nombre_cuerpo(n.get("bodyPart"))
+                agregar("—", lado, DIAMETROS[n["diaIndex"]], n.get("rating"), n.get("tagName"), n.get("bodyPart"))
+            else:
+                agregar(n.get("tagName"), "DIRECTA", DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
             continue
         for lado in ("NS", "FS"):
             if n.get("has" + lado, False):
@@ -561,7 +580,7 @@ def filas_roscas(config):
     servicios = {n.get("service") for n in config.get("nozzles", [])}
     for campo, lado in (("vent", "VENTEO"), ("drain", "DRENAJE")):
         if campo not in servicios and informado(config.get(campo, "")):
-            agregar("—", lado, config[campo], "3000#", "", "bonnet")
+            agregar("—", lado + " BONETE", config[campo], "3000#", "", "bonnet")
     return filas
 
 
