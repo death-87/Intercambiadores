@@ -537,7 +537,10 @@ def filas_roscas_planilla(registro):
         tag_texto = tag[1] if tag else (tag_servicio[1] if tag_servicio else "—")
         if tag_servicio and not origen_boq:
             origen = "—"
-        lado_texto = lado[1] if lado else "—"
+        posicion_texto = re.search(r'\b(SUPERIOR|INFERIOR)\b', limpio)
+        lado_texto = lado[1] if lado else (posicion_texto[1] if posicion_texto else "—")
+        if lado and posicion_texto:
+            lado_texto += " · " + posicion_texto[1]
         if servicio:
             descripcion = servicio + (" " + cuerpo if cuerpo != "—" else "")
             lado_texto = descripcion + (" · " + lado[1] if lado else "")
@@ -569,7 +572,10 @@ def filas_roscas(config):
                 lado = servicio + " " + nombre_cuerpo(n.get("bodyPart"))
                 agregar("—", lado, DIAMETROS[n["diaIndex"]], n.get("rating"), n.get("tagName"), n.get("bodyPart"))
             else:
-                agregar(n.get("tagName"), "DIRECTA", DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
+                posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
+                            "front": "NS", "rear": "FS", "axialPlus": "AXIAL +X",
+                            "axialMinus": "AXIAL −X"}.get(n.get("pos"), "—")
+                agregar(n.get("tagName"), posicion, DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
             continue
         for lado in ("NS", "FS"):
             if n.get("has" + lado, False):
