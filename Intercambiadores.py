@@ -516,9 +516,26 @@ def filas_roscas_planilla(registro):
         else:
             inicial = re.match(r'^[\s(]*([A-Z]+\d+[A-Z]?|V|D|VC|DC)(?![A-Z0-9])', limpio)
             origen = inicial[1] if inicial else "—"
-        tag = re.search(r'(?<![A-Z0-9])((?:PI|TI|PT|TT|PG|TG|PC|TC|LC|LG)\d+[A-Z]?)(?![A-Z0-9])', limpio)
+        parentesis_origen = None
+        for grupo in re.finditer(r'\(([^()]*)\)', limpio):
+            contenido = grupo[1]
+            codigo = re.search(r'(?<![A-Z0-9])([A-Z]+\d+[A-Z]?)(?![A-Z0-9])', contenido)
+            if codigo or re.search(r'\bBOQ(?:UILLA)?\b', contenido):
+                parentesis_origen = grupo
+                codigo_boq = re.search(r'\bBOQ(?:UILLA)?\.?\s*([A-Z]+\d+[A-Z]?)\b', contenido)
+                if codigo_boq:
+                    origen = codigo_boq[1]
+                elif codigo:
+                    origen = codigo[1]
+                break
+        texto_tag = re.sub(r'\([^()]*\)', ' ', limpio) if parentesis_origen else limpio
+        tag = re.search(r'\bTAG(?:\s+PLUG)?\s*[:=]\s*([A-Z0-9_-]+)', texto_tag)
+        if not tag and parentesis_origen:
+            # El TAG de la conexión va fuera del paréntesis de origen: T5, T6, PI2, etc.
+            tag = re.search(r'(?<![A-Z0-9])([A-Z]+\d+[A-Z]?)(?![A-Z0-9])',
+                            limpio[parentesis_origen.end():])
         if not tag:
-            tag = re.search(r'\bTAG(?:\s+PLUG)?\s*[:=]\s*([A-Z0-9_-]+)', limpio)
+            tag = re.search(r'(?<![A-Z0-9])((?:PI|TI|PT|TT|PG|TG|PC|TC|LC|LG)\d+[A-Z]?)(?![A-Z0-9])', texto_tag)
         cuerpo = "—"
         if re.search(r'\b(?:BONETE|BONNET)\b', limpio):
             cuerpo = "BONETE"
@@ -535,7 +552,7 @@ def filas_roscas_planilla(registro):
         elif tag_servicio:
             servicio = "VENTEO" if "V" in tag_servicio[1] else "DRENAJE"
         tag_texto = tag[1] if tag else (tag_servicio[1] if tag_servicio else "—")
-        if tag_servicio and not origen_boq:
+        if tag_servicio and not origen_boq and not parentesis_origen:
             origen = "—"
         posicion_texto = re.search(r'\b(SUPERIOR|INFERIOR)\b', limpio)
         lado_texto = lado[1] if lado else (posicion_texto[1] if posicion_texto else "—")
