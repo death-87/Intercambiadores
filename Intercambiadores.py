@@ -395,7 +395,7 @@ def cargar_disenos():
 def nombre_cuerpo(valor):
     return {
         "shell": "SHELL", "transition": "TRANSICIÓN", "channel": "CHANNEL",
-        "bonnet": "BONETE", "bonnetLeft": "BONETE IZQUIERDO",
+        "bonnet": "BONETE", "bonnetLeft": "BONETE",
     }.get(valor, str(valor or "").upper())
 
 
