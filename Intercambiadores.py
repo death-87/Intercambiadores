@@ -510,32 +510,21 @@ def filas_roscas_planilla(registro):
         medida = re.search(r'(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)\s*"', limpio)
         rating = re.search(r'\b(150|300|600|900|1500|2500|3000|6000|9000)\s*(?:#|LB\b|"|$)', limpio)
         lado = re.search(r'(?<![A-Z0-9])(NS|FS)(?![A-Z0-9])', limpio)
-        origen_boq = re.search(r'\bBOQ(?:UILLA)?\.?\s*([^),]+)', limpio)
-        if origen_boq:
-            origen = re.split(r'\b(?:NS|FS)\b', origen_boq[1])[0].strip(' ,.;')
-        else:
-            inicial = re.match(r'^[\s(]*([A-Z]+\d+[A-Z]?|V|D|VC|DC)(?![A-Z0-9])', limpio)
-            origen = inicial[1] if inicial else "—"
+        origen = "—"
         parentesis_origen = None
         for grupo in re.finditer(r'\(([^()]*)\)', limpio):
-            contenido = grupo[1]
-            codigo = re.search(r'(?<![A-Z0-9])([A-Z]+\d+[A-Z]?)(?![A-Z0-9])', contenido)
-            if codigo or re.search(r'\bBOQ(?:UILLA)?\b', contenido):
+            contenido = grupo[1].strip()
+            contenido = re.sub(r'^BOQ(?:UILLA)?\.?\s*', '', contenido)
+            candidato = re.split(r'[,;]|\b(?:NS|FS)\b', contenido)[0].strip()
+            if candidato and candidato not in {"SUPERIOR", "INFERIOR", "NORTE", "SUR", "NS", "FS"}:
                 parentesis_origen = grupo
-                codigo_boq = re.search(r'\bBOQ(?:UILLA)?\.?\s*([A-Z]+\d+[A-Z]?)\b', contenido)
-                if codigo_boq:
-                    origen = codigo_boq[1]
-                elif codigo:
-                    origen = codigo[1]
+                origen = candidato
                 break
-        texto_tag = re.sub(r'\([^()]*\)', ' ', limpio) if parentesis_origen else limpio
+        # Los códigos fuera del origen son TAG, nunca determinan el servicio.
+        texto_tag = re.sub(r'\([^()]*\)', ' ', limpio)
         tag = re.search(r'\bTAG(?:\s+PLUG)?\s*[:=]\s*([A-Z0-9_-]+)', texto_tag)
-        if not tag and parentesis_origen:
-            # El TAG de la conexión va fuera del paréntesis de origen: T5, T6, PI2, etc.
-            tag = re.search(r'(?<![A-Z0-9])([A-Z]+\d+[A-Z]?)(?![A-Z0-9])',
-                            limpio[parentesis_origen.end():])
         if not tag:
-            tag = re.search(r'(?<![A-Z0-9])((?:PI|TI|PT|TT|PG|TG|PC|TC|LC|LG)\d+[A-Z]?)(?![A-Z0-9])', texto_tag)
+            tag = re.search(r'(?<![A-Z0-9])([A-Z]+\d+[A-Z]?|SV|SD|CV|CD|VC|DC|V|D)(?![A-Z0-9])', texto_tag)
         cuerpo = "—"
         if re.search(r'\b(?:BONETE|BONNET)\b', limpio):
             cuerpo = "BONETE"
@@ -543,17 +532,12 @@ def filas_roscas_planilla(registro):
             cuerpo = "CHANNEL"
         elif re.search(r'\b(?:SHELL|CARCAZA|CARCASA)\b', limpio):
             cuerpo = "SHELL"
-        tag_servicio = re.search(r'(?<![A-Z0-9])((?:SV|SD|CV|CD|VC|DC|V|D)\d*)(?![A-Z0-9])', limpio)
         servicio = None
         if re.search(r'\b(?:VENTEO|VENT|VENTING)\b', limpio):
             servicio = "VENTEO"
         elif re.search(r'\b(?:DRENAJE|DRAIN)\b', limpio):
             servicio = "DRENAJE"
-        elif tag_servicio:
-            servicio = "VENTEO" if "V" in tag_servicio[1] else "DRENAJE"
-        tag_texto = tag[1] if tag else (tag_servicio[1] if tag_servicio else "—")
-        if tag_servicio and not origen_boq and not parentesis_origen:
-            origen = "—"
+        tag_texto = tag[1] if tag else "—"
         posicion_texto = re.search(r'\b(SUPERIOR|INFERIOR)\b', limpio)
         lado_texto = lado[1] if lado else (posicion_texto[1] if posicion_texto else "—")
         if lado and posicion_texto:
