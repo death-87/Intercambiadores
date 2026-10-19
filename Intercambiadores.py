@@ -590,6 +590,21 @@ def filas_roscas(config):
     return filas
 
 
+def aviso_diferencia_roscas(registro, config):
+    if config is None:
+        return None
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    columna = buscar_columna(columnas, ("CONEXIONES ROSCADAS", "CANTIDAD PLUGS"), ("ROSCAD", "PLUG"))
+    total_excel = cantidad_entera(registro[columna]) if columna is not None else None
+    if total_excel is None:
+        return None
+    total_modelo = len(filas_roscas(config))
+    if total_excel == total_modelo:
+        return None
+    return (f"Diferencia en conexiones roscadas: Excel = {total_excel}; modelo 3D = {total_modelo}. "
+            f"Diferencia (modelo − Excel): {total_modelo - total_excel:+d}. Revisar los datos.")
+
+
 def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None):
     salida = BytesIO()
     doc = SimpleDocTemplate(
@@ -706,6 +721,17 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     elementos += [tabla_operacion, Spacer(1, 6 * mm), recuadro_total, Spacer(1, 2 * mm)]
+    aviso_roscas = aviso_diferencia_roscas(registro, config)
+    if aviso_roscas:
+        aviso_style = ParagraphStyle("hx_aviso_roscas", parent=body, textColor=colors.HexColor("#784600"))
+        aviso_tabla = Table([[p(aviso_roscas, aviso_style)]], colWidths=[180 * mm])
+        aviso_tabla.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF2CC")),
+            ("BOX", (0, 0), (-1, -1), .8, colors.HexColor("#C58A18")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ]))
+        elementos += [aviso_tabla, Spacer(1, 3 * mm)]
     if config is None and conexiones:
         elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
                       Spacer(1, 2 * mm)]
@@ -908,6 +934,10 @@ def main():
         tag = str(registro[col_equipo]).strip()
         config = db.get(normalizar(tag), {}).get("data")
         cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
+        aviso_roscas = aviso_diferencia_roscas(registro, config)
+        if aviso_roscas:
+            st.warning(aviso_roscas)
+
         captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v9"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
