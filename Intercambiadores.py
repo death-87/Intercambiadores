@@ -204,7 +204,20 @@ def vincular_operacionales(filas, tags, columna_denominacion):
     candidatos, avisos = {}, []
     for numero, fila in enumerate(filas, start=2):
         texto = normalizar(fila.get(columna_denominacion, ""))
-        coincidencias = [tag for tag, patron in patrones.items() if patron.search(texto)]
+        columna_ubicacion = next((c for c in fila if normalizar(c) in {
+            "UBICAC.TECNICA", "UBICAC. TECNICA", "UBICACION TECNICA"}), None)
+        ubicacion = normalizar(fila.get(columna_ubicacion, "")) if columna_ubicacion else ""
+        tag_tecnico = re.search(r'([A-Z]+[0-9]+[A-Z]?)$', ubicacion)
+        if tag_tecnico:
+            # La ubicación identifica el equipo; un TAG entre paréntesis puede
+            # ser solo una referencia a otro activo, como F970 (C953).
+            coincidencias = [tag_tecnico[1]] if tag_tecnico[1] in patrones else []
+        else:
+            principal = re.sub(r'\([^)]*\)', ' ', texto)
+            coincidencias = [tag for tag, patron in patrones.items() if patron.search(principal)]
+            tiene_tag_principal = re.search(r'(?<![A-Z0-9])[A-Z]+[0-9]{3,}[A-Z]?(?![A-Z0-9])', principal)
+            if not coincidencias and not tiene_tag_principal:
+                coincidencias = [tag for tag, patron in patrones.items() if patron.search(texto)]
         if len(coincidencias) != 1:
             if any(informado(v) for v in fila.values()):
                 motivo = "varios equipos: " + ", ".join(coincidencias) if coincidencias else "ningún equipo de Hoja 1"
