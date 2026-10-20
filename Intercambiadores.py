@@ -468,8 +468,8 @@ def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
     n = cantidad_entera(registro[col_roscadas]) if col_roscadas else None
     if n is not None:
         return n, "Total declarado en planilla"
-    if config is None:
-        conexiones = filas_roscas_planilla(registro)
+    if config is None or es_horquilla(registro):
+        conexiones = filas_horquilla(registro) if es_horquilla(registro) else filas_roscas_planilla(registro)
         return (len(conexiones), "Contado desde las columnas H–AC de Hoja 1") if conexiones else (
             None, "Sin cantidad válida ni conexiones disponibles")
     n = sum(
@@ -570,7 +570,33 @@ def filas_roscas_planilla(registro):
     return filas
 
 
+def es_horquilla(registro):
+    return any(re.search(r'\b(?:INNER|OUTLET|OUTER)\s*[-_ ]?PIPE\b|\bHORQUILLA\b', normalizar(valor))
+               for _, valor in list(registro.items())[7:23] if informado(valor))
+
+
+def filas_horquilla(registro):
+    """Conserva las descripciones H–W sin imponer campos de shell/channel."""
+    filas = []
+    for columna, valor in list(registro.items())[7:23]:
+        if not informado(valor) or normalizar(valor) in {"-", "—", "0", "NO", "NO APLICA"}:
+            continue
+        texto = str(valor).strip()
+        fila = {"CONEXIÓN / DESCRIPCIÓN": texto}
+        medida = re.search(r'(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)\s*["″]', texto)
+        rating = re.search(r'\b(150|300|600|900|1500|2500|3000|6000|9000)\s*(?:#|LB\b)', normalizar(texto))
+        if medida:
+            fila["MEDIDA"] = medida[1] + '\"'
+        if rating:
+            fila["RATING"] = rating[1] + "#"
+        filas.append(fila)
+    columnas = [k for k in ("CONEXIÓN / DESCRIPCIÓN", "MEDIDA", "RATING") if any(k in f for f in filas)]
+    return [{k: fila.get(k, "") for k in columnas} for fila in filas]
+
+
 def registro_roscas(config, registro):
+    if es_horquilla(registro):
+        return filas_horquilla(registro)
     # Un diseño existente conserva prioridad, incluso si no contiene roscas.
     return filas_roscas(config) if config is not None else filas_roscas_planilla(registro)
 
@@ -609,7 +635,7 @@ def filas_roscas(config):
 
 
 def aviso_diferencia_roscas(registro, config):
-    if config is None:
+    if config is None or es_horquilla(registro):
         return None
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
     columna = buscar_columna(columnas, ("CONEXIONES ROSCADAS", "CANTIDAD PLUGS"), ("ROSCAD", "PLUG"))
@@ -750,16 +776,22 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ]))
         elementos += [aviso_tabla, Spacer(1, 3 * mm)]
-    if config is None and conexiones:
+    if es_horquilla(registro):
+        elementos += [p("Intercambiador horquilla · conexiones de Hoja 1, columnas H–W.", small), Spacer(1, 2 * mm)]
+    elif config is None and conexiones:
         elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
                       Spacer(1, 2 * mm)]
     if conexiones:
-        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
+        encabezado = list(conexiones[0])
+        if es_horquilla(registro):
+            anchos = [(180 - 25 * (len(encabezado) - 1)) * mm] + [25 * mm] * (len(encabezado) - 1)
+        else:
+            anchos = [37*mm, 20*mm, 23*mm, 17*mm, 22*mm, 29*mm, 32*mm]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
             [p(fila[k], cell_center if k in {"LADO", "MEDIDA", "TIPO", "RATING"} else cell) for k in encabezado] for fila in conexiones
         ]
         tabla_roscas = Table(datos_roscas, repeatRows=1,
-                             colWidths=[37*mm, 20*mm, 23*mm, 17*mm, 22*mm, 29*mm, 32*mm])
+                             colWidths=anchos)
         tabla_roscas.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), teal), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
@@ -984,7 +1016,8 @@ def main():
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             seccion("Registro de roscas", "Conexiones roscadas y su boquilla de origen.")
             boquillas = registro_roscas(config, registro)
-            st.caption("Origen: modelo 3D guardado." if config is not None else
+            st.caption("Intercambiador horquilla · conexiones de Hoja 1, columnas H–W." if es_horquilla(registro) else
+                       "Origen: modelo 3D guardado." if config is not None else
                        "Origen: Hoja 1, columnas H–AC. Los campos no identificados se muestran con —.")
             if boquillas:
                 st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
