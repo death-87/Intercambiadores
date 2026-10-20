@@ -66,7 +66,7 @@
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Modelo B · Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="D">Shell con cabezales elípticos soldados en ambos extremos</option><option value="E">Bonete apernado + cabezal elíptico soldado al shell</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
   <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
@@ -76,7 +76,7 @@
   <small id="model-channel-note" style="display:block;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo A: channel con tapa removible apernada. Entrada y salida pueden estar en la misma pieza; sus TAG son configurables.</small>
   <small id="model-c-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo U: cabezal elíptico soldado que forma parte del shell; no es un bonete independiente. El channel frontal tiene tapa removible (Tipo A).</small>
   <small id="model-d-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Dos cabezales elípticos soldados que forman parte del shell, sin bridas. Las dimensiones del cabezal se aplican a ambos extremos.</small>
-  <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Bonete apernado en un extremo y cabezal elíptico soldado al shell en el otro. Las dimensiones se aplican a ambos extremos.</small>
+  <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo B: channel con tapa integral, sin tapa removible, apernado al shell. El otro extremo es un cabezal elíptico soldado que forma parte del shell.</small>
   <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
     <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="0.50" max="7.00" step="0.025" value="4.275"></div>
@@ -1264,7 +1264,7 @@
         const bonnet = document.querySelector(`#${prefix}-nz-body option[value="bonnet"]`);
         const left = document.querySelector(`#${prefix}-nz-body option[value="bonnetLeft"]`);
         if (bonnet) bonnet.textContent = ['C', 'D'].includes(currentModel)
-          ? 'Shell · cabezal elíptico soldado (+X)' : 'Bonete';
+          ? 'Shell · cabezal elíptico soldado (+X)' : currentModel === 'E' ? 'Channel · Tipo B (tapa integral)' : 'Bonete';
         if (left) left.textContent = ['D', 'E'].includes(currentModel)
           ? 'Shell · cabezal elíptico soldado (−X)' : 'Bonete izquierdo';
         const channel = document.querySelector(`#${prefix}-nz-body option[value="channel"]`);
@@ -1273,7 +1273,7 @@
       for (const id of ['bonnet-diameter', 'bonnet-length']) {
         document.getElementById(id).parentElement.querySelector('label').firstChild.textContent =
           ['C', 'D'].includes(currentModel) ? 'Cabezal elíptico del shell: ' :
-          currentModel === 'E' ? 'Bonete / cabezal del shell: ' : 'Bonete: ';
+          currentModel === 'E' ? 'Channel tipo B / cabezal del shell: ' : 'Bonete: ';
       }
       document.getElementById('channel-diameter').disabled = currentModel === 'D' || currentModel === 'E';
       document.getElementById('channel-length').disabled = currentModel === 'D' || currentModel === 'E';
