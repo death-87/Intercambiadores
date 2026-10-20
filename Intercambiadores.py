@@ -143,23 +143,33 @@ def buscar_columna(columnas, exactas, fragmentos=()):
 
 
 def datos_operacionales(registro):
-    """Separa tubos y carcaza; conserva los valores y unidades de la planilla."""
+    """Selecciona los circuitos con datos y conserva entrada/salida por separado."""
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    def buscar_valor(campo, variantes, extremo=""):
+        nombres = tuple(campo + " " + lado + (" " + extremo if extremo else "") for lado in variantes)
+        columna = buscar_columna(columnas, nombres)
+        if columna is None:
+            columna = next((c for c in columnas if any(normalizar(c).startswith(n + " (")
+                            or normalizar(c).startswith(n + " [") for n in nombres)), None)
+        valor = registro[columna] if columna is not None else None
+        return valor if informado(valor) else ""
+    horquilla = any(re.search(r'\b(?:INNER|OUTER|OUTLET)\s+PIPE\b', normalizar(c))
+                    and informado(registro[c]) for c in columnas)
+    lados = (("Inner pipe", ("INNER PIPE",)), ("Outer pipe", ("OUTER PIPE", "OUTLET PIPE"))) if horquilla else (
+        ("Tubos", ("TUBOS",)), ("Carcasa", ("CARCASA", "CARCAZA")))
     filas = []
-    for etiqueta, campo in (("Temperatura (°C)", "TEMPERATURA"),
-                            ("Presión (kg/cm²g)", "PRESION"), ("Producto", "PRODUCTO")):
+    parametros = [("Temperatura IN (°C)", "TEMPERATURA", "IN"),
+                  ("Temperatura OUT (°C)", "TEMPERATURA", "OUT"),
+                  ("Temperatura (°C)", "TEMPERATURA", ""),
+                  ("Presión (kg/cm²g)", "PRESION", ""), ("Producto", "PRODUCTO", "")]
+    for etiqueta, campo, extremo in parametros:
         fila = {"Parámetro": etiqueta}
-        for lado, variantes in (("Tubos", ("TUBOS",)), ("Carcaza", ("CARCAZA", "CARCASA"))):
-            nombres = tuple(campo + " " + v for v in variantes)
-            columna = buscar_columna(columnas, nombres)
-            if columna is None:
-                columna = next((c for c in columnas if any(
-                    normalizar(c).startswith(n + " (") or normalizar(c).startswith(n + " [")
-                    for n in nombres)), None)
-            valor = registro[columna] if columna is not None else None
-            fila[lado] = valor if informado(valor) else "Sin información"
-        filas.append(fila)
-    return filas
+        for lado, variantes in lados:
+            fila[lado] = buscar_valor(campo, variantes, extremo)
+        if any(informado(fila[lado]) for lado, _ in lados):
+            filas.append(fila)
+    activos = [lado for lado, _ in lados if any(informado(f[lado]) for f in filas)]
+    return [{k: f[k] for k in ("Parámetro", *activos)} for f in filas]
 
 
 def datos_tecnicos(registro, registro_operacional=None):
@@ -167,7 +177,7 @@ def datos_tecnicos(registro, registro_operacional=None):
     def es_operacional(nombre):
         texto = normalizar(nombre)
         return any(texto.startswith(campo + " " + lado) for campo in ("TEMPERATURA", "PRESION", "PRODUCTO")
-                   for lado in ("TUBOS", "CARCAZA", "CARCASA"))
+                   for lado in ("TUBOS", "CARCAZA", "CARCASA", "INNER PIPE", "OUTER PIPE", "OUTLET PIPE"))
     datos = [(k, v) for k, v in registro.items()
              if not es_columna_auxiliar(k)
              and normalizar(k) not in {"DETALLE", "FOTO DE REFERENCIA", "DENOMINACION"}
@@ -177,7 +187,9 @@ def datos_tecnicos(registro, registro_operacional=None):
     if denominacion is not None and informado(fuente[denominacion]):
         datos.append(("Denominación", fuente[denominacion]))
     for fila in datos_operacionales(fuente):
-        for lado in ("Tubos", "Carcaza"):
+        for lado in (k for k in fila if k != "Parámetro"):
+            if not informado(fila[lado]):
+                continue
             etiqueta = fila["Parámetro"].split(" (", 1)
             nombre = etiqueta[0] + " " + lado.lower()
             if len(etiqueta) == 2:
@@ -468,8 +480,8 @@ def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
     n = cantidad_entera(registro[col_roscadas]) if col_roscadas else None
     if n is not None:
         return n, "Total declarado en planilla"
-    if config is None or es_horquilla(registro):
-        conexiones = filas_horquilla(registro) if es_horquilla(registro) else filas_roscas_planilla(registro)
+    if config is None:
+        conexiones = filas_roscas_planilla(registro)
         return (len(conexiones), "Contado desde las columnas H–AC de Hoja 1") if conexiones else (
             None, "Sin cantidad válida ni conexiones disponibles")
     n = sum(
@@ -570,33 +582,7 @@ def filas_roscas_planilla(registro):
     return filas
 
 
-def es_horquilla(registro):
-    return any(re.search(r'\b(?:INNER|OUTLET|OUTER)\s*[-_ ]?PIPE\b|\bHORQUILLA\b', normalizar(valor))
-               for _, valor in list(registro.items())[7:23] if informado(valor))
-
-
-def filas_horquilla(registro):
-    """Conserva las descripciones H–W sin imponer campos de shell/channel."""
-    filas = []
-    for columna, valor in list(registro.items())[7:23]:
-        if not informado(valor) or normalizar(valor) in {"-", "—", "0", "NO", "NO APLICA"}:
-            continue
-        texto = str(valor).strip()
-        fila = {"CONEXIÓN / DESCRIPCIÓN": texto}
-        medida = re.search(r'(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)\s*["″]', texto)
-        rating = re.search(r'\b(150|300|600|900|1500|2500|3000|6000|9000)\s*(?:#|LB\b)', normalizar(texto))
-        if medida:
-            fila["MEDIDA"] = medida[1] + '\"'
-        if rating:
-            fila["RATING"] = rating[1] + "#"
-        filas.append(fila)
-    columnas = [k for k in ("CONEXIÓN / DESCRIPCIÓN", "MEDIDA", "RATING") if any(k in f for f in filas)]
-    return [{k: fila.get(k, "") for k in columnas} for fila in filas]
-
-
 def registro_roscas(config, registro):
-    if es_horquilla(registro):
-        return filas_horquilla(registro)
     # Un diseño existente conserva prioridad, incluso si no contiene roscas.
     return filas_roscas(config) if config is not None else filas_roscas_planilla(registro)
 
@@ -635,7 +621,7 @@ def filas_roscas(config):
 
 
 def aviso_diferencia_roscas(registro, config):
-    if config is None or es_horquilla(registro):
+    if config is None:
         return None
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
     columna = buscar_columna(columnas, ("CONEXIONES ROSCADAS", "CANTIDAD PLUGS"), ("ROSCAD", "PLUG"))
@@ -751,12 +737,14 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
     elementos += [recuadro_operacion, Spacer(1, 2 * mm)]
-    encabezado_operacion = ["PARÁMETRO", "TUBOS", "CARCAZA"]
-    datos_operacion = [[p(k, cell_header) for k in encabezado_operacion]] + [
-        [p(fila[k]) for k in ("Parámetro", "Tubos", "Carcaza")]
-        for fila in datos_operacionales(registro_operacional or {})
+    operacion = datos_operacionales(registro_operacional or {})
+    columnas_operacion = list(operacion[0]) if operacion else ["Parámetro"]
+    datos_operacion = [[p(k.upper(), cell_header) for k in columnas_operacion]] + [
+        [p(fila[k]) for k in columnas_operacion] for fila in operacion
     ]
-    tabla_operacion = Table(datos_operacion, colWidths=[60 * mm] * 3, repeatRows=1)
+    if not operacion:
+        datos_operacion.append([p("Sin datos operacionales registrados.")])
+    tabla_operacion = Table(datos_operacion, colWidths=[180 * mm / len(columnas_operacion)] * len(columnas_operacion), repeatRows=1)
     tabla_operacion.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), teal), ("GRID", (0, 0), (-1, -1), .4, line),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
@@ -776,22 +764,16 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ]))
         elementos += [aviso_tabla, Spacer(1, 3 * mm)]
-    if es_horquilla(registro):
-        elementos += [p("Intercambiador horquilla · conexiones de Hoja 1, columnas H–W.", small), Spacer(1, 2 * mm)]
-    elif config is None and conexiones:
+    if config is None and conexiones:
         elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
                       Spacer(1, 2 * mm)]
     if conexiones:
-        encabezado = list(conexiones[0])
-        if es_horquilla(registro):
-            anchos = [(180 - 25 * (len(encabezado) - 1)) * mm] + [25 * mm] * (len(encabezado) - 1)
-        else:
-            anchos = [37*mm, 20*mm, 23*mm, 17*mm, 22*mm, 29*mm, 32*mm]
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
             [p(fila[k], cell_center if k in {"LADO", "MEDIDA", "TIPO", "RATING"} else cell) for k in encabezado] for fila in conexiones
         ]
         tabla_roscas = Table(datos_roscas, repeatRows=1,
-                             colWidths=anchos)
+                             colWidths=[37*mm, 20*mm, 23*mm, 17*mm, 22*mm, 29*mm, 32*mm])
         tabla_roscas.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), teal), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), .4, line), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
@@ -1004,20 +986,24 @@ def main():
             seccion("Información del equipo", "Datos registrados en la planilla de inspección.")
             resumen = {c: registro[c] for c in (col_equipo, col_unidad, col_status, col_comentario) if c}
             st.table(pd.DataFrame(resumen.items(), columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
-            seccion("Datos operacionales", "Temperatura, presión y producto registrados para este equipo.")
+            seccion("Datos operacionales", "Temperaturas IN/OUT, presión y producto por circuito.")
             registro_operacional = operacionales.get(normalizar(tag))
             if registro_operacional is None:
                 st.caption("Datos operacionales no disponibles." if error_operacionales else
                            "Sin una coincidencia única en Datos Operacionales para este equipo.")
             operacion = datos_operacionales(registro_operacional or {})
-            st.table(pd.DataFrame(operacion).set_index("Parámetro"))
+            if operacion:
+                if "Inner pipe" in operacion[0] or "Outer pipe" in operacion[0]:
+                    st.caption("Intercambiador horquilla · Inner pipe / Outer pipe")
+                st.table(pd.DataFrame(operacion).set_index("Parámetro"))
+            else:
+                st.info("Sin datos operacionales registrados.")
             with st.expander("Todos los datos técnicos de la planilla"):
                 datos_visibles = datos_tecnicos(registro, registro_operacional)
                 st.table(pd.DataFrame(datos_visibles, columns=["Parámetro", "Detalle"]).set_index("Parámetro"))
             seccion("Registro de roscas", "Conexiones roscadas y su boquilla de origen.")
             boquillas = registro_roscas(config, registro)
-            st.caption("Intercambiador horquilla · conexiones de Hoja 1, columnas H–W." if es_horquilla(registro) else
-                       "Origen: modelo 3D guardado." if config is not None else
+            st.caption("Origen: modelo 3D guardado." if config is not None else
                        "Origen: Hoja 1, columnas H–AC. Los campos no identificados se muestran con —.")
             if boquillas:
                 st.dataframe(pd.DataFrame(boquillas), hide_index=True, use_container_width=True)
