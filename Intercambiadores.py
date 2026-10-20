@@ -392,7 +392,9 @@ def cargar_disenos():
     return db, errores
 
 
-def nombre_cuerpo(valor):
+def nombre_cuerpo(valor, modelo=None):
+    if (valor == "bonnet" and modelo in {"C", "D"}) or (valor == "bonnetLeft" and modelo in {"D", "E"}):
+        return "SHELL"
     return {
         "shell": "SHELL", "transition": "TRANSICIÓN", "channel": "CHANNEL",
         "bonnet": "BONETE", "bonnetLeft": "BONETE",
@@ -429,7 +431,7 @@ def filas_boquillas(config):
                          else DIAMETROS[n["diaIndex"]]),
             "RATING": n.get("rating") or ("3000#" if roscada else "Sin información"),
             "TIPO": tipo,
-            "CUERPO": nombre_cuerpo(n["bodyPart"]), "POSICIÓN": posicion,
+            "CUERPO": nombre_cuerpo(n["bodyPart"], config.get("model", "A")), "POSICIÓN": posicion,
             "NS": detalle_ns if n.get("hasNS", False) else "—",
             "FS": detalle_fs if n.get("hasFS", False) else "—",
         })
@@ -578,12 +580,12 @@ def filas_roscas(config):
         filas.append({"BOQUILLA / ORIGEN": origen or "Sin TAG", "LADO": lado,
                       "MEDIDA": re.sub(r"\s*NPT\s*", "", str(medida), flags=re.I).strip() or "Sin medida",
                       "TIPO": "NPT", "RATING": rating or "3000#",
-                      "TAG PLUG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo)})
+                      "TAG PLUG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo, config.get("model", "A"))})
     for n in config.get("nozzles", []):
         if n.get("connectionType", "flanged") == "threaded":
             servicio = {"vent": "VENTEO", "drain": "DRENAJE"}.get(n.get("service"))
             if servicio:
-                lado = servicio + " " + nombre_cuerpo(n.get("bodyPart"))
+                lado = servicio + " " + nombre_cuerpo(n.get("bodyPart"), config.get("model", "A"))
                 agregar("—", lado, DIAMETROS[n["diaIndex"]], n.get("rating"), n.get("tagName"), n.get("bodyPart"))
             else:
                 posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
@@ -952,7 +954,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v9"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v10"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1051,7 +1053,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v9"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v10"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
