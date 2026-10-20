@@ -620,6 +620,24 @@ def filas_roscas(config):
     return filas
 
 
+def resumen_tipos_sap(registros, cantidades, columna_tipo):
+    grupos = {}
+    for registro, cantidad in zip(registros, cantidades):
+        tipo = registro.get(columna_tipo, "")
+        tipo = str(tipo).strip() if informado(tipo) else "Sin información"
+        grupo = grupos.setdefault(tipo, {"TIPO SAP": tipo, "EQUIPOS": 0,
+            "CONEXIONES ROSCADAS": 0, "EQUIPOS SIN CONTEO": 0})
+        grupo["EQUIPOS"] += 1
+        if cantidad is None:
+            grupo["EQUIPOS SIN CONTEO"] += 1
+        else:
+            grupo["CONEXIONES ROSCADAS"] += cantidad
+    for grupo in grupos.values():
+        if grupo["EQUIPOS"] == grupo["EQUIPOS SIN CONTEO"]:
+            grupo["CONEXIONES ROSCADAS"] = "Sin datos"
+    return sorted(grupos.values(), key=lambda grupo: grupo["TIPO SAP"])
+
+
 def aviso_diferencia_roscas(registro, config):
     if config is None:
         return None
@@ -849,6 +867,7 @@ def main():
     col_equipo = buscar_columna(df.columns, ("EQUIPO", "TAG", "TAG EQUIPO"), ("EQUIPO",))
     col_unidad = buscar_columna(df.columns, ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
     col_status = buscar_columna(df.columns, ("STATUS", "ESTATUS", "ESTADO"), ("STATUS", "ESTATUS"))
+    col_tipo_sap = buscar_columna(df.columns, ("TIPO (SAP)", "TIPO SAP", "TIPO DE INTERCAMBIADOR SAP"))
     col_comentario = buscar_columna(df.columns, ("COMENTARIO", "COMENTARIOS"), ("COMENTARIO",))
     col_roscadas = buscar_columna(df.columns, ("CONEXIONES ROSCADAS", "CANTIDAD PLUGS"), ("ROSCAD", "PLUG"))
     col_geo = buscar_columna(df.columns, ("GEORREFERENCIA", "COORDENADAS"), ("GEORREFER", "COORD"))
@@ -874,6 +893,8 @@ def main():
     if col_status:
         df[col_status] = df[col_status].map(lambda v: "SIN INFORMACIÓN" if not informado(v) else v.upper())
 
+    if col_tipo_sap:
+        df[col_tipo_sap] = df[col_tipo_sap].map(lambda v: str(v).strip().upper() if informado(v) else "Sin información")
     filtrado = df.copy()
     busqueda = st.sidebar.text_input("Buscar equipo", placeholder="TAG, unidad o comentario…").strip()
     if busqueda:
@@ -883,7 +904,7 @@ def main():
             coincidencias |= filtrado[c].str.contains(busqueda, case=False, regex=False, na=False)
         filtrado = filtrado[coincidencias]
     selecciones = []
-    for label, col in (("Estatus", col_status), ("Unidad / Área", col_unidad), ("Equipo / TAG", col_equipo)):
+    for label, col in (("Tipo de intercambiador (SAP)", col_tipo_sap), ("Estatus", col_status), ("Unidad / Área", col_unidad), ("Equipo / TAG", col_equipo)):
         if col:
             opciones = [None] + sorted(filtrado[col].unique())
             elegido = st.sidebar.selectbox(label, opciones, format_func=lambda v: "Todos" if v is None else v)
@@ -922,7 +943,7 @@ def main():
     with tabla:
         seccion("Inventario de equipos", "Selecciona un registro para consultar su ficha técnica y documentación.", f"{len(filtrado)} registros")
         defaults = list(dict.fromkeys(
-            c for c in (col_equipo, col_unidad, col_status, col_roscadas)
+            c for c in (col_equipo, col_tipo_sap, col_unidad, col_status, col_roscadas)
             if c and c in columnas_inventario
         ))
         with st.expander("Personalizar columnas"):
@@ -941,6 +962,11 @@ def main():
         if filtrado.empty:
             st.info("No hay registros con estos filtros.")
         else:
+            if col_tipo_sap:
+                seccion("Resumen por tipo SAP", "Equipos y conexiones roscadas según los filtros actuales.")
+                resumen_sap = resumen_tipos_sap(filtrado.to_dict("records"), cantidades, col_tipo_sap)
+                st.dataframe(pd.DataFrame(resumen_sap), hide_index=True, use_container_width=True)
+                st.caption("Conexiones roscadas suma los conteos disponibles. Los equipos sin conteo se indican aparte; un conteo de cero sí es válido.")
             for panel, col, label in zip(st.columns(2), (col_status, col_unidad), ("Estatus", "Unidad")):
                 with panel:
                     if col:
