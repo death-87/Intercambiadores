@@ -2312,6 +2312,17 @@
       reportCamera.lookAt(center);
       reportCamera.updateMatrixWorld(true);
       const reportRenderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+      const reportLights = [dirLight, fillLight, rimLight].map(light => ({
+        light, position: light.position.clone(), intensity: light.intensity
+      }));
+      function lightReportSide(viewSide, rear = false) {
+        for (const saved of reportLights) {
+          saved.light.position.copy(saved.position);
+          saved.light.position.z *= viewSide;
+          saved.light.intensity = saved.intensity * (rear ? 0.98 : 1);
+          saved.light.updateMatrixWorld(true);
+        }
+      }
       const labels = [];
       heatExchanger.traverse(obj => {
         if (obj.setReportStyle && obj.userData.labelLeader) {
@@ -2389,6 +2400,7 @@
         reportRenderer.outputColorSpace = renderer.outputColorSpace;
         reportRenderer.toneMapping = renderer.toneMapping;
         reportRenderer.toneMappingExposure = renderer.toneMappingExposure;
+        lightReportSide(side);
         showLabelsForSide(side);
         layoutReportLabels();
         reportRenderer.render(scene, reportCamera);
@@ -2396,6 +2408,7 @@
         reportCamera.position.set(center.x, center.y, center.z - side * (size.z + 20));
         reportCamera.lookAt(center);
         reportCamera.updateMatrixWorld(true);
+        lightReportSide(-side, true);
         showLabelsForSide(-side);
         layoutReportLabels();
         reportRenderer.render(scene, reportCamera);
@@ -2404,6 +2417,11 @@
           action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage
         }});
       } finally {
+        for (const saved of reportLights) {
+          saved.light.position.copy(saved.position);
+          saved.light.intensity = saved.intensity;
+          saved.light.updateMatrixWorld(true);
+        }
         heatExchanger.traverse(obj => obj.setReportStyle?.(false));
         for (const saved of labels) {
           saved.sprite.updateText(saved.text);
