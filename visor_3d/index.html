@@ -135,6 +135,12 @@
       <div class="input-group" id="edit-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="edit-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
     </div>
+    <div id="edit-elbow-controls" class="input-group">
+      <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
+      <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
+      <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
+      <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
+    </div>
     <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
       <div class="input-group" id="edit-neck-control">
         <label>Largo niple visual: <output id="edit-neck-length-value">0.30</output> m</label>
@@ -262,6 +268,12 @@
       <div class="input-group"><label>Terminación del niple:</label><select id="new-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
       <div class="input-group" id="new-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="new-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
+    </div>
+    <div id="new-elbow-controls" class="input-group">
+      <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
+      <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
+      <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
+      <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
     </div>
     <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
     <div class="input-group" id="new-neck-control">
@@ -534,6 +546,7 @@
         nozzles: nozzlesList.map(nz => ({
           tagName: nz.userData.tagName || "",
           service: nz.userData.service || "process",
+          elbow90: nz.userData.elbow90, elbowRotation: nz.userData.elbowRotation,
           direction: nz.userData.direction || 'radial',
           connectionType: nz.userData.connectionType || "flanged",
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
@@ -1441,7 +1454,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial') {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1458,6 +1471,8 @@
       const visualNeckLength = type !== 'threaded'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
+        elbow90: type === 'flanged' && elbow90 === true,
+        elbowRotation: Number.isFinite(Number(elbowRotation)) ? ((Number(elbowRotation) % 360) + 360) % 360 : 0,
         direction: NOZZLE_DIRECTIONS.includes(direction) ? direction : 'radial',
         swEnd: ['none', 'valve', 'flange'].includes(swEnd) ? swEnd : 'none',
         swFlangeRating: ['150#', '300#', '600#'].includes(swFlangeRating) ? swFlangeRating : '150#',
@@ -1482,6 +1497,7 @@
       rfMat.roughness = 0.22;
       group.userData.materials = [nzMat, flMat, rfMat]; 
       let totalH, plugNS, plugFS;
+      let labelParent = group, labelHeight = null;
       if (type === 'threaded') {
         const elongatedPlug = createNozzlePlug(flMat, '', normalizedRating, false);
         scaleNozzlePlug(elongatedPlug, DIAMETERS[dIndex]);
@@ -1567,7 +1583,8 @@
           [pInner, nippleLength], [pipeR, nippleLength], [hubR, nippleLength + hubHeight],
           [pInner, nippleLength + hubHeight], [pInner, nippleLength]
         ].map(([x, y]) => new THREE.Vector2(x, y));
-        group.add(new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat));
+        const flangeHub = new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat);
+        group.add(flangeHub);
         const flangeShape = new THREE.Shape();
         flangeShape.absarc(0, 0, fOuter, 0, Math.PI * 2, false);
         const bore = new THREE.Path();
@@ -1609,6 +1626,40 @@
         neckWeld.rotation.x = Math.PI / 2;
         neckWeld.position.y = nippleLength;
         group.add(neckWeld);
+        if (group.userData.elbow90) {
+          const bendRadius = Math.max(dim.OD * 1.5, 0.075);
+          const bend = new THREE.Group();
+          bend.name = 'Codo 90°';
+          bend.position.y = nippleLength;
+          bend.rotation.y = THREE.MathUtils.degToRad(group.userData.elbowRotation);
+          group.add(bend);
+          const curve = new THREE.Curve();
+          curve.getPoint = (t, target = new THREE.Vector3()) => {
+            const angle = t * Math.PI / 2;
+            return target.set(0, bendRadius * Math.sin(angle), bendRadius * (1 - Math.cos(angle)));
+          };
+          const section = new THREE.Shape();
+          section.absarc(0, 0, pipeR, 0, Math.PI * 2, false);
+          const bore = new THREE.Path();
+          bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
+          section.holes.push(bore);
+          bend.add(new THREE.Mesh(new THREE.ExtrudeGeometry(section, {
+            steps: 48, bevelEnabled: false, extrudePath: curve, curveSegments: 32
+          }), nzMat));
+          const outlet = new THREE.Group();
+          outlet.name = 'Flange en salida del codo';
+          outlet.position.set(0, bendRadius, bendRadius);
+          outlet.rotation.x = Math.PI / 2;
+          bend.add(outlet);
+          for (const part of [flangeHub, flange, faceMesh, neckWeld]) {
+            group.remove(part);
+            part.position.y -= nippleLength;
+            outlet.add(part);
+          }
+          labelParent = outlet;
+          labelHeight = dim.H;
+          totalH += bendRadius;
+        }
         plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS);
         scaleNozzlePlug(plugNS, sizeNS);
         plugNS.rotation.x = Math.PI / 2;
@@ -1637,7 +1688,7 @@
 
       const nozzleSprite = createTextSprite(tagText, 'white', 40);
       const referenceOD = flangeDimensions(dIndex, type === 'flanged' ? normalizedRating : '150#').D;
-      attachNozzleLabel(group, nozzleSprite, totalH, referenceOD, posX < 0 ? -1 : 1);
+      attachNozzleLabel(labelParent, nozzleSprite, labelHeight ?? totalH, referenceOD, posX < 0 ? -1 : 1);
       group.userData.nozzleSprite = nozzleSprite;
 
       placeNozzle(group, posX, pos, bodyPart, group.userData.angleDeg);
@@ -1689,7 +1740,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation
           );
           nozzlesList.push(newNz);
         });
@@ -1758,6 +1809,9 @@
       const data = selectedNozzle.userData;
       document.getElementById('editor-panel').style.display = 'block';
       document.getElementById('edit-nz-name').value = data.tagName;
+      document.getElementById('edit-elbow').value = data.elbow90 ? 'elbow' : 'straight';
+      document.getElementById('edit-elbow-angle').value = data.elbowRotation || 0;
+      document.getElementById('edit-elbow-angle-value').value = `${data.elbowRotation || 0}°`;
       document.getElementById('edit-nz-direction').value = data.direction || 'radial';
       document.getElementById('edit-nz-service').value = data.service || 'process';
       document.getElementById('edit-nz-type').value = data.connectionType || 'flanged';
@@ -1852,6 +1906,24 @@
     const editSubRearDia = document.getElementById('edit-sub-rear-dia');
     const editSubRearTag = document.getElementById('edit-sub-rear-tag');
 
+    function updateElbowControls(prefix, type) {
+      document.getElementById(`${prefix}-elbow-controls`).hidden = type !== 'flanged';
+      document.getElementById(`${prefix}-elbow-angle`).disabled = document.getElementById(`${prefix}-elbow`).value !== 'elbow';
+    }
+    for (const prefix of ['new', 'edit']) {
+      document.getElementById(`${prefix}-elbow-angle`).addEventListener('input', event => {
+        document.getElementById(`${prefix}-elbow-angle-value`).value = `${event.target.value}°`;
+      });
+      for (const field of ['elbow', 'elbow-angle']) {
+        document.getElementById(`${prefix}-${field}`).addEventListener('change', () => {
+          updateElbowControls(prefix, document.getElementById(`${prefix}-nz-type`).value);
+          if (prefix === 'edit') rebuildSelectedNozzle({
+            elbow90: document.getElementById('edit-elbow').value === 'elbow',
+            elbowRotation: Number(document.getElementById('edit-elbow-angle').value)
+          });
+        });
+      }
+    }
     function updateSwControls(prefix, type) {
       document.getElementById(`${prefix}-sw-controls`).hidden = type !== 'sw';
       document.getElementById(`${prefix}-sw-flange-control`).hidden = document.getElementById(`${prefix}-sw-end`).value !== 'flange';
@@ -1880,6 +1952,7 @@
 
     function updateConnectionTypeUI(type, preferredRating) {
       const threaded = type !== 'flanged';
+      updateElbowControls('edit', type);
       updateSwControls('edit', type);
       populateRatingSelect(editRating, type, preferredRating);
       document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
@@ -1923,7 +1996,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -2117,6 +2190,7 @@
     const newAngle = document.getElementById('new-nz-angle');
     function updateNewConnectionUI(preferred) {
       const type = newType.value;
+      updateElbowControls('new', type);
       updateSwControls('new', type);
       populateDiameterSelect(newDia, type, preferred);
       populateBaseDiameter('new', Number(newDia.value), type, Number(newDia.value));
@@ -2187,7 +2261,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value);
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();

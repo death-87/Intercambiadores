@@ -338,6 +338,13 @@ def validar_diseno(data):
             value = n.get(field, 0)
             if type(value) not in (int, float) or not math.isfinite(value):
                 raise ValueError(f"{field} debe ser numérico y finito")
+        if not isinstance(n.get("elbow90", False), bool):
+            raise ValueError("elbow90 debe ser booleano")
+        giro_codo = n.get("elbowRotation", 0)
+        if type(giro_codo) not in (int, float) or not math.isfinite(giro_codo) or not 0 <= giro_codo < 360:
+            raise ValueError("giro del codo fuera de rango")
+        if n.get("elbow90", False) and n.get("connectionType", "flanged") != "flanged":
+            raise ValueError("el codo de salida requiere una boquilla enflanchada")
         if n.get("direction", "radial") not in {"radial", "+X", "-X", "+Y", "-Y", "+Z", "-Z"}:
             raise ValueError("dirección de boquilla inválida")
         angle = n.get("angleDeg")
@@ -891,7 +898,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v13"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v14"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1344,7 +1351,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v13"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v14"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1484,7 +1491,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v13"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v14"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
