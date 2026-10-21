@@ -728,7 +728,7 @@ def aviso_diferencia_roscas(registro, config):
             f"Diferencia (modelo − Excel): {total_modelo - total_excel:+d}. Revisar los datos.")
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -764,7 +764,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(muted)
         canvas.drawString(15 * mm, 7.5 * mm, "INGEMARS · CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
-        canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {documento.page}")
+        canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {pagina_inicial + documento.page}")
         canvas.drawString(15 * mm, 3.5 * mm, "Elaborado por: Juan Navarrete A.")
         canvas.restoreState()
 
@@ -890,6 +890,129 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     return salida.getvalue()
 
 
+def clave_captura(tag, config):
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v13"], sort_keys=True).encode()).hexdigest()[:20]
+
+
+def decodificar_capturas(captura, clave):
+    if not isinstance(captura, dict) or captura.get("action") != "report_capture" or captura.get("capture_key") != clave:
+        raise ValueError("La captura no corresponde al equipo solicitado.")
+    imagenes = {}
+    for campo, prefijo in (("image", "captura_pdf_"), ("rear_image", "captura_posterior_pdf_")):
+        imagen = captura.get(campo, "")
+        if not (isinstance(imagen, str) and imagen.startswith("data:image/png;base64,") and len(imagen) < 8_000_000):
+            raise ValueError("Captura no válida")
+        contenido = base64.b64decode(imagen.split(",", 1)[1], validate=True)
+        if not contenido.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("PNG no válido")
+        imagenes[prefijo + clave] = contenido
+    return imagenes
+
+
+def generar_pdf_planta(equipos, imagenes):
+    from pypdf import PdfReader, PdfWriter
+    writer = PdfWriter()
+    for equipo in equipos:
+        clave = equipo["captura_key"]
+        pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
+                          equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
+                          imagen_modelo=imagenes.get("captura_pdf_" + clave),
+                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
+                          pagina_inicial=len(writer.pages))
+        inicio = len(writer.pages)
+        reader = PdfReader(BytesIO(pdf))
+        for pagina in reader.pages:
+            writer.add_page(pagina)
+        writer.add_outline_item(equipo["tag"], inicio)
+    writer.add_metadata({"/Title": "Informe de intercambiadores por planta", "/Author": "Juan Navarrete A."})
+    salida = BytesIO()
+    writer.write(salida)
+    writer.close()
+    return salida.getvalue()
+
+
+def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacionales, estado, incluir_bonete):
+    tarea = st.session_state.get("informe_planta_tarea")
+    with st.expander("Informe PDF por planta", expanded=bool(tarea or st.session_state.get("informe_planta_resultado"))):
+        if not col_unidad:
+            st.info("La planilla necesita la columna Unidad de Proceso para preparar un informe por planta.")
+            return
+        plantas = sorted(v for v in df[col_unidad].unique() if informado(v))
+        planta = st.selectbox("Planta / Unidad de proceso", plantas, key="informe_planta_unidad")
+        st.caption("Incluye todos los equipos de la planta seleccionada. Los filtros del inventario no limitan este informe.")
+        con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
+        if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
+            equipos = []
+            for registro in df[df[col_unidad] == planta].sort_values(col_equipo).to_dict("records"):
+                tag = str(registro[col_equipo]).strip()
+                if not informado(tag):
+                    continue
+                config = db.get(normalizar(tag), {}).get("data")
+                cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
+                equipos.append({"registro": registro, "tag": tag, "config": config,
+                    "estado": estado(tag), "cantidad": cantidad, "origen": origen,
+                    "operacion": operacionales.get(normalizar(tag)), "captura_key": clave_captura(tag, config)})
+            if not equipos:
+                st.warning("No hay equipos válidos en esta planta.")
+            else:
+                st.session_state.pop("informe_planta_resultado", None)
+                st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
+                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": []}
+                st.rerun()
+        if tarea:
+            if st.button("Cancelar preparación", key="cancelar_planta"):
+                st.session_state.pop("informe_planta_tarea", None)
+                st.rerun()
+            pendientes = [e for e in tarea["equipos"] if tarea["con_imagenes"] and e["config"] is not None
+                and e["captura_key"] not in tarea["omitidas"]
+                and ("captura_pdf_" + e["captura_key"] not in st.session_state or
+                     "captura_posterior_pdf_" + e["captura_key"] not in st.session_state)]
+            total_modelos = sum(e["config"] is not None for e in tarea["equipos"])
+            if pendientes:
+                equipo = pendientes[0]
+                clave = equipo["captura_key"]
+                st.progress((total_modelos - len(pendientes)) / max(1, total_modelos),
+                            text=f"Preparando vistas de {equipo['tag']} · {len(pendientes)} modelos pendientes")
+                st.caption("Mantén esta página abierta. Los modelos se preparan automáticamente uno a uno.")
+                if st.button("Continuar sin imágenes de este equipo", key="omitir_captura_" + clave):
+                    tarea["omitidas"].append(clave)
+                    st.rerun()
+                captura = declarar_visor()(initial_data=equipo["config"], readonly=True, ack=None,
+                    height=260, capture_key=clave, report_mode=True,
+                    key="informe_planta_" + tarea["id"] + clave, default=None)
+                if isinstance(captura, dict) and captura.get("capture_key") == clave:
+                    if captura.get("action") == "report_capture":
+                        try:
+                            st.session_state.update(decodificar_capturas(captura, clave))
+                            st.rerun()
+                        except ValueError as exc:
+                            st.warning(str(exc))
+                    elif captura.get("action") == "capture_error":
+                        st.warning("No se pudo capturar este modelo. Puedes continuar sin sus imágenes.")
+                st.stop()
+            with st.spinner("Uniendo las fichas en un solo PDF…"):
+                imagenes = st.session_state if tarea["con_imagenes"] else {}
+                try:
+                    pdf = generar_pdf_planta(tarea["equipos"], imagenes)
+                except Exception as exc:
+                    st.error(f"No se pudo generar el informe de planta: {exc}. Revisa que requirements.txt esté actualizado.")
+                    return
+                sin_imagen = [e["tag"] for e in tarea["equipos"] if tarea["con_imagenes"] and
+                    (e["config"] is None or e["captura_key"] in tarea["omitidas"])]
+                st.session_state["informe_planta_resultado"] = {"planta": tarea["planta"], "pdf": pdf,
+                    "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen}
+                st.session_state.pop("informe_planta_tarea", None)
+                st.rerun()
+        resultado = st.session_state.get("informe_planta_resultado")
+        if resultado:
+            st.success(f"Informe de {resultado['planta']} listo: {resultado['equipos']} equipos.")
+            if resultado["sin_imagen"]:
+                st.caption("Equipos incluidos sin vistas 3D: " + ", ".join(resultado["sin_imagen"]))
+            nombre = re.sub(r'[^\w.-]+', '_', resultado["planta"])
+            st.download_button("Descargar informe de planta · PDF", data=resultado["pdf"],
+                file_name=f"Informe_{nombre}.pdf", mime="application/pdf", key="descargar_planta")
+
+
 def main():
     aplicar_diseno()
     st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">HX</div>'
@@ -990,6 +1113,7 @@ def main():
     with st.sidebar.expander("Criterio de conteo"):
         incluir_bonete = st.checkbox("Incluir venteo y drenaje de diseños antiguos", value=True)
         st.caption("Los diseños nuevos ya los incluyen en la lista general. Un total válido en la planilla tiene prioridad.")
+    informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacionales, estado, incluir_bonete)
     cantidades = []
     for _, row in filtrado.iterrows():
         cfg = db.get(normalizar(row[col_equipo]), {}).get("data")

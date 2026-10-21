@@ -2467,7 +2467,12 @@
         reportCaptureSent = true;
         requestAnimationFrame(() => {
           try { captureReportView(args.capture_key); }
-          catch (error) { console.warn('No se pudo capturar la vista para el PDF', error); }
+          catch (error) {
+            console.warn('No se pudo capturar la vista para el PDF', error);
+            if (args.report_mode) send('streamlit:setComponentValue', {dataType: 'json', value: {
+              action: 'capture_error', capture_key: args.capture_key
+            }});
+          }
         });
       }
       send('streamlit:setFrameHeight', {height: args.height || 720});
