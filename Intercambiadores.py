@@ -909,22 +909,144 @@ def decodificar_capturas(captura, clave):
     return imagenes
 
 
-def generar_pdf_planta(equipos, imagenes):
+def resumen_informe_planta(equipos):
+    total, sin_conteo, detalladas, grupos = 0, 0, 0, {}
+    for equipo in equipos:
+        if equipo["cantidad"] is None:
+            sin_conteo += 1
+        else:
+            total += equipo["cantidad"]
+        for fila in registro_roscas(equipo["config"], equipo["registro"]):
+            medida = str(fila.get("MEDIDA") or "—").strip()
+            rating = str(fila.get("RATING") or "—").strip()
+            if medida in {"—", "Sin medida"}:
+                medida = "Sin identificar"
+            if rating == "—":
+                rating = "Sin identificar"
+            grupos[(medida, rating)] = grupos.get((medida, rating), 0) + 1
+            detalladas += 1
+    return {"equipos": len(equipos), "total": total, "sin_conteo": sin_conteo,
+            "detalladas": detalladas, "distribucion": [(m, r, n) for (m, r), n in sorted(grupos.items())]}
+
+
+def preliminares_planta(equipos, planta, inicios):
+    from reportlab.platypus import PageBreak
+    salida = BytesIO()
+    doc = SimpleDocTemplate(salida, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm,
+                            topMargin=18*mm, bottomMargin=18*mm)
+    verde, oscuro, claro, amarillo = map(colors.HexColor, ("#4D9824", "#24451E", "#F0F6E9", "#FFC321"))
+    estilos = getSampleStyleSheet()
+    titulo = ParagraphStyle("planta_titulo", parent=estilos["Title"], fontName="Helvetica-Bold",
+                            fontSize=28, leading=34, textColor=oscuro, alignment=TA_LEFT)
+    subtitulo = ParagraphStyle("planta_sub", parent=titulo, fontSize=20, leading=26)
+    cuerpo = ParagraphStyle("planta_cuerpo", parent=estilos["Normal"], fontSize=9, leading=13)
+    cabecera = ParagraphStyle("planta_col", parent=cuerpo, fontName="Helvetica-Bold", textColor=colors.white)
+    def texto(valor, estilo=cuerpo):
+        return Paragraph(escape(str(valor)), estilo)
+    def tabla(datos, anchos):
+        t = Table([[texto(v, cabecera if i == 0 else cuerpo) for v in fila] for i, fila in enumerate(datos)],
+                  colWidths=anchos, repeatRows=1)
+        t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), verde),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, claro]),
+            ("GRID", (0,0), (-1,-1), .4, colors.HexColor("#CAD8BF")),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0), (-1,-1), 7), ("BOTTOMPADDING", (0,0), (-1,-1), 7)]))
+        return t
+    def pie(canvas, documento):
+        canvas.saveState()
+        canvas.setStrokeColor(verde)
+        canvas.line(15*mm, 13*mm, 195*mm, 13*mm)
+        canvas.setFillColor(oscuro)
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(15*mm, 8*mm, "Elaborado por: Juan Navarrete A.")
+        canvas.drawRightString(195*mm, 8*mm, f"Página {documento.page}")
+        if documento.page == 1:
+            canvas.setFillColor(amarillo)
+            canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
+        canvas.restoreState()
+    logos = []
+    for archivo, ancho, alto in (("logoingemar.png", 75*mm, 25*mm), ("logoenap.png", 28*mm, 28*mm)):
+        if (ROOT / archivo).is_file():
+            logo = Image(str(ROOT / archivo)); logo._restrictSize(ancho, alto); logos.append(logo)
+        else:
+            logos.append(texto("INGEMARS" if "ingemar" in archivo else "ENAP"))
+    logo_tabla = Table([logos], colWidths=[140*mm,40*mm])
+    logo_tabla.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
+    elementos = [logo_tabla, Spacer(1,32*mm), texto("INFORME TÉCNICO", titulo),
+        Spacer(1,5*mm), texto("INTERCAMBIADORES DE CALOR", subtitulo), Spacer(1,14*mm),
+        texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, titulo), Spacer(1,16*mm),
+        texto("Datos operacionales, registro de conexiones roscadas y vistas de los modelos 3D disponibles.", cuerpo),
+        Spacer(1,28*mm), texto("INGEMARS · ENAP", subtitulo),
+        texto("Elaborado por: Juan Navarrete A.", cuerpo), PageBreak()]
+    resumen = resumen_informe_planta(equipos)
+    elementos += [texto("RESUMEN DE LA PLANTA", subtitulo), Spacer(1,7*mm),
+        tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
+               ["Total de conexiones roscadas · conteos disponibles", resumen["total"]],
+               ["Conexiones con descripción detallada", resumen["detalladas"]],
+               ["Equipos sin conteo disponible", resumen["sin_conteo"]]], [140*mm,40*mm]),
+        Spacer(1,9*mm), texto("CONEXIONES POR MEDIDA Y CLASE", subtitulo), Spacer(1,5*mm)]
+    if resumen["distribucion"]:
+        elementos.append(tabla([["MEDIDA", "CLASE / RATING", "CONEXIONES"]] +
+            [list(fila) for fila in resumen["distribucion"]], [65*mm,65*mm,50*mm]))
+    else:
+        elementos.append(texto("No hay conexiones detalladas para distribuir por medida y clase."))
+    elementos += [Spacer(1,5*mm), texto("El total conserva el criterio de la ficha: Excel válido, con respaldo del modelo o de las descripciones. "
+        "La distribución cuenta conexiones detalladas del modelo; sin modelo, usa H–AC de Hoja 1. "
+        "Los campos desconocidos se agrupan como Sin identificar. Ambos totales pueden diferir si falta detalle o hay discrepancias."),
+        PageBreak(), texto("ÍNDICE DE EQUIPOS", subtitulo), Spacer(1,7*mm),
+        tabla([["EQUIPO", "CONEXIONES ROSCADAS", "PÁGINA"]] + [[equipo["tag"],
+            equipo["cantidad"] if equipo["cantidad"] is not None else "Sin dato", inicios[i]]
+            for i, equipo in enumerate(equipos)], [80*mm,65*mm,35*mm])]
+    doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
+    return salida.getvalue()
+
+
+def generar_pdf_planta(equipos, imagenes, planta=None):
     from pypdf import PdfReader, PdfWriter
-    writer = PdfWriter()
+    from reportlab.pdfgen import canvas as pdfcanvas
+    if planta is None:
+        registro = equipos[0]["registro"] if equipos else {}
+        columna = buscar_columna(list(registro), ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
+        planta = str(registro.get(columna, "Planta"))
+    fichas = []
     for equipo in equipos:
         clave = equipo["captura_key"]
         pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                           equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
-                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
-                          pagina_inicial=len(writer.pages))
+                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave))
+        fichas.append(PdfReader(BytesIO(pdf)))
+    paginas_previas = 3
+    for intento in range(5):
+        inicios, cursor = [], paginas_previas + 1
+        for ficha in fichas:
+            inicios.append(cursor)
+            cursor += len(ficha.pages)
+        previo = PdfReader(BytesIO(preliminares_planta(equipos, planta, inicios)))
+        if len(previo.pages) == paginas_previas:
+            break
+        paginas_previas = len(previo.pages)
+    else:
+        raise ValueError("No se pudo estabilizar la paginación del índice.")
+    writer = PdfWriter()
+    for pagina in previo.pages:
+        writer.add_page(pagina)
+    for equipo, ficha in zip(equipos, fichas):
         inicio = len(writer.pages)
-        reader = PdfReader(BytesIO(pdf))
-        for pagina in reader.pages:
+        for pagina in ficha.pages:
+            # Reemplaza solo el número de página de cada ficha por el del informe completo.
+            sello = BytesIO()
+            canvas = pdfcanvas.Canvas(sello, pagesize=A4)
+            canvas.setFillColor(colors.white)
+            canvas.rect(173*mm,5*mm,24*mm,6*mm,fill=1,stroke=0)
+            canvas.setFont("Helvetica",7)
+            canvas.setFillColor(colors.HexColor("#626E5A"))
+            canvas.drawRightString(195*mm,7.5*mm,f"Página {len(writer.pages)+1}")
+            canvas.save()
+            pagina.merge_page(PdfReader(BytesIO(sello.getvalue())).pages[0])
             writer.add_page(pagina)
         writer.add_outline_item(equipo["tag"], inicio)
-    writer.add_metadata({"/Title": "Informe de intercambiadores por planta", "/Author": "Juan Navarrete A."})
+    writer.add_metadata({"/Title": f"Informe de intercambiadores · {planta}", "/Author": "Juan Navarrete A."})
     salida = BytesIO()
     writer.write(salida)
     writer.close()
@@ -993,7 +1115,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             with st.spinner("Uniendo las fichas en un solo PDF…"):
                 imagenes = st.session_state if tarea["con_imagenes"] else {}
                 try:
-                    pdf = generar_pdf_planta(tarea["equipos"], imagenes)
+                    pdf = generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"])
                 except Exception as exc:
                     st.error(f"No se pudo generar el informe de planta: {exc}. Revisa que requirements.txt esté actualizado.")
                     return
