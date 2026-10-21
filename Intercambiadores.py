@@ -551,7 +551,7 @@ def filas_roscas_planilla(registro):
                 break
         # Los códigos fuera del origen son TAG, nunca determinan el servicio.
         texto_tag = re.sub(r'\([^()]*\)', ' ', limpio)
-        tag = re.search(r'\bTAG(?:\s+PLUG)?\s*[:=]\s*([A-Z0-9_-]+)', texto_tag)
+        tag = re.search(r'\bTAG(?:\s+(?:PLUG|CPLG))?\s*[:=]\s*([A-Z0-9_-]+)', texto_tag)
         if not tag:
             tag = re.search(r'(?<![A-Z0-9])([A-Z]+\d+[A-Z]?|SV|SD|CV|CD|VC|DC|V|D)(?![A-Z0-9])', texto_tag)
         cuerpo = "—"
@@ -578,7 +578,7 @@ def filas_roscas_planilla(registro):
                       "MEDIDA": re.sub(r'\s+', ' ', medida[1]) + '\"' if medida else "—",
                       "TIPO": "NPT" if re.search(r'\bNPT\b', limpio) else "ROSCADA",
                       "RATING": rating[1] + "#" if rating else "—",
-                      "TAG PLUG": tag_texto, "CUERPO": cuerpo})
+                      "TAG CPLG": tag_texto, "CUERPO": cuerpo})
     return filas
 
 
@@ -594,7 +594,7 @@ def filas_roscas(config):
         filas.append({"BOQUILLA / ORIGEN": origen or "Sin TAG", "LADO": lado,
                       "MEDIDA": re.sub(r"\s*NPT\s*", "", str(medida), flags=re.I).strip() or "Sin medida",
                       "TIPO": "NPT", "RATING": rating or "3000#",
-                      "TAG PLUG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo, config.get("model", "A"))})
+                      "TAG CPLG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo, config.get("model", "A"))})
     for n in config.get("nozzles", []):
         if n.get("connectionType", "flanged") == "threaded":
             servicio = {"vent": "VENTEO", "drain": "DRENAJE"}.get(n.get("service"))
@@ -622,7 +622,7 @@ def filas_roscas(config):
 
 def comparar_roscas(excel, modelo):
     """Cruza conexiones con identidad inequívoca; nunca empareja por orden."""
-    campos = ["BOQUILLA / ORIGEN", "TAG PLUG", "LADO", "MEDIDA", "RATING", "TIPO", "CUERPO"]
+    campos = ["BOQUILLA / ORIGEN", "TAG CPLG", "LADO", "MEDIDA", "RATING", "TIPO", "CUERPO"]
     def clave(valor, campo):
         texto = normalizar(valor or "")
         if not informado(texto) or texto in {"—", "-", "SIN TAG", "SIN MEDIDA"}:
@@ -647,8 +647,8 @@ def comparar_roscas(excel, modelo):
     propuestas = {}
     ambiguas = set()
     for i, fila in enumerate(excel):
-        tag = valor(fila, "TAG PLUG")
-        candidatos = [j for j, otra in enumerate(modelo) if tag and tag == valor(otra, "TAG PLUG")]
+        tag = valor(fila, "TAG CPLG")
+        candidatos = [j for j, otra in enumerate(modelo) if tag and tag == valor(otra, "TAG CPLG")]
         if not candidatos:
             origen, lado = valor(fila, "BOQUILLA / ORIGEN"), valor(fila, "LADO")
             candidatos = [j for j, otra in enumerate(modelo)
@@ -862,7 +862,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
                       Spacer(1, 2 * mm)]
     if conexiones:
-        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG PLUG", "CUERPO"]
+        encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG CPLG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
             [p(fila[k], cell_center if k in {"LADO", "MEDIDA", "TIPO", "RATING"} else cell) for k in encabezado] for fila in conexiones
         ]
@@ -1149,7 +1149,7 @@ def main():
                         st.write("Modelo 3D guardado")
                         st.dataframe(pd.DataFrame(roscas_modelo), hide_index=True, use_container_width=True)
                         st.table(pd.DataFrame(celdas_roscas_planilla(registro), columns=["Columna", "Texto original"]))
-                    st.caption("El cruce usa primero TAG PLUG y luego origen/lado. Las coincidencias ambiguas y los campos vacíos requieren revisión; no se emparejan por orden. Se comparan las conexiones roscadas, no todas las boquillas bridadas o SW.")
+                    st.caption("El cruce usa primero TAG CPLG y luego origen/lado. Las coincidencias ambiguas y los campos vacíos requieren revisión; no se emparejan por orden. Se comparan las conexiones roscadas, no todas las boquillas bridadas o SW.")
             abrir, copiar = st.columns(2)
             with abrir:
                 if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag),
