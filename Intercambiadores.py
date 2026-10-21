@@ -620,6 +620,81 @@ def filas_roscas(config):
     return filas
 
 
+def comparar_roscas(excel, modelo):
+    """Cruza conexiones con identidad inequívoca; nunca empareja por orden."""
+    campos = ["BOQUILLA / ORIGEN", "TAG PLUG", "LADO", "MEDIDA", "RATING", "TIPO", "CUERPO"]
+    def clave(valor, campo):
+        texto = normalizar(valor or "")
+        if not informado(texto) or texto in {"—", "-", "SIN TAG", "SIN MEDIDA"}:
+            return ""
+        if campo == "MEDIDA":
+            texto = re.sub(r'\s*(?:NPT|["″])', '', texto).strip()
+            try:
+                partes = texto.replace(',', '.').split()
+                return str(sum(float(p.split('/')[0]) / float(p.split('/')[1]) if '/' in p else float(p) for p in partes))
+            except (ValueError, ZeroDivisionError):
+                return texto
+        if campo == "LADO":
+            lado = re.search(r'\b(NS|FS|SUPERIOR|INFERIOR)\b', texto)
+            return lado[1] if lado else texto
+        if campo == "RATING":
+            return texto.replace('#', '').strip()
+        if campo == "TIPO" and texto == "ROSCADA":
+            return ""  # El Excel no especifica el estándar de rosca.
+        return texto
+    def valor(fila, campo):
+        return clave(fila.get(campo), campo)
+    propuestas = {}
+    ambiguas = set()
+    for i, fila in enumerate(excel):
+        tag = valor(fila, "TAG PLUG")
+        candidatos = [j for j, otra in enumerate(modelo) if tag and tag == valor(otra, "TAG PLUG")]
+        if not candidatos:
+            origen, lado = valor(fila, "BOQUILLA / ORIGEN"), valor(fila, "LADO")
+            candidatos = [j for j, otra in enumerate(modelo)
+                          if origen and origen == valor(otra, "BOQUILLA / ORIGEN")
+                          and (not lado or not valor(otra, "LADO") or lado == valor(otra, "LADO"))]
+            if not candidatos and origen:
+                # Permite detectar un lado distinto si el origen identifica una sola conexión.
+                candidatos = [j for j, otra in enumerate(modelo) if origen == valor(otra, "BOQUILLA / ORIGEN")]
+        if len(candidatos) == 1:
+            propuestas[i] = candidatos[0]
+        elif candidatos:
+            ambiguas.add(i)
+    repetidas = {j for j in propuestas.values() if list(propuestas.values()).count(j) > 1}
+    usados, resultados = set(), []
+    for i, fila in enumerate(excel):
+        j = propuestas.get(i)
+        otra = modelo[j] if j is not None and j not in repetidas else None
+        if otra is None:
+            estado = "Coincidencia ambigua" if i in ambiguas or j in repetidas else "Sin correspondencia identificada"
+            diferencias = "Revisar TAG y boquilla de origen; no se asignó una pareja automáticamente."
+        else:
+            usados.add(j)
+            distintos, incompletos = [], []
+            for campo in campos:
+                a, b = valor(fila, campo), valor(otra, campo)
+                if not a or not b:
+                    incompletos.append(campo)
+                elif a != b:
+                    distintos.append(campo)
+            estado = "Diferencias" if distintos else "Revisión incompleta" if incompletos else "Coincide"
+            diferencias = ("Distintos: " + ", ".join(distintos) + ". " if distintos else "") + (
+                "Sin datos para verificar: " + ", ".join(incompletos) if incompletos else "")
+        detalle = {"EXCEL #": str(i + 1), "MODELO #": str(j + 1) if otra is not None else "—",
+                   "RESULTADO": estado, "OBSERVACIÓN": diferencias or "Datos coincidentes."}
+        for campo in campos:
+            detalle[campo] = f"Excel: {fila.get(campo, '—')} | 3D: {otra.get(campo, '—') if otra is not None else '—'}"
+        resultados.append(detalle)
+    for j, otra in enumerate(modelo):
+        if j not in usados:
+            detalle = {"EXCEL #": "—", "MODELO #": str(j + 1), "RESULTADO": "Sin correspondencia en Excel",
+                       "OBSERVACIÓN": "No se encontró una fila inequívoca de Hoja 1 para esta conexión."}
+            detalle.update({campo: f"Excel: — | 3D: {otra.get(campo, '—')}" for campo in campos})
+            resultados.append(detalle)
+    return resultados
+
+
 def resumen_tipos_sap(registros, cantidades, columna_tipo):
     grupos = {}
     for registro, cantidad in zip(registros, cantidades):
@@ -1039,6 +1114,42 @@ def main():
             if config is None and celdas_roscas_planilla(registro):
                 with st.expander("Ver descripciones originales de las conexiones"):
                     st.table(pd.DataFrame(celdas_roscas_planilla(registro), columns=["Columna", "Descripción"]))
+            seccion("Comparación Excel / modelo 3D", "Verificación de conexiones roscadas del equipo seleccionado.")
+            if config is None:
+                st.info("Este equipo no tiene un modelo 3D válido para comparar. Los datos del Excel siguen disponibles.")
+            else:
+                roscas_excel = filas_roscas_planilla(registro)
+                roscas_modelo = filas_roscas(config)
+                total_declarado = cantidad_entera(registro[col_roscadas]) if col_roscadas else None
+                for panel, titulo, valor in zip(st.columns(3),
+                        ("Total declarado Excel", "Conexiones descritas H–AC", "Conexiones del modelo 3D"),
+                        (total_declarado if total_declarado is not None else "Sin dato", len(roscas_excel), len(roscas_modelo))):
+                    panel.metric(titulo, valor)
+                if len(roscas_excel) != len(roscas_modelo) or (
+                        total_declarado is not None and total_declarado != len(roscas_modelo)) or (
+                        total_declarado is not None and total_declarado != len(roscas_excel)):
+                    st.warning("Las cantidades no coinciden. Revisa el total declarado, las descripciones del Excel y el modelo 3D.")
+                elif total_declarado is None:
+                    st.info("La cantidad de descripciones coincide con el modelo. Falta un total declarado válido en Excel.")
+                else:
+                    st.success("Las tres cantidades coinciden.")
+                comparacion = comparar_roscas(roscas_excel, roscas_modelo)
+                pendientes = sum(f["RESULTADO"] != "Coincide" for f in comparacion)
+                if pendientes:
+                    st.warning(f"{pendientes} resultados requieren revisión por diferencias, datos incompletos o conexiones sin pareja.")
+                elif comparacion:
+                    st.success("Todas las conexiones comparadas coinciden en sus datos.")
+                else:
+                    st.info("No hay conexiones roscadas descritas en ninguna de las dos fuentes.")
+                if comparacion:
+                    st.dataframe(pd.DataFrame(comparacion), hide_index=True, use_container_width=True)
+                with st.expander("Ver ambas fuentes y descripciones originales"):
+                    st.write("Hoja 1 · H–AC")
+                    st.dataframe(pd.DataFrame(roscas_excel), hide_index=True, use_container_width=True)
+                    st.write("Modelo 3D guardado")
+                    st.dataframe(pd.DataFrame(roscas_modelo), hide_index=True, use_container_width=True)
+                    st.table(pd.DataFrame(celdas_roscas_planilla(registro), columns=["Columna", "Texto original"]))
+                st.caption("El cruce usa primero TAG PLUG y luego origen/lado. Las coincidencias ambiguas y los campos vacíos requieren revisión; no se emparejan por orden. Se comparan las conexiones roscadas, no todas las boquillas bridadas o SW.")
             abrir, copiar = st.columns(2)
             with abrir:
                 if st.button("Abrir editor 3D", type="primary", disabled=not informado(tag),
