@@ -138,7 +138,8 @@
     <div id="edit-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <small>En el centro del codo, NS y FS salen paralelas a Z (+/−). El giro angular solo cambia su ubicación.</small>
+      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="X">X · paralelas al shell</option><option value="Z" selected>Z · perpendiculares al shell (lateral)</option><option value="Y">Y · perpendiculares al shell (vertical)</option></select>
+      <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
@@ -278,7 +279,8 @@
     <div id="new-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <small>En el centro del codo, NS y FS salen paralelas a Z (+/−). El giro angular solo cambia su ubicación.</small>
+      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="X">X · paralelas al shell</option><option value="Z" selected>Z · perpendiculares al shell (lateral)</option><option value="Y">Y · perpendiculares al shell (vertical)</option></select>
+      <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
@@ -569,7 +571,7 @@
           angleDeg: Number.isFinite(nz.userData.angleDeg) ? nz.userData.angleDeg : 0,
           valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
           offsetY: nz.userData.offsetY || 0, offsetZ: nz.userData.offsetZ || 0,
-          sideMount: nz.userData.sideMount,
+          sideMount: nz.userData.sideMount, sideAxis: nz.userData.sideAxis,
           angleNS: nz.userData.angleNS, angleFS: nz.userData.angleFS,
           hasNS: !!nz.userData.hasNS,
           sizeNS: nz.userData.sizeNS || "",
@@ -1225,15 +1227,30 @@
           orientSubNozzleBranch(branch, localSubNozzleSide(angleDeg, globalSide), angle);
           return;
         }
+        const axis = nozzle.userData.sideAxis || 'Z';
+        const worldDirection = new THREE.Vector3(axis === 'X' ? globalSide : 0,
+          axis === 'Y' ? globalSide : 0, axis === 'Z' ? globalSide : 0);
         const inverse = mount.getWorldQuaternion(new THREE.Quaternion()).invert();
-        // La ubicación puede girar sobre el tubo, pero la salida permanece
-        // paralela al eje Z global, sin heredar la inclinación del codo.
-        const outletDirection = new THREE.Vector3(0, 0, globalSide).applyQuaternion(inverse).normalize();
-        const positionDirection = outletDirection.clone();
-        positionDirection.y = 0;
-        if (positionDirection.lengthSq() < 1e-8) positionDirection.set(globalSide, 0, 0);
-        positionDirection.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(angle));
-        branch.position.copy(positionDirection).multiplyScalar(branch.userData.radialMountRadius);
+        const outletDirection = worldDirection.clone().applyQuaternion(inverse).normalize();
+        // Encuentra la pared exterior de la curva sobre el eje seleccionado.
+        const bend = mount.parent;
+        const bendDirection = worldDirection.clone().applyQuaternion(bend.getWorldQuaternion(new THREE.Quaternion()).invert());
+        const R = mount.userData.bendRadius, radius = mount.userData.pipeRadius;
+        const center = new THREE.Vector3(0, R * Math.SQRT1_2, R * (1 - Math.SQRT1_2));
+        function distanceToTube(t) {
+          const p = center.clone().addScaledVector(bendDirection, t);
+          const theta = Math.max(0, Math.min(Math.PI / 2, Math.atan2(p.y, R - p.z)));
+          const nearest = new THREE.Vector3(0, R * Math.sin(theta), R * (1 - Math.cos(theta)));
+          return p.distanceTo(nearest);
+        }
+        let low = 0, high = radius;
+        while (distanceToTube(high) < radius && high < R * 8 + radius * 8) high *= 2;
+        for (let step = 0; step < 36; step++) {
+          const middle = (low + high) / 2;
+          if (distanceToTube(middle) < radius) low = middle;
+          else high = middle;
+        }
+        branch.position.copy(outletDirection).multiplyScalar(high);
         branch.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outletDirection);
       }
       orient(nozzle.userData.subFrontGroup, frontSide, nozzle.userData.subFront?.angle || 0);
@@ -1485,7 +1502,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight') {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z') {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1502,6 +1519,7 @@
       const visualNeckLength = type !== 'threaded'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
+        sideAxis: ['X', 'Y', 'Z'].includes(sideAxis) ? sideAxis : 'Z',
         sideMount: sideMount === 'elbow' ? 'elbow' : 'straight',
         angleNS: Math.max(-180, Math.min(180, Number(angleNS) || 0)),
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
@@ -1667,6 +1685,8 @@
           if (group.userData.sideMount === 'elbow') {
             elbowMount = new THREE.Group();
             elbowMount.name = 'Centro del codo · conexiones NS FS';
+            elbowMount.userData.bendRadius = bendRadius;
+            elbowMount.userData.pipeRadius = pipeR;
             elbowMount.position.set(0, bendRadius * Math.SQRT1_2, bendRadius * (1 - Math.SQRT1_2));
             elbowMount.rotation.x = Math.PI / 4;
             bend.add(elbowMount);
@@ -1791,7 +1811,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis
           );
           nozzlesList.push(newNz);
         });
@@ -1865,6 +1885,7 @@
         document.getElementById(`edit-${key}-angle`).value = angle || 0;
         document.getElementById(`edit-${key}-angle-value`).value = `${angle || 0}°`;
       }
+      document.getElementById('edit-side-axis').value = data.sideAxis || 'Z';
       document.getElementById('edit-side-mount').value = data.sideMount || 'straight';
       document.getElementById('edit-elbow').value = data.elbow90 ? 'elbow' : 'straight';
       document.getElementById('edit-elbow-angle').value = data.elbowRotation || 0;
@@ -1967,18 +1988,27 @@
       document.getElementById(`${prefix}-elbow-controls`).hidden = type !== 'flanged';
       document.getElementById(`${prefix}-elbow-angle`).disabled = document.getElementById(`${prefix}-elbow`).value !== 'elbow';
       document.getElementById(`${prefix}-side-mount`).disabled = document.getElementById(`${prefix}-elbow`).value !== 'elbow';
+      const fixedAxis = document.getElementById(`${prefix}-elbow`).value === 'elbow'
+        && document.getElementById(`${prefix}-side-mount`).value === 'elbow';
+      document.getElementById(`${prefix}-side-axis`).disabled = !fixedAxis;
+      if (prefix === 'edit') {
+        for (const key of ['ns', 'fs', 'sub-front', 'sub-rear']) {
+          document.getElementById(`edit-${key}-angle`).disabled = fixedAxis;
+        }
+      }
     }
     for (const prefix of ['new', 'edit']) {
       document.getElementById(`${prefix}-elbow-angle`).addEventListener('input', event => {
         document.getElementById(`${prefix}-elbow-angle-value`).value = `${event.target.value}°`;
       });
-      for (const field of ['elbow', 'elbow-angle', 'side-mount']) {
+      for (const field of ['elbow', 'elbow-angle', 'side-mount', 'side-axis']) {
         document.getElementById(`${prefix}-${field}`).addEventListener('change', () => {
           updateElbowControls(prefix, document.getElementById(`${prefix}-nz-type`).value);
           if (prefix === 'edit') rebuildSelectedNozzle({
             elbow90: document.getElementById('edit-elbow').value === 'elbow',
             elbowRotation: Number(document.getElementById('edit-elbow-angle').value),
-            sideMount: document.getElementById('edit-side-mount').value
+            sideMount: document.getElementById('edit-side-mount').value,
+            sideAxis: document.getElementById('edit-side-axis').value
           });
         });
       }
@@ -2055,7 +2085,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -2335,7 +2365,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value);
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value);
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
