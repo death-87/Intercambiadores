@@ -479,11 +479,41 @@
       return Math.round(raw / 0.05) * 0.05;
     }
 
-    function sideConnectionScale(size) {
-      const text = String(size || '').replace(/NPT/gi, '').trim();
-      const index = DIAMETERS.findIndex(value => text.startsWith(value));
-      const pipeOD = flangeDimensions(index >= 0 ? index : 1, '150#').OD;
-      return Math.max(0.45, Math.min(1.25, pipeOD * 25));
+    // Bonney Forge, Forged Steel Fittings & Unions, páginas impresas 15–16.
+    // https://cad.bonneyforge.com/Asset/Forged-Steel-Fittings-and-Unions.pdf
+    // NPS, longitud A copla completa, Ø B copla 3000, Ø B copla 6000,
+    // longitud A plug redondo, Ø B plug redondo. Valores en pulgadas.
+    const THREADED_CATALOG_INCH = [
+      [0.125, 1.25, .75, .875, 1.375, 13/32],
+      [0.25, 1.375, .75, 1, 1.625, 9/16],
+      [0.375, 1.5, .875, 1.25, 1.625, 11/16],
+      [0.5, 1.875, 1.125, 1.5, 1.75, 13/16],
+      [0.75, 2, 1.375, 1.75, 1.75, 17/16],
+      [1, 2.375, 1.75, 2.25, 2, 21/16],
+      [1.25, 2.625, 2.25, 2.5, 2, 27/16],
+      [1.5, 3.125, 2.5, 3, 2, 61/32],
+      [2, 3.375, 3, 3.625, 2.5, 19/8],
+      [2.5, 3.625, 3.625, 4.25, 2.75, 23/8],
+      [3, 4.25, 4.25, 5, 2.75, 3.5],
+      [4, 4.75, 5.5, 6.25, 3, 4.5]
+    ];
+    function threadedCatalogDimensions(size, rating = '3000#') {
+      const raw = String(size || '').replace(/½/g, '1/2').replace(/¾/g, '3/4').replace(/¼/g, '1/4');
+      const match = raw.match(/^\s*(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:[.,]\d+)?)/);
+      let nominal = null;
+      if (match) {
+        nominal = match[1].trim().split(/\s+/).reduce((sum, part) => {
+          const fraction = part.split('/');
+          return sum + (fraction.length === 2 ? Number(fraction[0]) / Number(fraction[1]) : Number(part.replace(',', '.')));
+        }, 0);
+      }
+      const selected = THREADED_CATALOG_INCH.find(row => Math.abs(row[0] - nominal) < 1e-8);
+      // Una medida todavía vacía mantiene una referencia visible de 3/4".
+      // La tabla de datos conserva la medida vacía; no se guarda una medida inventada.
+      const row = selected || THREADED_CATALOG_INCH.find(row => row[0] === .75);
+      return {nominal: row[0], specified: !!selected, couplingLength: row[1] * INCH,
+        couplingDiameter: row[rating === '6000#' ? 3 : 2] * INCH,
+        plugLength: row[4] * INCH, plugDiameter: row[5] * INCH};
     }
 
     function updateAsmeInfo(elementId, diaIndex, rating, type, face = 'RF') {
@@ -1399,45 +1429,36 @@
       }
     }
 
-    function createNozzlePlug(colorMat, tagText = '', rating = '3000#', withLabel = true) {
+    function createNozzlePlug(colorMat, tagText = '', rating = '3000#', withLabel = true, size = '') {
       const plugGroup = new THREE.Group();
-      // Plug macizo: no tiene paso interior. Estas proporciones visuales
-      // todavía no sustituyen una tabla dimensional de ASME B16.11.
-      const classFactor = rating === '6000#' ? 1.16 : 1.0;
-      const couplingH = 0.06 * classFactor;
-      const threadH = 0.02 * classFactor;
-      const headH = 0.08 * classFactor;
-      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(
-        0.04 * classFactor, 0.04 * classFactor, couplingH, 24), colorMat);
-      coupling.position.y = couplingH / 2;
+      const dim = threadedCatalogDimensions(size, rating);
+      const couplingH = dim.couplingLength;
+      const couplingR = dim.couplingDiameter / 2;
+      const plugR = dim.plugDiameter / 2;
+      // El catálogo da dimensiones exteriores, no la profundidad montada.
+      // La inserción y la rosca NPT se representan esquemáticamente.
+      const insertion = Math.min(dim.plugLength * .35, couplingH * .5);
+      const boreR = plugR * 1.01;
+      const profile = [[boreR,0],[couplingR,0],[couplingR,couplingH],
+        [boreR,couplingH],[boreR,0]].map(([r,y]) => new THREE.Vector2(r,y));
+      const coupling = new THREE.Mesh(new THREE.LatheGeometry(profile, 48), colorMat);
+      coupling.name = 'Copla completa roscada ' + rating;
       plugGroup.add(coupling);
-      const threadedBody = new THREE.Mesh(new THREE.CylinderGeometry(
-        0.025 * classFactor, 0.025 * classFactor, threadH, 24), plugMat);
-      threadedBody.position.y = couplingH + threadH / 2;
-      plugGroup.add(threadedBody);
-      const elongatedHead = new THREE.Mesh(new THREE.CylinderGeometry(
-        0.025 * classFactor, 0.025 * classFactor, headH, 24), plugMat);
-      elongatedHead.position.y = couplingH + threadH + headH / 2;
-      plugGroup.add(elongatedHead);
-      plugGroup.userData.totalHeight = couplingH + threadH + headH;
-      plugGroup.userData.couplingRadius = 0.04 * classFactor;
+      // Cilindro cerrado y macizo: no hay paso interior en el plug.
+      const solidPlug = new THREE.Mesh(new THREE.CylinderGeometry(
+        plugR, plugR, dim.plugLength, 48, 1, false), plugMat);
+      solidPlug.position.y = couplingH - insertion + dim.plugLength / 2;
+      solidPlug.name = 'Plug redondo macizo · Bonney Forge B16.11';
+      plugGroup.add(solidPlug);
+      plugGroup.userData.totalHeight = couplingH + dim.plugLength - insertion;
+      plugGroup.userData.couplingRadius = couplingR;
+      plugGroup.userData.catalogDimensions = {...dim, insertionSchematic: insertion};
       if (withLabel) {
         const tagSprite = createTextSprite(tagText, 'white', 34);
-        attachNozzleLabel(plugGroup, tagSprite, plugGroup.userData.totalHeight,
-          0.08 * classFactor);
+        attachNozzleLabel(plugGroup, tagSprite, plugGroup.userData.totalHeight, dim.couplingDiameter);
         plugGroup.userData.tagSprite = tagSprite;
       }
       return plugGroup;
-    }
-    function scaleNozzlePlug(plugGroup, size) {
-      const scale = sideConnectionScale(size);
-      plugGroup.scale.setScalar(scale);
-      const tagSprite = plugGroup.userData.tagSprite;
-      if (tagSprite) {
-        tagSprite.position.multiplyScalar(1 / scale);
-        tagSprite.scale.multiplyScalar(1 / scale);
-        tagSprite.userData.labelLeader?.scale.setScalar(1 / scale);
-      }
     }
 
     function createFlangedSubNozzle(config, side, parentPipeR, parentNippleLength,
@@ -1561,8 +1582,7 @@
       let totalH, plugNS, plugFS;
       let labelParent = group, labelHeight = null, elbowMount = null;
       if (type === 'threaded') {
-        const elongatedPlug = createNozzlePlug(flMat, '', normalizedRating, false);
-        scaleNozzlePlug(elongatedPlug, DIAMETERS[dIndex]);
+        const elongatedPlug = createNozzlePlug(flMat, '', normalizedRating, false, DIAMETERS[dIndex]);
         elongatedPlug.name = service === 'vent' ? 'Venteo con plug alargado'
           : service === 'drain' ? 'Drenaje con plug alargado' : 'Boquilla roscada con plug alargado';
         group.add(elongatedPlug);
@@ -1731,14 +1751,12 @@
           labelHeight = dim.H;
           totalH += bendRadius;
         }
-        plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS);
-        scaleNozzlePlug(plugNS, sizeNS);
+        plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS, true, sizeNS);
         plugNS.rotation.x = Math.PI / 2;
         plugNS.position.set(0, nippleLength * 0.55, sidePipeR + 0.008);
         plugNS.visible = hasNS;
         group.add(plugNS);
-        plugFS = createNozzlePlug(flMat, tagFS, group.userData.ratingFS);
-        scaleNozzlePlug(plugFS, sizeFS);
+        plugFS = createNozzlePlug(flMat, tagFS, group.userData.ratingFS, true, sizeFS);
         plugFS.rotation.x = -Math.PI / 2;
         plugFS.position.set(0, nippleLength * 0.55, -sidePipeR - 0.008);
         plugFS.visible = hasFS;
