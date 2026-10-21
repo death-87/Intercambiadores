@@ -138,6 +138,7 @@
     <div id="edit-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
+      <small>En el centro del codo, NS y FS salen paralelas a Z (+/−). El giro angular solo cambia su ubicación.</small>
       <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
@@ -277,6 +278,7 @@
     <div id="new-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
+      <small>En el centro del codo, NS y FS salen paralelas a Z (+/−). El giro angular solo cambia su ubicación.</small>
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
@@ -1223,14 +1225,16 @@
           orientSubNozzleBranch(branch, localSubNozzleSide(angleDeg, globalSide), angle);
           return;
         }
-        // Proyecta NS/FS sobre la sección del tubo en el centro de la curva.
         const inverse = mount.getWorldQuaternion(new THREE.Quaternion()).invert();
-        const direction = new THREE.Vector3(0, 0, globalSide).applyQuaternion(inverse);
-        direction.y = 0;
-        if (direction.lengthSq() < 1e-8) direction.set(globalSide, 0, 0);
-        direction.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(angle));
-        branch.position.copy(direction).multiplyScalar(branch.userData.radialMountRadius);
-        branch.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+        // La ubicación puede girar sobre el tubo, pero la salida permanece
+        // paralela al eje Z global, sin heredar la inclinación del codo.
+        const outletDirection = new THREE.Vector3(0, 0, globalSide).applyQuaternion(inverse).normalize();
+        const positionDirection = outletDirection.clone();
+        positionDirection.y = 0;
+        if (positionDirection.lengthSq() < 1e-8) positionDirection.set(globalSide, 0, 0);
+        positionDirection.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(angle));
+        branch.position.copy(positionDirection).multiplyScalar(branch.userData.radialMountRadius);
+        branch.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outletDirection);
       }
       orient(nozzle.userData.subFrontGroup, frontSide, nozzle.userData.subFront?.angle || 0);
       orient(nozzle.userData.subRearGroup, -frontSide, nozzle.userData.subRear?.angle || 0);
