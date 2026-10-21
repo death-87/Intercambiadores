@@ -639,8 +639,8 @@ def comparar_roscas(excel, modelo):
             return lado[1] if lado else texto
         if campo == "RATING":
             return texto.replace('#', '').strip()
-        if campo == "TIPO" and texto == "ROSCADA":
-            return ""  # El Excel no especifica el estándar de rosca.
+        if campo == "TIPO" and texto in {"ROSCADA", "NPT"}:
+            return "NPT"  # Equivalentes para la comparación de este proyecto.
         return texto
     def valor(fila, campo):
         return clave(fila.get(campo), campo)
