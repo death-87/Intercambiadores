@@ -929,6 +929,22 @@ def resumen_informe_planta(equipos):
             "detalladas": detalladas, "distribucion": [(m, r, n) for (m, r), n in sorted(grupos.items())]}
 
 
+def nombre_planta_informe(codigo):
+    clave = re.sub(r"\s+", "", normalizar(codigo))
+    nombres = {
+        "A0ALQ": "ALQUILACIÓN (Alkylation)",
+        "A0CCK": "CRACKING CATALÍTICO",
+        "A0LPG3": "Liquefied Petroleum Gas 3",
+        "ALPG3": "Liquefied Petroleum Gas 3",
+        "A0SHP": "Selective Hydrogenation Process",
+        "A0SAR": "Spent Acid Regeneration",
+        "A0URA2": "Sulfur Recovery Unit 2",
+        "A0DIPE": "Di-Isopropyl Ether",
+        "A0HDG": "Hydrodesulfurization of Gasoline",
+    }
+    return nombres.get(clave, str(codigo))
+
+
 def preliminares_planta(equipos, planta, inicios):
     from reportlab.platypus import PageBreak
     salida = BytesIO()
@@ -972,12 +988,22 @@ def preliminares_planta(equipos, planta, inicios):
             logos.append(texto("INGEMARS" if "ingemar" in archivo else "ENAP"))
     logo_tabla = Table([logos], colWidths=[140*mm,40*mm])
     logo_tabla.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
-    elementos = [logo_tabla, Spacer(1,32*mm), texto("INFORME TÉCNICO", titulo),
-        Spacer(1,5*mm), texto("INTERCAMBIADORES DE CALOR", subtitulo), Spacer(1,14*mm),
-        texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, titulo), Spacer(1,16*mm),
-        texto("Datos operacionales, registro de conexiones roscadas y vistas de los modelos 3D disponibles.", cuerpo),
-        Spacer(1,28*mm), texto("INGEMARS · ENAP", subtitulo),
-        texto("Elaborado por: Juan Navarrete A.", cuerpo), PageBreak()]
+    autor_label = ParagraphStyle("autor_label", parent=cuerpo, fontName="Helvetica-Bold",
+                                 fontSize=11, leading=15, textColor=oscuro)
+    autor_nombre = ParagraphStyle("autor_nombre", parent=cuerpo, fontName="Helvetica-Bold",
+                                  fontSize=18, leading=24, textColor=oscuro)
+    autor = Table([[texto("ELABORADO POR:", autor_label)],
+                   [texto("Juan Navarrete A.", autor_nombre)]], colWidths=[180*mm])
+    autor.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),claro),
+        ("LINEBEFORE",(0,0),(0,-1),4,verde),
+        ("LEFTPADDING",(0,0),(-1,-1),12), ("RIGHTPADDING",(0,0),(-1,-1),12),
+        ("TOPPADDING",(0,0),(-1,0),10), ("BOTTOMPADDING",(0,1),(-1,1),12)]))
+    elementos = [logo_tabla, Spacer(1,24*mm), texto("INFORME TÉCNICO", cuerpo),
+        Spacer(1,5*mm), texto("LEVANTAMIENTO DE CONEXIONES ROSCADAS", titulo),
+        Spacer(1,5*mm), texto("Y DATOS OPERACIONALES", subtitulo), Spacer(1,12*mm),
+        texto("INTERCAMBIADORES DE CALOR", cuerpo), Spacer(1,9*mm),
+        texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
+        texto(nombre_planta_informe(planta), subtitulo), Spacer(1,18*mm), autor, PageBreak()]
     resumen = resumen_informe_planta(equipos)
     elementos += [texto("RESUMEN DE LA PLANTA", subtitulo), Spacer(1,7*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
@@ -1046,7 +1072,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None):
             pagina.merge_page(PdfReader(BytesIO(sello.getvalue())).pages[0])
             writer.add_page(pagina)
         writer.add_outline_item(equipo["tag"], inicio)
-    writer.add_metadata({"/Title": f"Informe de intercambiadores · {planta}", "/Author": "Juan Navarrete A."})
+    writer.add_metadata({"/Title": f"Levantamiento de conexiones roscadas y datos operacionales · {planta} · {nombre_planta_informe(planta)}", "/Author": "Juan Navarrete A."})
     salida = BytesIO()
     writer.write(salida)
     writer.close()
