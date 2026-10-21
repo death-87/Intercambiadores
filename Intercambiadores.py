@@ -690,6 +690,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         canvas.setFillColor(muted)
         canvas.drawString(15 * mm, 7.5 * mm, "INGEMARS · CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
         canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {documento.page}")
+        canvas.drawString(15 * mm, 3.5 * mm, "Elaborado por: Juan Navarrete A.")
         canvas.restoreState()
 
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
