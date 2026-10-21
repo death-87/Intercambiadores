@@ -542,10 +542,23 @@ def ir_editor(tag, como_plantilla=False):
     st.error("No se encontró la página del editor dentro de pages/.")
 
 
+def normalizar_medida_rosca(valor):
+    texto = str(valor or "").replace("″", '\"').replace("“", '\"').replace("”", '\"')
+    texto = re.sub(r"\s*NPT\s*", "", texto, flags=re.I).strip()
+    texto = re.sub(r'"(?:\s*")+', '\"', texto)
+    return re.sub(r"\s+", " ", texto)
+
+
+def texto_sin_conexiones(valor):
+    texto = normalizar(valor)
+    return bool(re.search(r'\bSIN (?:BOQUILLAS CON )?CONEXIONES ROSCADAS\b|\bNO (?:HAY|TIENE) CONEXIONES ROSCADAS\b', texto))
+
+
 def celdas_roscas_planilla(registro):
     """H–AC de Hoja 1: una conexión por celda, conservando el orden original."""
     return [(columna, str(valor).strip()) for columna, valor in list(registro.items())[7:29]
-            if informado(valor) and normalizar(valor) not in {"-", "—", "0", "NO", "NO APLICA"}]
+            if informado(valor) and not texto_sin_conexiones(valor)
+            and normalizar(valor) not in {"-", "—", "0", "NO", "NO APLICA"}]
 
 
 def filas_roscas_planilla(registro):
@@ -554,7 +567,7 @@ def filas_roscas_planilla(registro):
         texto = texto.replace("″", '"').replace("“", '"').replace("”", '"')
         limpio = normalizar(texto)
         # Fracciones antes de enteros para no convertir 3/4 en 4.
-        medida = re.search(r'(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)\s*"', limpio)
+        medida = re.search(r'(?<![A-Z0-9/])(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)\s*"', limpio)
         rating = re.search(r'\b(150|300|600|900|1500|2500|3000|6000|9000)\s*(?:#|LB\b|"|$)', limpio)
         lado = re.search(r'(?<![A-Z0-9])(NS|FS)(?![A-Z0-9])', limpio)
         origen = "—"
@@ -610,7 +623,7 @@ def filas_roscas(config):
     filas = []
     def agregar(origen, lado, medida, rating, tag, cuerpo):
         filas.append({"BOQUILLA / ORIGEN": origen or "Sin TAG", "LADO": lado,
-                      "MEDIDA": re.sub(r"\s*NPT\s*", "", str(medida), flags=re.I).strip() or "Sin medida",
+                      "MEDIDA": normalizar_medida_rosca(medida) or "Sin medida",
                       "TIPO": "NPT", "RATING": rating or "3000#",
                       "TAG CPLG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo, config.get("model", "A"))})
     for n in config.get("nozzles", []):
@@ -935,7 +948,7 @@ def resumen_informe_planta(equipos):
         else:
             total += equipo["cantidad"]
         for fila in registro_roscas(equipo["config"], equipo["registro"]):
-            medida = str(fila.get("MEDIDA") or "—").strip()
+            medida = normalizar_medida_rosca(fila.get("MEDIDA") or "—")
             rating = str(fila.get("RATING") or "—").strip()
             if medida in {"—", "Sin medida"}:
                 medida = "Sin identificar"
