@@ -277,7 +277,7 @@ def cargar_datos():
 def validar_diseno(data, _nivel=0):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
-    if data.get("model", "A") not in ("A", "B", "C", "D", "E", "F"):
+    if data.get("model", "A") not in ("A", "B", "C", "D", "E", "F", "H"):
         raise ValueError("modelo desconocido")
     dimensions = data.get("dimensions", {})
     if not isinstance(dimensions, dict):
@@ -286,7 +286,8 @@ def validar_diseno(data, _nivel=0):
         "shellLength": (0.5, 7.0), "reducerLength": (0.2, 2.0),
         "channelLength": (0.2, 2.0), "bonnetLength": (0.2, 2.0),
         "shellDiameter": (0.2, 2.0), "channelDiameter": (0.2, 2.0),
-        "bonnetDiameter": (0.2, 2.0),
+        "bonnetDiameter": (0.2, 2.0), "hairpinGap": (0.05, 2.0),
+        "hairpinTubeDiameter": (0.02, 1.4),
     }
     for field, value in dimensions.items():
         if field not in limits:
@@ -328,7 +329,7 @@ def validar_diseno(data, _nivel=0):
             raise ValueError("el diámetro en el equipo no puede ser menor que el de la brida")
         if n.get("connectionType", "flanged") in {"threaded", "sw"} and base_idx != idx:
             raise ValueError("la reducción requiere una boquilla enflanchada")
-        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft"}:
+        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft", "shellLower", "tubeUpper", "tubeLower"}:
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded", "sw"}:
             raise ValueError("tipo de conexión inválido")
@@ -456,6 +457,10 @@ def cargar_disenos():
 
 
 def nombre_cuerpo(valor, modelo=None):
+    if modelo == "H":
+        return {"shell":"SHELL SUPERIOR", "shellLower":"SHELL INFERIOR",
+            "tubeUpper":"TUBO INTERIOR SUPERIOR", "tubeLower":"TUBO INTERIOR INFERIOR",
+            "channel":"CABEZAL COMÚN"}.get(valor, str(valor or "").upper())
     if valor == "bonnet" and modelo == "E":
         return "CHANNEL"
     if (valor == "bonnet" and modelo in {"C", "D"}) or (valor == "bonnetLeft" and modelo in {"D", "E"}):
@@ -995,7 +1000,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v29"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v30"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1459,7 +1464,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v29"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v30"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1604,7 +1609,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v29"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v30"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
