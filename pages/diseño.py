@@ -47,6 +47,11 @@ NEW = "-- NUEVO EQUIPO (En blanco) --"
 ss = st.session_state
 
 
+def normalizar_tag(value):
+    value = unicodedata.normalize("NFKD", str(value).strip())
+    return " ".join("".join(c for c in value if not unicodedata.combining(c)).upper().split())
+
+
 def cargar_db():
     response = requests.get(
         f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq",
@@ -68,6 +73,23 @@ def cargar_db():
         if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
             raise ValueError(f"Datos inválidos para el equipo {tag}.")
         db[tag] = data
+    # El superior es seleccionable por su TAG, pero ambos niveles conservan
+    # una única fuente de verdad: el diseño completo del conjunto.
+    conjuntos = list(db.items())
+    propietarios = {}
+    for owner, data in conjuntos:
+        upper = data.get("stackedEquipment", {}).get("data", {})
+        upper_tag = str(upper.get("nameplate", "")).strip()
+        if not upper_tag:
+            continue
+        key = normalizar_tag(upper_tag)
+        if key == normalizar_tag(owner) or key in propietarios:
+            raise ValueError(f"TAG superior duplicado en conjuntos: {upper_tag}")
+        propietarios[key] = owner
+        for existing in list(db):
+            if normalizar_tag(existing) == key:
+                del db[existing]
+        db[upper_tag] = data
     return db
 
 
@@ -97,11 +119,6 @@ if "ex_drafts" not in ss:
     ss.ex_drafts = {}
     ss.ex_seen = {}
     ss.ex_ack = None
-
-def normalizar_tag(value):
-    value = unicodedata.normalize("NFKD", str(value).strip())
-    return " ".join("".join(c for c in value if not unicodedata.combining(c)).upper().split())
-
 
 def preparar_copia_desde(origen):
     """Callback: se ejecuta antes del rerun y puede cambiar el widget ex_select."""
@@ -210,7 +227,15 @@ if project_root not in sys.path:
 from visor_3d import declarar_visor
 
 viewer = declarar_visor()
-result = viewer(initial_data=ss.ex_drafts[selected], ack=ss.ex_ack, stack_models=ss.ex_db,
+# La raíz del JSON es siempre el inferior. La selección del editor viaja
+# separadamente para que abrir el TAG superior no active el equipo inferior.
+editor_data = deepcopy(ss.ex_drafts[selected])
+editor_data["_editorSelection"] = {
+    "tag": selected if selected != NEW else "",
+    "token": ss.ex_generation,
+}
+result = viewer(initial_data=editor_data, ack=ss.ex_ack, stack_models=ss.ex_db,
+                selected_tag=editor_data["_editorSelection"]["tag"], selection_token=ss.ex_generation,
                 key="viewer_" + ss.ex_generation, default=None)
 if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_generation):
     event_id = result.get("event_id")
@@ -218,6 +243,13 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
     if event_id and isinstance(data, dict) and isinstance(data.get("nozzles"), list):
         ss.ex_seen[ss.ex_generation] = event_id
         ss.ex_drafts[selected] = deepcopy(data)
+        # Los dos accesos al conjunto comparten también el borrador actual.
+        owner_tag = str(data.get("nameplate", "")).strip()
+        upper_tag = str(data.get("stackedEquipment", {}).get("data", {}).get("nameplate", "")).strip()
+        if upper_tag:
+            for alias in (owner_tag, upper_tag):
+                if alias in ss.ex_db:
+                    ss.ex_drafts[alias] = deepcopy(data)
         if result.get("action") == "save":
             tag = str(data.get("nameplate", "")).strip()
             try:
@@ -232,11 +264,14 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                 with st.spinner("Guardando y verificando en Sheets..."):
                     ss.ex_db = guardar_db(tag, data)
                 ss.ex_drafts[tag] = deepcopy(data)
-                ss.ex_select_pending = tag
+                upper_tag = str(data.get("stackedEquipment", {}).get("data", {}).get("nameplate", "")).strip()
+                ss.ex_select_pending = upper_tag if upper_tag and normalizar_tag(selected) == normalizar_tag(upper_tag) else tag
+                if upper_tag:
+                    ss.ex_drafts[upper_tag] = deepcopy(data)
                 ss.ex_loaded = None
                 ss.pop("ex_template_source", None)
                 ss.design_revision = ss.get("design_revision", 0) + 1
-                message = f"✅ Equipo '{tag}' guardado y verificado en Sheets."
+                message = f"✅ Conjunto '{tag}' / '{upper_tag}' guardado; cada TAG conserva sus propias boquillas." if upper_tag else f"✅ Equipo '{tag}' guardado y verificado en Sheets."
             except Exception as exc:
                 message = f"❌ Guardado no confirmado: {exc}"
             ss.ex_ack = {"event_id": event_id, "message": message}
