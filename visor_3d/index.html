@@ -2486,90 +2486,9 @@
     heatExchanger.add(nameplate);
 
 
-    function stackLabelSprites() {
-      const labels = [];
-      assemblyGroup.traverse(sprite => {
-        if (sprite.userData.labelLeader) labels.push(sprite);
-      });
-      return labels;
-    }
-    function restoreStackLabelLayout() {
-      for (const sprite of stackLabelSprites()) {
-        if (!sprite.stackLayoutBase) continue;
-        sprite.position.copy(sprite.stackLayoutBase.position);
-        const leader = sprite.userData.labelLeader;
-        leader.geometry.attributes.position.array.set(sprite.stackLayoutBase.line);
-        leader.geometry.attributes.position.needsUpdate = true;
-        leader.geometry.computeBoundingSphere();
-      }
-    }
-    function layoutStackLabels(now = performance.now()) {
-      if (!stackState || now - (layoutStackLabels.lastRun || 0) < 100) return;
-      layoutStackLabels.lastRun = now;
-      const labels = stackLabelSprites();
-      for (const sprite of labels) {
-        if (!sprite.stackLayoutBase) sprite.stackLayoutBase = {
-          position: sprite.position.clone(),
-          line: sprite.userData.labelLeader.geometry.attributes.position.array.slice()
-        };
-      }
-      restoreStackLabelLayout();
-      assemblyGroup.updateMatrixWorld(true);
-      camera.updateMatrixWorld(true);
-      const width = renderer.domElement.clientWidth || window.innerWidth;
-      const height = renderer.domElement.clientHeight || window.innerHeight;
-      const project = point => {
-        const p = point.clone().project(camera);
-        return {x:(p.x+1)*width/2, y:(1-p.y)*height/2, z:p.z};
-      };
-      const visible = labels.filter(sprite => {
-        for (let node=sprite; node; node=node.parent) if (!node.visible) return false;
-        return true;
-      }).map(sprite => {
-        const leader = sprite.userData.labelLeader;
-        const anchor = project(leader.localToWorld(new THREE.Vector3().fromBufferAttribute(leader.geometry.attributes.position,0)));
-        const desired = project(sprite.getWorldPosition(new THREE.Vector3()));
-        const text = sprite.userData.labelText || '';
-        return {sprite, anchor, desired, w:Math.max(42,text.length*8), h:24};
-      }).filter(item => item.anchor.z > -1 && item.anchor.z < 1)
-        .sort((a,b) => a.anchor.y-b.anchor.y || a.anchor.x-b.anchor.x);
-      const placed = [];
-      function crosses(a,b,c,d) {
-        const orient=(p,q,r)=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);
-        return orient(a,b,c)*orient(a,b,d)<-0.01 && orient(c,d,a)*orient(c,d,b)<-0.01;
-      }
-      const centerX=project(assemblyGroup.getWorldPosition(new THREE.Vector3())).x;
-      for (const item of visible) {
-        const {sprite,anchor,desired,w,h}=item;
-        const direction=anchor.x<centerX ? -1 : 1;
-        const candidates=[];
-        for (let ring=0;ring<24;ring++) {
-          for (const sign of ring ? [-1,1] : [1]) {
-            for (const dx of [0, direction*65, direction*130, -direction*65]) {
-              candidates.push({x:Math.max(w/2+8,Math.min(width-w/2-8,desired.x+dx)),
-                y:Math.max(h/2+8,Math.min(height-h/2-8,desired.y+sign*ring*30))});
-            }
-          }
-        }
-        const clearRect = p => placed.every(other => Math.abs(p.x-other.x)>(w+other.w)/2+8 || Math.abs(p.y-other.y)>(h+other.h)/2+5);
-        const target = candidates.find(p=>clearRect(p) && placed.every(other=>!crosses(anchor,p,other.anchor,other)))
-          || candidates.find(clearRect) || candidates[0];
-        placed.push({...target,w,h,anchor});
-        const world = new THREE.Vector3(target.x/width*2-1,1-target.y/height*2,desired.z).unproject(camera);
-        sprite.position.copy(sprite.parent.worldToLocal(world.clone()));
-        const leader=sprite.userData.labelLeader;
-        const end=leader.parent.worldToLocal(world);
-        leader.geometry.attributes.position.setXYZ(1,end.x,end.y,end.z);
-        leader.geometry.attributes.position.needsUpdate=true;
-        leader.geometry.computeBoundingSphere();
-      }
-      assemblyGroup.updateMatrixWorld(true);
-    }
-
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
-      if (initialized && !rebuildingStack) layoutStackLabels();
       renderer.render(scene, camera);
     }
     animate();
@@ -2730,7 +2649,6 @@
     function refreshAssemblyView() {
       const previouslyLoading = loading;
       loading = true; rebuildingStack = true;
-      restoreStackLabelLayout();
       deselectNozzle();
       disposeCompanion();
       heatExchanger.position.set(0,0,0);
@@ -2826,7 +2744,6 @@
     });
     let reportCaptureSent = false;
     function captureReportView(captureKey) {
-      restoreStackLabelLayout();
       const width = 1600, height = 700, aspect = width / height;
       assemblyGroup.updateMatrixWorld(true);
       const bounds = new THREE.Box3().setFromObject(assemblyGroup);
