@@ -154,7 +154,7 @@
     <div id="edit-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select>
+      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Los ejes corresponden al codo en 0°. Las conexiones acompañan el giro del codo conservando sus TAG NS/FS.</small>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
@@ -302,7 +302,7 @@
     <div id="new-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select>
+      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Los ejes corresponden al codo en 0°. Las conexiones acompañan el giro del codo conservando sus TAG NS/FS.</small>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
@@ -1333,10 +1333,15 @@
         const side = globalSide * sense;
         const worldDirection = new THREE.Vector3(axis === 'X' ? side : 0,
           axis === 'Y' ? side : 0, axis === 'Z' ? side : 0);
+        const bend = mount.parent;
+        // Los ejes se eligen en la posición de giro cero del codo. Después
+        // acompañan su rotación, sin compensarla para quedar fijos al shell.
+        const nozzleWorld = nozzle.getWorldQuaternion(new THREE.Quaternion());
+        worldDirection.applyQuaternion(nozzleWorld.clone().invert())
+          .applyQuaternion(bend.quaternion).applyQuaternion(nozzleWorld);
         const inverse = mount.getWorldQuaternion(new THREE.Quaternion()).invert();
         const outletDirection = worldDirection.clone().applyQuaternion(inverse).normalize();
         // Encuentra la pared exterior de la curva sobre el eje seleccionado.
-        const bend = mount.parent;
         const bendDirection = worldDirection.clone().applyQuaternion(bend.getWorldQuaternion(new THREE.Quaternion()).invert());
         const R = mount.userData.bendRadius, radius = mount.userData.pipeRadius;
         const center = new THREE.Vector3(0, R * Math.SQRT1_2, R * (1 - Math.SQRT1_2));
