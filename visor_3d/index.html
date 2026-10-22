@@ -419,6 +419,7 @@
     let stackState = null, lowerDesign = null, editingLevel = 'lower', companionGroup = null;
     let rebuildingStack = false;
     let availableStackModels = {};
+    let loadedSelectionToken = null;
     let currentNameplate = "";
     let currentNameplateSide = 'front';
     let currentModel = 'A';
@@ -2670,11 +2671,12 @@
       } finally { loading = previouslyLoading; rebuildingStack = false; }
     }
     function loadAssemblyDesign(data, selectedTag = '') {
+      selectedTag = selectedTag || data._editorSelection?.tag || '';
       if (data.assemblyContext?.lower) {
         selectedTag = data.nameplate;
         data = data.assemblyContext.lower;
       }
-      const {stackedEquipment, ...base} = data;
+      const {stackedEquipment, _editorSelection, ...base} = data;
       lowerDesign = base;
       stackState = stackedEquipment?.data ? {
         gap: Math.min(5, Math.max(0, Number(stackedEquipment.gap) || 0)),
@@ -2919,14 +2921,16 @@
       importSelect.value = previousImport;
       window.exchangerBridge.setReadOnly(readOnly);
       document.getElementById('save-equipment').style.display = args.demo ? 'none' : '';
-      if (!initialized) {
+      const selectionToken = args.selection_token || args.initial_data?._editorSelection?.token || null;
+      if (!initialized || (selectionToken && selectionToken !== loadedSelectionToken)) {
         loading = true;
         loadAssemblyDesign(args.initial_data, args.selected_tag);
+        loadedSelectionToken = selectionToken;
         loading = false;
         initialized = true;
         document.getElementById('save-equipment').disabled = readOnly || Boolean(args.demo);
         clearTimeout(window.exchangerBridge.timer);
-        document.getElementById('save-status').textContent = 'Visor listo.';
+        document.getElementById('save-status').textContent = 'Editando: ' + (currentNameplate || 'Sin TAG') + (stackState ? (editingLevel === 'upper' ? ' · Equipo superior' : ' · Equipo inferior') : '');
       }
       if (args.ack && args.ack.event_id === pendingSave) {
         saving = false;

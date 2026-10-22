@@ -227,7 +227,15 @@ if project_root not in sys.path:
 from visor_3d import declarar_visor
 
 viewer = declarar_visor()
-result = viewer(initial_data=ss.ex_drafts[selected], ack=ss.ex_ack, stack_models=ss.ex_db, selected_tag=selected if selected != NEW else "",
+# La raíz del JSON es siempre el inferior. La selección del editor viaja
+# separadamente para que abrir el TAG superior no active el equipo inferior.
+editor_data = deepcopy(ss.ex_drafts[selected])
+editor_data["_editorSelection"] = {
+    "tag": selected if selected != NEW else "",
+    "token": ss.ex_generation,
+}
+result = viewer(initial_data=editor_data, ack=ss.ex_ack, stack_models=ss.ex_db,
+                selected_tag=editor_data["_editorSelection"]["tag"], selection_token=ss.ex_generation,
                 key="viewer_" + ss.ex_generation, default=None)
 if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_generation):
     event_id = result.get("event_id")
