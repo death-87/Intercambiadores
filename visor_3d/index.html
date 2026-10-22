@@ -2663,6 +2663,10 @@
       } finally { loading = previouslyLoading; rebuildingStack = false; }
     }
     function loadAssemblyDesign(data, selectedTag = '') {
+      if (data.assemblyContext?.lower) {
+        selectedTag = data.nameplate;
+        data = data.assemblyContext.lower;
+      }
       const {stackedEquipment, ...base} = data;
       lowerDesign = base;
       stackState = stackedEquipment?.data ? {
@@ -2739,7 +2743,7 @@
     function captureReportView(captureKey) {
       const width = 1600, height = 700, aspect = width / height;
       assemblyGroup.updateMatrixWorld(true);
-      const bounds = new THREE.Box3().setFromObject(heatExchanger);
+      const bounds = new THREE.Box3().setFromObject(assemblyGroup);
       const center = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
       const halfHeight = Math.max(size.y / 2, size.x / (2 * aspect), 0.5) * 1.08;
@@ -2830,9 +2834,17 @@
         }
         assemblyGroup.updateMatrixWorld(true);
       }
-      const companionVisible = companionGroup?.visible;
+      const companionLabels = [];
+      companionGroup?.traverse(obj => {
+        if (!obj.userData.labelLeader) return;
+        companionLabels.push({obj, visible: obj.visible, leader: obj.userData.labelLeader,
+          leaderVisible: obj.userData.labelLeader.visible});
+      });
       try {
-        if (companionGroup) companionGroup.visible = false;
+        for (const saved of companionLabels) {
+          saved.obj.visible = false;
+          saved.leader.visible = false;
+        }
         heatExchanger.traverse(obj => obj.setReportStyle?.(true));
         reportRenderer.setPixelRatio(2);
         reportRenderer.setSize(width, height);
@@ -2857,7 +2869,10 @@
           action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage
         }});
       } finally {
-        if (companionGroup) companionGroup.visible = companionVisible;
+        for (const saved of companionLabels) {
+          saved.obj.visible = saved.visible;
+          saved.leader.visible = saved.leaderVisible;
+        }
         for (const saved of reportLights) {
           saved.light.position.copy(saved.position);
           saved.light.intensity = saved.intensity;
