@@ -154,7 +154,7 @@
     <div id="edit-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Los ejes corresponden al codo en 0°. Las conexiones acompañan el giro del codo conservando sus TAG NS/FS.</small>
+      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="perimeter">Perímetro del cuerpo del codo · giro circular NS/FS</option><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Para girar NS/FS circularmente sobre la pared, elige Perímetro del cuerpo del codo y ajusta sus ángulos. X/Y/Z mantienen las direcciones de referencia.</small>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
@@ -302,7 +302,7 @@
     <div id="new-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Los ejes corresponden al codo en 0°. Las conexiones acompañan el giro del codo conservando sus TAG NS/FS.</small>
+      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="perimeter">Perímetro del cuerpo del codo · giro circular NS/FS</option><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Para girar NS/FS circularmente sobre la pared, elige Perímetro del cuerpo del codo y ajusta sus ángulos. X/Y/Z mantienen las direcciones de referencia.</small>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
@@ -1328,6 +1328,16 @@
           return;
         }
         const selectedAxis = nozzle.userData.sideAxis || 'Z';
+        if (selectedAxis === 'perimeter') {
+          // Sección circular normal a la tangente del codo en su punto medio.
+          // El grupo mount ya lleva la orientación de esa sección (45°).
+          const radians = THREE.MathUtils.degToRad(angle);
+          const normal = new THREE.Vector3(globalSide*Math.sin(radians), 0,
+            globalSide*Math.cos(radians));
+          branch.position.copy(normal).multiplyScalar(mount.userData.pipeRadius);
+          branch.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
+          return;
+        }
         const axis = selectedAxis.replace(/^[+-]/, '');
         const sense = selectedAxis.startsWith('-') ? -1 : 1;
         const side = globalSide * sense;
@@ -1658,7 +1668,7 @@
       const visualNeckLength = type !== 'threaded'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
-        sideAxis: ['X', 'Y', 'Z', '-X', '-Y', '-Z'].includes(String(sideAxis).replace(/^\+/, '')) ? String(sideAxis).replace(/^\+/, '') : 'Z',
+        sideAxis: ['X', 'Y', 'Z', '-X', '-Y', '-Z', 'perimeter'].includes(String(sideAxis).replace(/^\+/, '')) ? String(sideAxis).replace(/^\+/, '') : 'Z',
         sideMount: sideMount === 'elbow' ? 'elbow' : 'straight',
         angleNS: Math.max(-180, Math.min(180, Number(angleNS) || 0)),
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
@@ -2136,7 +2146,7 @@
       document.getElementById(`${prefix}-side-axis`).disabled = !fixedAxis;
       if (prefix === 'edit') {
         for (const key of ['ns', 'fs', 'sub-front', 'sub-rear']) {
-          document.getElementById(`edit-${key}-angle`).disabled = fixedAxis;
+          document.getElementById(`edit-${key}-angle`).disabled = fixedAxis && document.getElementById('edit-side-axis').value !== 'perimeter';
         }
       }
     }
