@@ -81,7 +81,7 @@
     <small>Elige si el equipo actual va arriba o abajo. Al activar se crea una copia editable para el otro nivel. Cada nivel tiene sus propias boquillas y dimensiones. Ambos TAG quedan disponibles por separado. El informe usa únicamente las boquillas del TAG elegido.</small>
   </div>
 </div>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option><option value="F">Dos bonetes apernados · uno en cada extremo</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
   <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
@@ -92,6 +92,7 @@
   <small id="model-c-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo U: cabezal elíptico soldado que forma parte del shell; no es un bonete independiente. El channel frontal tiene tapa removible (Tipo A).</small>
   <small id="model-d-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Dos cabezales elípticos soldados que forman parte del shell, sin bridas. Las dimensiones del cabezal se aplican a ambos extremos.</small>
   <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo B: channel con tapa integral, sin tapa removible, apernado al shell. El otro extremo es un cabezal elíptico soldado que forma parte del shell.</small>
+  <small id="model-f-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Bonete apernado en cada extremo del shell. El diámetro y largo de bonete se aplican a ambos extremos. Izquierdo y derecho solo identifican su ubicación en el editor.</small>
   <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
     <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="0.50" max="7.00" step="0.025" value="4.275"></div>
@@ -1013,6 +1014,15 @@
     heatExchanger.add(leftBonnetGroup);
     leftBonnetGroup.visible = false;
 
+    // Dos bonetes desmontables, reflejados respecto al centro del shell.
+    const leftBoltedBonnetGroup = rearBonnetGroup.clone(true);
+    leftBoltedBonnetGroup.name = 'Dos bonetes apernados: extremo izquierdo';
+    leftBoltedBonnetGroup.rotation.y = Math.PI;
+    const leftBoltedBonnetBody = leftBoltedBonnetGroup.children.find(
+      child => child.geometry === bonnetBody.geometry);
+    heatExchanger.add(leftBoltedBonnetGroup);
+    leftBoltedBonnetGroup.visible = false;
+
     const modelB = new THREE.Group();
     modelB.name = 'Modelo B: transición cónica y cabezal reducido';
     heatExchanger.add(modelB);
@@ -1210,6 +1220,9 @@
       const jointOffset = 0.132;
       channelGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
       rearBonnetGroup.position.x = currentDimensions.shellLength / 2 + jointOffset;
+      leftBoltedBonnetGroup.position.x = -currentDimensions.shellLength / 2 - jointOffset;
+      leftBoltedBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
+      if (leftBoltedBonnetBody) leftBoltedBonnetBody.scale.y = bonnetLengthScale;
       leftBonnetGroup.position.x = -currentDimensions.shellLength / 2;
       rebuildModelAChannel();
       channelGroup.scale.set(1, channelScale, channelScale);
@@ -1383,11 +1396,12 @@
       applyNozzleDirection(nozzle, angle);
     }
     function applyModel(model, reposition = false) {
-      currentModel = ['A', 'B', 'C', 'D', 'E'].includes(model) ? model : 'A';
+      currentModel = ['A', 'B', 'C', 'D', 'E', 'F'].includes(model) ? model : 'A';
       document.getElementById('equipment-model').value = currentModel;
       modelAShellGroup.visible = currentModel !== 'B';
       channelGroup.visible = currentModel === 'A' || currentModel === 'C';
-      rearBonnetGroup.visible = currentModel === 'A' || currentModel === 'E';
+      rearBonnetGroup.visible = ['A', 'E', 'F'].includes(currentModel);
+      leftBoltedBonnetGroup.visible = currentModel === 'F';
       leftBonnetGroup.visible = currentModel === 'D' || currentModel === 'E';
       weldedBonnetGroup.visible = currentModel === 'C' || currentModel === 'D';
       modelB.visible = currentModel === 'B';
@@ -1403,13 +1417,14 @@
       document.getElementById('model-c-note').style.display = currentModel === 'C' ? 'block' : 'none';
       document.getElementById('model-d-note').style.display = currentModel === 'D' ? 'block' : 'none';
       document.getElementById('model-e-note').style.display = currentModel === 'E' ? 'block' : 'none';
+      document.getElementById('model-f-note').style.display = currentModel === 'F' ? 'block' : 'none';
       for (const prefix of ['edit', 'new']) {
         const bonnet = document.querySelector(`#${prefix}-nz-body option[value="bonnet"]`);
         const left = document.querySelector(`#${prefix}-nz-body option[value="bonnetLeft"]`);
         if (bonnet) bonnet.textContent = ['C', 'D'].includes(currentModel)
-          ? 'Shell · cabezal elíptico soldado (+X)' : currentModel === 'E' ? 'Channel · Tipo B (tapa integral)' : 'Bonete';
+          ? 'Shell · cabezal elíptico soldado (+X)' : currentModel === 'E' ? 'Channel · Tipo B (tapa integral)' : currentModel === 'F' ? 'Bonete derecho (+X)' : 'Bonete';
         if (left) left.textContent = ['D', 'E'].includes(currentModel)
-          ? 'Shell · cabezal elíptico soldado (−X)' : 'Bonete izquierdo';
+          ? 'Shell · cabezal elíptico soldado (−X)' : currentModel === 'F' ? 'Bonete izquierdo (−X)' : 'Bonete izquierdo';
         const channel = document.querySelector(`#${prefix}-nz-body option[value="channel"]`);
         if (channel) channel.textContent = ['A', 'C'].includes(currentModel) ? 'Channel · Tipo A (tapa removible)' : 'Channel';
       }
@@ -1418,8 +1433,8 @@
           ['C', 'D'].includes(currentModel) ? 'Cabezal elíptico del shell: ' :
           currentModel === 'E' ? 'Channel tipo B / cabezal del shell: ' : 'Bonete: ';
       }
-      document.getElementById('channel-diameter').disabled = currentModel === 'D' || currentModel === 'E';
-      document.getElementById('channel-length').disabled = currentModel === 'D' || currentModel === 'E';
+      document.getElementById('channel-diameter').disabled = ['D', 'E', 'F'].includes(currentModel);
+      document.getElementById('channel-length').disabled = ['D', 'E', 'F'].includes(currentModel);
       applyModelADimensions();
       const p = modelBLayout();
       BODY_BOUNDS.shell = currentModel === 'B'
@@ -1430,12 +1445,13 @@
         ? {min: p.reducerSmall + 0.05, max: p.shellLeft - 0.05,
           center: (p.reducerSmall + p.shellLeft) / 2}
         : {...BODY_BOUNDS.shell};
+      const leftHead = currentModel === 'F' ? leftBoltedBonnetGroup : leftBonnetGroup;
       BODY_BOUNDS.bonnetLeft = {
-        min: leftBonnetGroup.position.x - Math.max(0.10, currentDimensions.bonnetLength - 0.05),
-        max: leftBonnetGroup.position.x - 0.05,
-        center: leftBonnetGroup.position.x - currentDimensions.bonnetLength * 0.45
+        min: leftHead.position.x - Math.max(0.10, currentDimensions.bonnetLength - 0.05),
+        max: leftHead.position.x - 0.05,
+        center: leftHead.position.x - currentDimensions.bonnetLength * 0.45
       };
-      BODY_BOUNDS.channel = currentModel === 'D' || currentModel === 'E'
+      BODY_BOUNDS.channel = ['D', 'E', 'F'].includes(currentModel)
         ? {...BODY_BOUNDS.bonnetLeft}
         : currentModel === 'B'
         ? {min: p.channelBodyLeft + 0.08, max: p.channelBodyRight - 0.08,
@@ -1454,13 +1470,13 @@
       document.querySelectorAll('#edit-nz-body option[value="transition"], #new-nz-body option[value="transition"]')
         .forEach(option => { option.disabled = currentModel !== 'B'; });
       document.querySelectorAll('#edit-nz-body option[value="channel"], #new-nz-body option[value="channel"]')
-        .forEach(option => { option.disabled = currentModel === 'D' || currentModel === 'E'; });
+        .forEach(option => { option.disabled = ['D', 'E', 'F'].includes(currentModel); });
       document.querySelectorAll('#edit-nz-body option[value="bonnetLeft"], #new-nz-body option[value="bonnetLeft"]')
-        .forEach(option => { option.disabled = currentModel !== 'D' && currentModel !== 'E'; });
+        .forEach(option => { option.disabled = !['D', 'E', 'F'].includes(currentModel); });
       nozzlesList.forEach(nozzle => {
         const data = nozzle.userData;
-        if ((currentModel === 'D' || currentModel === 'E') && data.bodyPart === 'channel') data.bodyPart = 'bonnetLeft';
-        if (currentModel !== 'D' && currentModel !== 'E' && data.bodyPart === 'bonnetLeft') data.bodyPart = 'channel';
+        if (['D', 'E', 'F'].includes(currentModel) && data.bodyPart === 'channel') data.bodyPart = 'bonnetLeft';
+        if (!['D', 'E', 'F'].includes(currentModel) && data.bodyPart === 'bonnetLeft') data.bodyPart = 'channel';
         const bounds = BODY_BOUNDS[data.bodyPart];
         // Preserve manually entered positions when dimensions change.
         placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
@@ -1570,8 +1586,8 @@
     }
 
     function normalizeBodyPartForCurrentModel(bodyPart) {
-      if ((currentModel === 'D' || currentModel === 'E') && bodyPart === 'channel') return 'bonnetLeft';
-      if (currentModel !== 'D' && currentModel !== 'E' && bodyPart === 'bonnetLeft') return 'channel';
+      if (['D', 'E', 'F'].includes(currentModel) && bodyPart === 'channel') return 'bonnetLeft';
+      if (!['D', 'E', 'F'].includes(currentModel) && bodyPart === 'bonnetLeft') return 'channel';
       return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
     }
 
