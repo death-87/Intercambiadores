@@ -153,7 +153,7 @@
     <div id="edit-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="X">X · paralelas al shell</option><option value="Z" selected>Z · perpendiculares al shell (lateral)</option><option value="Y">Y · perpendiculares al shell (vertical)</option></select>
+      <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
@@ -294,7 +294,7 @@
     <div id="new-elbow-controls" class="input-group">
       <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
-      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="X">X · paralelas al shell</option><option value="Z" selected>Z · perpendiculares al shell (lateral)</option><option value="Y">Y · perpendiculares al shell (vertical)</option></select>
+      <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
@@ -1306,9 +1306,12 @@
           orientSubNozzleBranch(branch, localSubNozzleSide(angleDeg, globalSide), angle);
           return;
         }
-        const axis = nozzle.userData.sideAxis || 'Z';
-        const worldDirection = new THREE.Vector3(axis === 'X' ? globalSide : 0,
-          axis === 'Y' ? globalSide : 0, axis === 'Z' ? globalSide : 0);
+        const selectedAxis = nozzle.userData.sideAxis || 'Z';
+        const axis = selectedAxis.replace(/^[+-]/, '');
+        const sense = selectedAxis.startsWith('-') ? -1 : 1;
+        const side = globalSide * sense;
+        const worldDirection = new THREE.Vector3(axis === 'X' ? side : 0,
+          axis === 'Y' ? side : 0, axis === 'Z' ? side : 0);
         const inverse = mount.getWorldQuaternion(new THREE.Quaternion()).invert();
         const outletDirection = worldDirection.clone().applyQuaternion(inverse).normalize();
         // Encuentra la pared exterior de la curva sobre el eje seleccionado.
@@ -1591,7 +1594,7 @@
       const visualNeckLength = type !== 'threaded'
         ? Math.min(1.50, Math.max(0.10, Number(neckLength) || defaultNozzleNeckLength(dIndex))) : 0;
       group.userData = {
-        sideAxis: ['X', 'Y', 'Z'].includes(sideAxis) ? sideAxis : 'Z',
+        sideAxis: ['X', 'Y', 'Z', '-X', '-Y', '-Z'].includes(String(sideAxis).replace(/^\+/, '')) ? String(sideAxis).replace(/^\+/, '') : 'Z',
         sideMount: sideMount === 'elbow' ? 'elbow' : 'straight',
         angleNS: Math.max(-180, Math.min(180, Number(angleNS) || 0)),
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
