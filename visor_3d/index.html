@@ -2577,7 +2577,10 @@
           const canvas = document.createElement('canvas');
           canvas.width = texture.image.width; canvas.height = texture.image.height;
           canvas.getContext('2d').drawImage(texture.image, 0, 0);
-          copy.image = canvas; copy.needsUpdate = true;
+          // Texture.clone() comparte Source. Asignar image aquí también
+          // cambiaría la textura original y ambos nameplates mostrarían lo mismo.
+          copy.source = new THREE.Source(canvas);
+          copy.needsUpdate = true;
         }
         textures.set(texture, copy); return copy;
       }
