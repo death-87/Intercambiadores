@@ -210,7 +210,7 @@ if project_root not in sys.path:
 from visor_3d import declarar_visor
 
 viewer = declarar_visor()
-result = viewer(initial_data=ss.ex_drafts[selected], ack=ss.ex_ack,
+result = viewer(initial_data=ss.ex_drafts[selected], ack=ss.ex_ack, stack_models=ss.ex_db,
                 key="viewer_" + ss.ex_generation, default=None)
 if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_generation):
     event_id = result.get("event_id")

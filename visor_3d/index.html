@@ -66,6 +66,17 @@
 <div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
+<div id="stack-controls" style="margin:8px 0;padding:7px;border:1px solid #475569;border-radius:5px">
+  <label><input type="checkbox" id="stack-enabled"> Dos intercambiadores apilados</label>
+  <div id="stack-options" hidden>
+    <label>Equipo que estás editando:</label><select id="stack-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select>
+    <label>Separación entre cuerpos (m):</label><input type="number" id="stack-gap" value="0.40" min="0" max="5" step="0.05">
+    <label>Desplazamiento X del superior (m):</label><input type="number" id="stack-offset-x" value="0" min="-20" max="20" step="0.05">
+    <label>Importar diseño guardado como superior:</label><select id="stack-import"><option value="">Seleccionar TAG…</option></select>
+    <button id="stack-import-button" type="button">Importar equipo superior</button>
+    <small>Al activar se crea una copia editable del inferior. Cada nivel tiene sus propias boquillas y dimensiones. Guardar conserva el conjunto bajo el TAG inferior; no crea otra fila de inventario.</small>
+  </div>
+</div>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
@@ -401,6 +412,9 @@
     function send(type, fields) {
       window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, '*');
     }
+    let stackState = null, lowerDesign = null, editingLevel = 'lower', companionGroup = null;
+    let rebuildingStack = false;
+    let availableStackModels = {};
     let currentNameplate = "";
     let currentNameplateSide = 'front';
     let currentModel = 'A';
@@ -582,9 +596,8 @@
         ? Number(selectedIndex) : allowed[allowed.length - 1]);
     }
 
-    function syncStateToParent(action = "change") {
-      if (loading || !initialized || readOnly) return;
-      const exportData = {
+    function collectCurrentDesign() {
+      return {
         model: currentModel,
         dimensions: {...currentDimensions, modelALengthsEnabled: true},
         nameplate: currentNameplate,
@@ -623,6 +636,20 @@
           subRear: {...nz.userData.subRear}
         }))
       };
+    }
+    function collectAssemblyDesign() {
+      const active = collectCurrentDesign();
+      if (!stackState) return active;
+      if (editingLevel === 'upper') stackState.data = active;
+      else lowerDesign = active;
+      return {...lowerDesign, stackedEquipment: {
+        gap: stackState.gap, offsetX: stackState.offsetX, data: stackState.data
+      }};
+    }
+    function syncStateToParent(action = "change") {
+      if (loading || !initialized || readOnly || rebuildingStack) return;
+      const exportData = collectAssemblyDesign();
+      positionStackedEquipment();
       const eventId = sessionId + ':' + (++revision);
       if (action === 'save') pendingSave = eventId;
       send('streamlit:setComponentValue', {dataType: 'json', value: {
@@ -705,7 +732,10 @@
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 }); 
 
     const heatExchanger = new THREE.Group();
-    scene.add(heatExchanger);
+    const assemblyGroup = new THREE.Group();
+    assemblyGroup.name = 'Conjunto de intercambiadores';
+    scene.add(assemblyGroup);
+    assemblyGroup.add(heatExchanger);
 
     // Detalles visuales orientativos; no representan un patrón normativo de pernos.
     function ringX(parent, x, radius, tube, material) {
@@ -823,6 +853,8 @@
       const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
       const sprite = new THREE.Sprite(spriteMat);
       
+      sprite.userData.labelFontSize = fontSize;
+      sprite.userData.labelColor = color;
       sprite.userData.baseScaleX = 1.0;
       sprite.userData.baseScaleY = 0.4;
       sprite.scale.set(sprite.userData.baseScaleX, sprite.userData.baseScaleY, 1);
@@ -2498,16 +2530,196 @@
       currentNameplate = currentNameplate.trim();
       document.getElementById('nameplate-input').value = currentNameplate;
       updateNameplateText(currentNameplate);
+      const design = collectAssemblyDesign();
+      if (stackState) {
+        const lowerTag = String(design.nameplate || '').trim().toUpperCase();
+        const upperTag = String(design.stackedEquipment.data.nameplate || '').trim().toUpperCase();
+        if (!lowerTag || !upperTag || lowerTag === upperTag) {
+          document.getElementById('save-status').textContent = 'Ingresa TAG distintos para el equipo inferior y el superior.';
+          return;
+        }
+      }
       saving = true;
       document.querySelectorAll('#ui-container input, #ui-container select, #ui-container button').forEach(el => el.disabled = true);
       document.getElementById('save-status').textContent = 'Guardando y verificando en Sheets...';
       syncStateToParent('save');
     });
+    function disposeCompanion() {
+      if (!companionGroup) return;
+      assemblyGroup.remove(companionGroup);
+      const geometries = new Set(), materials = new Set(), textures = new Set();
+      companionGroup.traverse(node => {
+        if (node.geometry) geometries.add(node.geometry);
+        for (const material of (Array.isArray(node.material) ? node.material : [node.material])) {
+          if (!material) continue;
+          materials.add(material);
+          if (material.map) textures.add(material.map);
+        }
+      });
+      geometries.forEach(value => value.dispose());
+      materials.forEach(value => value.dispose());
+      textures.forEach(value => value.dispose());
+      companionGroup = null;
+    }
+    function cloneEquipmentForAssembly(root) {
+      const objects = new Map(), geometries = new Map(), materials = new Map(), textures = new Map();
+      function copyTexture(texture) {
+        if (!texture) return null;
+        if (textures.has(texture)) return textures.get(texture);
+        const copy = texture.clone();
+        if (texture.image?.getContext) {
+          const canvas = document.createElement('canvas');
+          canvas.width = texture.image.width; canvas.height = texture.image.height;
+          canvas.getContext('2d').drawImage(texture.image, 0, 0);
+          copy.image = canvas; copy.needsUpdate = true;
+        }
+        textures.set(texture, copy); return copy;
+      }
+      function copyMaterial(material) {
+        if (!materials.has(material)) {
+          const copy = material.clone(); copy.map = copyTexture(material.map);
+          materials.set(material, copy);
+        }
+        return materials.get(material);
+      }
+      function copyNode(node) {
+        let copy;
+        if (node.setReportStyle) {
+          copy = createTextSprite(node.userData.labelText || '', node.userData.labelColor || 'white', node.userData.labelFontSize || 32);
+          copy.position.copy(node.position); copy.quaternion.copy(node.quaternion); copy.scale.copy(node.scale);
+          copy.visible = node.visible; copy.renderOrder = node.renderOrder;
+        } else {
+          // Object3D.userData contains editor references. Clone geometry without
+          // serializing those references or sharing mutable resources.
+          const data = node.userData;
+          try { node.userData = {}; copy = node.clone(false); }
+          finally { node.userData = data; }
+          if (node.geometry) {
+            if (!geometries.has(node.geometry)) geometries.set(node.geometry, node.geometry.clone());
+            copy.geometry = geometries.get(node.geometry);
+          }
+          if (node.material) copy.material = Array.isArray(node.material)
+            ? node.material.map(copyMaterial) : copyMaterial(node.material);
+        }
+        objects.set(node, copy);
+        for (const child of node.children) copy.add(copyNode(child));
+        return copy;
+      }
+      const result = copyNode(root);
+      for (const [source, copy] of objects) {
+        for (const [key, value] of Object.entries(source.userData)) {
+          if (objects.has(value)) copy.userData[key] = objects.get(value);
+          else if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) copy.userData[key] = value;
+        }
+      }
+      result.position.set(0,0,0);
+      return result;
+    }
+    function stackSeparation() {
+      const diameter = data => Math.max(...['shellDiameter', 'channelDiameter', 'bonnetDiameter']
+        .map(key => Number(data?.dimensions?.[key]) || 1.098));
+      return (diameter(lowerDesign) + diameter(stackState?.data)) / 2 + (stackState?.gap || 0);
+    }
+    function positionStackedEquipment() {
+      if (!stackState) { heatExchanger.position.set(0,0,0); return; }
+      const height = stackSeparation(), x = stackState.offsetX || 0;
+      heatExchanger.position.set(editingLevel === 'upper' ? x : 0, editingLevel === 'upper' ? height : 0, 0);
+      if (companionGroup) companionGroup.position.set(editingLevel === 'lower' ? x : 0, editingLevel === 'lower' ? height : 0, 0);
+      document.getElementById('save-equipment').textContent = 'GUARDAR CONJUNTO · TAG INFERIOR: ' + (lowerDesign?.nameplate || 'Sin TAG');
+    }
+    function updateStackControls() {
+      document.getElementById('stack-enabled').checked = !!stackState;
+      document.getElementById('stack-options').hidden = !stackState;
+      document.getElementById('stack-level').value = editingLevel;
+      document.getElementById('stack-gap').value = stackState?.gap ?? .4;
+      document.getElementById('stack-offset-x').value = stackState?.offsetX ?? 0;
+      if (!stackState) document.getElementById('save-equipment').textContent = 'GUARDAR EQUIPO EN SHEETS';
+    }
+    function refreshAssemblyView() {
+      const previouslyLoading = loading;
+      loading = true; rebuildingStack = true;
+      deselectNozzle();
+      disposeCompanion();
+      heatExchanger.position.set(0,0,0);
+      try {
+        if (stackState) {
+          const inactive = editingLevel === 'lower' ? stackState.data : lowerDesign;
+          const active = editingLevel === 'lower' ? lowerDesign : stackState.data;
+          loadExchangerData(inactive);
+          companionGroup = cloneEquipmentForAssembly(heatExchanger);
+          assemblyGroup.add(companionGroup);
+          loadExchangerData(active);
+          positionStackedEquipment();
+        } else loadExchangerData(lowerDesign);
+        updateStackControls();
+      } finally { loading = previouslyLoading; rebuildingStack = false; }
+    }
+    function loadAssemblyDesign(data) {
+      const {stackedEquipment, ...base} = data;
+      lowerDesign = base;
+      stackState = stackedEquipment?.data ? {
+        gap: Math.min(5, Math.max(0, Number(stackedEquipment.gap) || 0)),
+        offsetX: Math.min(20, Math.max(-20, Number(stackedEquipment.offsetX) || 0)),
+        data: {...stackedEquipment.data}
+      } : null;
+      editingLevel = 'lower';
+      refreshAssemblyView();
+      if (stackState) {
+        controls.target.y = stackSeparation() / 2;
+        camera.position.set(8, stackSeparation() + 4, 12);
+        controls.update();
+      }
+    }
+    document.getElementById('stack-enabled').addEventListener('change', event => {
+      if (readOnly) return;
+      collectAssemblyDesign();
+      if (event.target.checked) {
+        lowerDesign = collectCurrentDesign();
+        const upper = JSON.parse(JSON.stringify(lowerDesign));
+        const tag = upper.nameplate || 'EQUIPO';
+        upper.nameplate = /A$/i.test(tag) ? tag.slice(0,-1)+'B' : /1$/.test(tag) ? tag.slice(0,-1)+'2' : tag+' B';
+        stackState = {gap:.4, offsetX:0, data:upper};
+      } else stackState = null;
+      editingLevel = 'lower';
+      refreshAssemblyView();
+      controls.target.y = stackState ? stackSeparation()/2 : 0;
+      controls.update();
+      syncStateToParent();
+    });
+    document.getElementById('stack-level').addEventListener('change', event => {
+      if (!stackState || readOnly) return;
+      collectAssemblyDesign();
+      editingLevel = event.target.value;
+      refreshAssemblyView(); syncStateToParent();
+    });
+    for (const [id, field, low, high] of [['stack-gap','gap',0,5], ['stack-offset-x','offsetX',-20,20]]) {
+      document.getElementById(id).addEventListener('change', event => {
+        if (!stackState || readOnly) return;
+        const value = Number(event.target.value);
+        if (!Number.isFinite(value)) return;
+        stackState[field] = Math.max(low, Math.min(high, value));
+        event.target.value = stackState[field];
+        syncStateToParent();
+      });
+    }
+    document.getElementById('stack-import-button').addEventListener('click', () => {
+      if (!stackState || readOnly) return;
+      const tag = document.getElementById('stack-import').value;
+      if (!availableStackModels[tag]) return;
+      collectAssemblyDesign();
+      const {stackedEquipment, ...data} = availableStackModels[tag];
+      if ((data.nameplate || tag).trim().toUpperCase() === (lowerDesign.nameplate || '').trim().toUpperCase()) {
+        document.getElementById('save-status').textContent = 'Selecciona un TAG distinto al equipo inferior.';
+        return;
+      }
+      stackState.data = JSON.parse(JSON.stringify({...data, nameplate: data.nameplate || tag}));
+      editingLevel = 'upper'; refreshAssemblyView(); syncStateToParent();
+    });
     let reportCaptureSent = false;
     function captureReportView(captureKey) {
       const width = 1600, height = 700, aspect = width / height;
-      heatExchanger.updateMatrixWorld(true);
-      const bounds = new THREE.Box3().setFromObject(heatExchanger);
+      assemblyGroup.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(assemblyGroup);
       const center = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
       const halfHeight = Math.max(size.y / 2, size.x / (2 * aspect), 0.5) * 1.08;
@@ -2530,7 +2742,7 @@
         }
       }
       const labels = [];
-      heatExchanger.traverse(obj => {
+      assemblyGroup.traverse(obj => {
         if (obj.setReportStyle && obj.userData.labelLeader) {
           const leader = obj.userData.labelLeader;
           const ancestors = [];
@@ -2565,7 +2777,7 @@
       }
 
       function layoutReportLabels() {
-        heatExchanger.updateMatrixWorld(true);
+        assemblyGroup.updateMatrixWorld(true);
         const placed = [];
         const active = labels.filter(saved => saved.sprite.visible).map(saved => {
           const point = saved.sprite.getWorldPosition(new THREE.Vector3()).project(reportCamera);
@@ -2596,10 +2808,10 @@
           positions.needsUpdate = true;
           leader.geometry.computeBoundingSphere();
         }
-        heatExchanger.updateMatrixWorld(true);
+        assemblyGroup.updateMatrixWorld(true);
       }
       try {
-        heatExchanger.traverse(obj => obj.setReportStyle?.(true));
+        assemblyGroup.traverse(obj => obj.setReportStyle?.(true));
         reportRenderer.setPixelRatio(2);
         reportRenderer.setSize(width, height);
         reportRenderer.setClearColor(0xffffff, 1);
@@ -2628,7 +2840,7 @@
           saved.light.intensity = saved.intensity;
           saved.light.updateMatrixWorld(true);
         }
-        heatExchanger.traverse(obj => obj.setReportStyle?.(false));
+        assemblyGroup.traverse(obj => obj.setReportStyle?.(false));
         for (const saved of labels) {
           saved.sprite.updateText(saved.text);
           saved.sprite.position.copy(saved.position);
@@ -2646,11 +2858,17 @@
     }
     window.exchangerBridge.attach(args => {
       readOnly = Boolean(args.readonly);
+      availableStackModels = args.stack_models || {};
+      const importSelect = document.getElementById('stack-import');
+      const previousImport = importSelect.value;
+      importSelect.replaceChildren(new Option('Seleccionar TAG…', ''),
+        ...Object.keys(availableStackModels).sort().map(tag => new Option(tag, tag)));
+      importSelect.value = previousImport;
       window.exchangerBridge.setReadOnly(readOnly);
       document.getElementById('save-equipment').style.display = args.demo ? 'none' : '';
       if (!initialized) {
         loading = true;
-        loadExchangerData(args.initial_data);
+        loadAssemblyDesign(args.initial_data);
         loading = false;
         initialized = true;
         document.getElementById('save-equipment').disabled = readOnly || Boolean(args.demo);

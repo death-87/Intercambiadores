@@ -274,7 +274,7 @@ def cargar_datos():
     return data
 
 
-def validar_diseno(data):
+def validar_diseno(data, _nivel=0):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
     if data.get("model", "A") not in ("A", "B", "C", "D", "E"):
@@ -301,6 +301,20 @@ def validar_diseno(data):
             raise ValueError(f"{field} debe ser texto")
     if data.get("nameplateSide", "front") not in {"front", "rear"}:
         raise ValueError("cara del nameplate inválida")
+    apilado = data.get("stackedEquipment")
+    if apilado is not None:
+        if _nivel >= 1 or not isinstance(apilado, dict) or not isinstance(apilado.get("data"), dict):
+            raise ValueError("el conjunto admite un solo equipo superior")
+        for campo, limites in (("gap", (0, 5)), ("offsetX", (-20, 20))):
+            valor = apilado.get(campo, .4 if campo == "gap" else 0)
+            if type(valor) not in (int, float) or not math.isfinite(valor) or not limites[0] <= valor <= limites[1]:
+                raise ValueError(f"{campo} del conjunto fuera de rango")
+        validar_diseno(apilado["data"], _nivel=1)
+        inferior, superior = normalizar(data.get("nameplate", "")), normalizar(apilado["data"].get("nameplate", ""))
+        if inferior and not superior:
+            raise ValueError("el equipo superior necesita su propio TAG")
+        if inferior and inferior == superior:
+            raise ValueError("los dos equipos deben tener TAG distintos")
     for n in data["nozzles"]:
         if not isinstance(n, dict):
             raise ValueError("boquilla inválida")
@@ -909,20 +923,24 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         elementos.append(tabla_roscas)
     else:
         elementos.append(p("No hay conexiones roscadas registradas.", body))
+    titulo_vistas = "VISTA DEL CONJUNTO" if config and config.get("stackedEquipment") else "VISTA DEL EQUIPO"
+    if config and config.get("stackedEquipment") and (imagen_modelo or imagen_posterior):
+        superior = config["stackedEquipment"]["data"].get("nameplate", "Sin TAG")
+        elementos += [Spacer(1, 4 * mm), p(f"Conjunto: {tag} (inferior) + {superior} (superior). Los datos y conteos de esta ficha corresponden a {tag}.", small)]
     if imagen_modelo:
         imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
-            Paragraph("VISTA DEL EQUIPO · NS (NEAR SIDE)", section_style), imagen]))
+            Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
     if imagen_posterior:
         imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
-            Paragraph("VISTA DEL EQUIPO · FS (FAR SIDE)", section_style), imagen]))
+            Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v20"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v21"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1375,7 +1393,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v20"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v21"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1515,7 +1533,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v20"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v21"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
