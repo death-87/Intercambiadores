@@ -67,6 +67,7 @@
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
 <div id="stack-controls" style="margin:8px 0;padding:7px;border:1px solid #475569;border-radius:5px">
+  <label>Posición de este equipo al crear el conjunto:</label><select id="stack-start-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select>
   <label><input type="checkbox" id="stack-enabled"> Dos intercambiadores apilados</label>
   <div id="stack-options" hidden>
     <label>TAG del equipo inferior:</label><input type="text" id="stack-tag-lower">
@@ -74,9 +75,10 @@
     <label>Equipo que estás editando:</label><select id="stack-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select>
     <label>Separación entre cuerpos (m):</label><input type="number" id="stack-gap" value="0.40" min="0" max="5" step="0.05">
     <label>Desplazamiento X del superior (m):</label><input type="number" id="stack-offset-x" value="0" min="-20" max="20" step="0.05">
-    <label>Importar diseño guardado como superior:</label><select id="stack-import"><option value="">Seleccionar TAG…</option></select>
-    <button id="stack-import-button" type="button">Importar equipo superior</button>
-    <small>Al activar se crea una copia editable del inferior. Cada nivel tiene sus propias boquillas y dimensiones. Ambos TAG quedan disponibles por separado. El informe usa únicamente las boquillas del TAG elegido.</small>
+    <label>Ubicación del equipo que vas a importar:</label><select id="stack-import-level"><option value="upper">Superior</option><option value="lower">Inferior</option></select>
+    <label>Importar diseño guardado:</label><select id="stack-import"><option value="">Seleccionar TAG…</option></select>
+    <button id="stack-import-button" type="button">Importar equipo seleccionado</button>
+    <small>Elige si el equipo actual va arriba o abajo. Al activar se crea una copia editable para el otro nivel. Cada nivel tiene sus propias boquillas y dimensiones. Ambos TAG quedan disponibles por separado. El informe usa únicamente las boquillas del TAG elegido.</small>
   </div>
 </div>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option></select></div>
@@ -2639,6 +2641,8 @@
     function updateStackControls() {
       document.getElementById('stack-enabled').checked = !!stackState;
       document.getElementById('stack-options').hidden = !stackState;
+      document.getElementById('stack-start-level').disabled = !!stackState || readOnly;
+      document.getElementById('stack-import-level').value = editingLevel === 'upper' ? 'lower' : 'upper';
       document.getElementById('stack-level').value = editingLevel;
       document.getElementById('stack-tag-lower').value = lowerDesign?.nameplate || '';
       document.getElementById('stack-tag-upper').value = stackState?.data.nameplate || '';
@@ -2689,13 +2693,17 @@
       if (readOnly) return;
       collectAssemblyDesign();
       if (event.target.checked) {
-        lowerDesign = collectCurrentDesign();
-        const upper = JSON.parse(JSON.stringify(lowerDesign));
-        const tag = upper.nameplate || 'EQUIPO';
-        upper.nameplate = /A$/i.test(tag) ? tag.slice(0,-1)+'B' : /1$/.test(tag) ? tag.slice(0,-1)+'2' : tag+' B';
-        stackState = {gap:.4, offsetX:0, data:upper};
-      } else stackState = null;
-      editingLevel = 'lower';
+        const current = collectCurrentDesign();
+        const other = JSON.parse(JSON.stringify(current));
+        const startUpper = document.getElementById('stack-start-level').value === 'upper';
+        const tag = other.nameplate || 'EQUIPO';
+        other.nameplate = startUpper
+          ? (/B$/i.test(tag) ? tag.slice(0,-1)+'A' : /2$/.test(tag) ? tag.slice(0,-1)+'1' : tag+' A')
+          : (/A$/i.test(tag) ? tag.slice(0,-1)+'B' : /1$/.test(tag) ? tag.slice(0,-1)+'2' : tag+' B');
+        lowerDesign = startUpper ? other : current;
+        stackState = {gap:.4, offsetX:0, data:startUpper ? current : other};
+        editingLevel = startUpper ? 'upper' : 'lower';
+      } else { stackState = null; editingLevel = 'lower'; }
       refreshAssemblyView();
       controls.target.y = stackState ? stackSeparation()/2 : 0;
       controls.update();
@@ -2735,12 +2743,16 @@
       const source = availableStackModels[tag];
       const selected = source.stackedEquipment?.data;
       const {stackedEquipment, ...data} = selected && String(selected.nameplate).trim().toUpperCase() === tag.trim().toUpperCase() ? selected : source;
-      if ((data.nameplate || tag).trim().toUpperCase() === (lowerDesign.nameplate || '').trim().toUpperCase()) {
-        document.getElementById('save-status').textContent = 'Selecciona un TAG distinto al equipo inferior.';
+      const destination = document.getElementById('stack-import-level').value;
+      const other = destination === 'lower' ? stackState.data : lowerDesign;
+      if ((data.nameplate || tag).trim().toUpperCase() === (other.nameplate || '').trim().toUpperCase()) {
+        document.getElementById('save-status').textContent = 'Selecciona un TAG distinto al equipo del otro nivel.';
         return;
       }
-      stackState.data = JSON.parse(JSON.stringify({...data, nameplate: data.nameplate || tag}));
-      editingLevel = 'upper'; refreshAssemblyView(); syncStateToParent();
+      const imported = JSON.parse(JSON.stringify({...data, nameplate: data.nameplate || tag}));
+      if (destination === 'lower') lowerDesign = imported;
+      else stackState.data = imported;
+      refreshAssemblyView(); syncStateToParent();
     });
     let reportCaptureSent = false;
     function captureReportView(captureKey) {
