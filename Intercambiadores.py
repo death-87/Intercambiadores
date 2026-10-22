@@ -433,6 +433,20 @@ def cargar_disenos():
             db[clave] = {"tag": tag, "data": cfg}
         except (ValueError, TypeError) as exc:
             errores[clave] = f"{tag}: {exc}"
+    propietarios = {}
+    for owner, entry in list(db.items()):
+        upper = entry["data"].get("stackedEquipment", {}).get("data")
+        if not upper:
+            continue
+        tag = upper["nameplate"].strip()
+        key = normalizar(tag)
+        if key in propietarios or key == owner:
+            errores[key] = f"TAG superior duplicado en conjuntos: {tag}"
+            db.pop(key, None)
+            continue
+        propietarios[key] = owner
+        if key not in errores:
+            db[key] = {"tag": tag, "data": {**upper, "assemblyContext": {"lower": entry["data"]}}}
     return db, errores
 
 
@@ -923,10 +937,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         elementos.append(tabla_roscas)
     else:
         elementos.append(p("No hay conexiones roscadas registradas.", body))
-    titulo_vistas = "VISTA DEL CONJUNTO" if config and config.get("stackedEquipment") else "VISTA DEL EQUIPO"
-    if config and config.get("stackedEquipment") and (imagen_modelo or imagen_posterior):
-        superior = config["stackedEquipment"]["data"].get("nameplate", "Sin TAG")
-        elementos += [Spacer(1, 4 * mm), p(f"Conjunto: {tag} (inferior) + {superior} (superior). Los datos y conteos de esta ficha corresponden a {tag}.", small)]
+    conjunto = (config or {}).get("assemblyContext", {}).get("lower") or config or {}
+    titulo_vistas = "VISTA DEL CONJUNTO" if conjunto.get("stackedEquipment") else "VISTA DEL EQUIPO"
+    if conjunto.get("stackedEquipment") and (imagen_modelo or imagen_posterior):
+        inferior = conjunto.get("nameplate", "—")
+        superior = conjunto["stackedEquipment"]["data"].get("nameplate", "—")
+        elementos.append(p(f"Inferior: {inferior} · Superior: {superior}. Boquillas y datos de esta ficha: {tag}.", small))
     if imagen_modelo:
         imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
@@ -940,7 +956,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v21"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v23"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1393,7 +1409,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v21"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v23"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1533,7 +1549,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v21"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v23"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
