@@ -527,10 +527,27 @@ def cantidad_entera(valor):
         return None
 
 
+def sin_roscas_declarado(registro):
+    columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
+    columna = buscar_columna(columnas, ("COMENTARIO", "COMENTARIOS"), ("COMENTARIO",))
+    return columna is not None and texto_sin_conexiones(registro[columna])
+
+
+def estado_conexiones_roscadas(registro, cantidad, config=None):
+    declarado = sin_roscas_declarado(registro)
+    if declarado or cantidad == 0:
+        if (cantidad is not None and cantidad > 0) or registro_roscas(config, registro):
+            return "Revisar discrepancia"
+        return "Sin conexiones roscadas"
+    return "Con conexiones roscadas" if cantidad is not None and cantidad > 0 else "Sin información"
+
+
 def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
     n = cantidad_entera(registro[col_roscadas]) if col_roscadas else None
     if n is not None:
         return n, "Total declarado en planilla"
+    if sin_roscas_declarado(registro) and not registro_roscas(config, registro):
+        return 0, "Sin conexiones roscadas declarado en comentarios"
     if config is None:
         conexiones = filas_roscas_planilla(registro)
         return (len(conexiones), "Contado desde las columnas H–AC de Hoja 1") if conexiones else (
@@ -871,6 +888,23 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     elementos += [cabecera, Spacer(1, 7 * mm)]
 
     conexiones = registro_roscas(config, registro)
+    estado_roscas = estado_conexiones_roscadas(registro, cantidad, config)
+    if estado_roscas == "Sin conexiones roscadas" or sin_roscas_declarado(registro) or (cantidad == 0 and conexiones):
+        conflicto = estado_roscas == "Revisar discrepancia"
+        destacado_style = ParagraphStyle("hx_sin_roscas", parent=body, fontName="Helvetica-Bold",
+            fontSize=13, leading=17, textColor=navy)
+        mensaje = "REVISAR · DISCREPANCIA EN CONEXIONES ROSCADAS" if conflicto else "EQUIPO SIN CONEXIONES ROSCADAS"
+        detalle = ("El comentario o el total cero no coinciden con las conexiones registradas. Revisar antes de dar por verificada la ausencia de roscas."
+            if conflicto else "Ausencia de conexiones roscadas declarada en comentarios de Hoja 1."
+            if sin_roscas_declarado(registro) else "Cantidad registrada de conexiones roscadas: 0.")
+        destacado = Table([[p(mensaje, destacado_style)], [p(detalle, body)]], colWidths=[180 * mm])
+        destacado.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF2CC") if conflicto else pale),
+            ("BOX", (0, 0), (-1, -1), 1.5, colors.HexColor("#C58A18") if conflicto else teal),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        elementos += [KeepTogether([destacado, Spacer(1, 5 * mm)])]
     total = cantidad if cantidad is not None else "No disponible"
     total_label_style = ParagraphStyle("hx_total_label", parent=body,
                                       fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=navy)
@@ -1312,7 +1346,18 @@ def main():
 
     if col_tipo_sap:
         df[col_tipo_sap] = df[col_tipo_sap].map(lambda v: str(v).strip().upper() if informado(v) else "Sin información")
+    with st.sidebar.expander("Criterio de conteo"):
+        incluir_bonete = st.checkbox("Incluir venteo y drenaje de diseños antiguos", value=True)
+        st.caption("Los diseños nuevos ya los incluyen en la lista general. Un total válido en la planilla tiene prioridad.")
+    estados_roscas = pd.Series({i: estado_conexiones_roscadas(row,
+        contar_conexiones(row, col_roscadas, db.get(normalizar(row[col_equipo]), {}).get("data"), incluir_bonete)[0],
+        db.get(normalizar(row[col_equipo]), {}).get("data")) for i, row in df.iterrows()}, dtype=str)
     filtrado = df.copy()
+    filtro_roscas = st.sidebar.selectbox("Conexiones roscadas", ["Todos", "Sin conexiones roscadas",
+        "Con conexiones roscadas", "Revisar discrepancia", "Sin información"])
+    if filtro_roscas != "Todos":
+        filtrado = filtrado.loc[estados_roscas.loc[filtrado.index] == filtro_roscas]
+
     busqueda = st.sidebar.text_input("Buscar equipo", placeholder="TAG, unidad o comentario…").strip()
     if busqueda:
         columnas_busqueda = [c for c in (col_equipo, col_unidad, col_comentario) if c]
@@ -1328,9 +1373,6 @@ def main():
             selecciones.append(elegido)
             if elegido is not None:
                 filtrado = filtrado[filtrado[col] == elegido]
-    with st.sidebar.expander("Criterio de conteo"):
-        incluir_bonete = st.checkbox("Incluir venteo y drenaje de diseños antiguos", value=True)
-        st.caption("Los diseños nuevos ya los incluyen en la lista general. Un total válido en la planilla tiene prioridad.")
     informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacionales, estado, incluir_bonete)
     cantidades = []
     for _, row in filtrado.iterrows():
@@ -1353,6 +1395,8 @@ def main():
         ("Diseños 3D", registrados if registrados is not None else "—", "Registros filtrados con diseño válido" if disenos_disponibles else "Consulta 3D no disponible"),
         ("Conexiones roscadas", sum(conocidos) if conocidos else "—", f"Conteo conocido en {len(conocidos)} de {len(filtrado)} registros"),
     ])
+    sin_roscas = int((estados_roscas.loc[filtrado.index] == "Sin conexiones roscadas").sum())
+    st.info(f"Equipos sin conexiones roscadas: {sin_roscas} de {len(filtrado)} registros filtrados. Puedes verlos con el filtro Conexiones roscadas.")
     if df[col_equipo].map(normalizar).duplicated().any():
         st.warning("Hay TAG repetidos en Hoja 1. Los gráficos y totales cuentan filas; revisa duplicados si cada equipo debe ocupar una sola fila.")
     columnas_inventario = [c for c in df.columns if not es_columna_auxiliar(c)]
@@ -1368,6 +1412,7 @@ def main():
             visibles = st.multiselect("Campos de la planilla", columnas_inventario, default=defaults)
             st.caption("Las columnas auxiliares Cantidad, Conn, Conn1, Conn2, etc. se ocultan del inventario.")
         mostrar = filtrado[visibles].copy()
+        mostrar.insert(0, "Estado de conexiones roscadas", estados_roscas.loc[filtrado.index])
         mostrar.insert(0, "Diseño 3D", filtrado[col_equipo].map(estado))
         firma = hashlib.sha256(json.dumps([selecciones, visibles, filtrado.index.tolist(), filtrado[col_equipo].tolist()], ensure_ascii=False).encode()).hexdigest()[:16]
         evento = st.dataframe(mostrar, hide_index=True, use_container_width=True,
@@ -1425,6 +1470,11 @@ def main():
                     f'<h2>{escape(tag)}</h2><div class="hx-detail-meta"><span>{escape(unidad)}</span>'
                     f'<span class="hx-pill">{escape(estatus)}</span>'
                     f'<span class="hx-pill">3D · {escape(estado(tag))}</span></div></div>', unsafe_allow_html=True)
+        clasificacion_roscas = estado_conexiones_roscadas(registro, cantidad, config)
+        if clasificacion_roscas == "Sin conexiones roscadas":
+            st.success("EQUIPO SIN CONEXIONES ROSCADAS · " + ("Declarado en los comentarios de Hoja 1." if sin_roscas_declarado(registro) else "Cantidad registrada: 0."))
+        elif clasificacion_roscas == "Revisar discrepancia":
+            st.warning("Revisar: el comentario sin conexiones roscadas o el total cero contradice las conexiones registradas.")
         detalles, enlaces = st.columns([2, 1])
         with detalles:
             seccion("Información del equipo", "Datos registrados en la planilla de inspección.")
