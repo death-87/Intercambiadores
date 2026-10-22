@@ -63,18 +63,20 @@
   <button id="toggle-equipment-panel" type="button" aria-controls="ui-container" aria-expanded="true" hidden>Ocultar datos equipo</button>
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
-<div class="input-group"><label>TAG / Nameplate:</label><input id="nameplate-input" type="text"></div>
+<div class="input-group"><label>TAG del equipo seleccionado:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
 <div id="stack-controls" style="margin:8px 0;padding:7px;border:1px solid #475569;border-radius:5px">
   <label><input type="checkbox" id="stack-enabled"> Dos intercambiadores apilados</label>
   <div id="stack-options" hidden>
+    <label>TAG del equipo inferior:</label><input type="text" id="stack-tag-lower">
+    <label>TAG del equipo superior:</label><input type="text" id="stack-tag-upper">
     <label>Equipo que estás editando:</label><select id="stack-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select>
     <label>Separación entre cuerpos (m):</label><input type="number" id="stack-gap" value="0.40" min="0" max="5" step="0.05">
     <label>Desplazamiento X del superior (m):</label><input type="number" id="stack-offset-x" value="0" min="-20" max="20" step="0.05">
     <label>Importar diseño guardado como superior:</label><select id="stack-import"><option value="">Seleccionar TAG…</option></select>
     <button id="stack-import-button" type="button">Importar equipo superior</button>
-    <small>Al activar se crea una copia editable del inferior. Cada nivel tiene sus propias boquillas y dimensiones. Guardar conserva el conjunto bajo el TAG inferior; no crea otra fila de inventario.</small>
+    <small>Al activar se crea una copia editable del inferior. Cada nivel tiene sus propias boquillas y dimensiones. Ambos TAG quedan disponibles por separado. El informe usa únicamente las boquillas del TAG elegido.</small>
   </div>
 </div>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option></select></div>
@@ -650,6 +652,10 @@
       if (loading || !initialized || readOnly || rebuildingStack) return;
       const exportData = collectAssemblyDesign();
       positionStackedEquipment();
+      if (stackState) {
+        document.getElementById('stack-tag-lower').value = lowerDesign.nameplate || '';
+        document.getElementById('stack-tag-upper').value = stackState.data.nameplate || '';
+      }
       const eventId = sessionId + ':' + (++revision);
       if (action === 'save') pendingSave = eventId;
       send('streamlit:setComponentValue', {dataType: 'json', value: {
@@ -2631,6 +2637,8 @@
       document.getElementById('stack-enabled').checked = !!stackState;
       document.getElementById('stack-options').hidden = !stackState;
       document.getElementById('stack-level').value = editingLevel;
+      document.getElementById('stack-tag-lower').value = lowerDesign?.nameplate || '';
+      document.getElementById('stack-tag-upper').value = stackState?.data.nameplate || '';
       document.getElementById('stack-gap').value = stackState?.gap ?? .4;
       document.getElementById('stack-offset-x').value = stackState?.offsetX ?? 0;
       if (!stackState) document.getElementById('save-equipment').textContent = 'GUARDAR EQUIPO EN SHEETS';
@@ -2654,7 +2662,11 @@
         updateStackControls();
       } finally { loading = previouslyLoading; rebuildingStack = false; }
     }
-    function loadAssemblyDesign(data) {
+    function loadAssemblyDesign(data, selectedTag = '') {
+      if (data.assemblyContext?.lower) {
+        selectedTag = data.nameplate;
+        data = data.assemblyContext.lower;
+      }
       const {stackedEquipment, ...base} = data;
       lowerDesign = base;
       stackState = stackedEquipment?.data ? {
@@ -2662,7 +2674,7 @@
         offsetX: Math.min(20, Math.max(-20, Number(stackedEquipment.offsetX) || 0)),
         data: {...stackedEquipment.data}
       } : null;
-      editingLevel = 'lower';
+      editingLevel = stackState && String(selectedTag).trim().toUpperCase() === String(stackState.data.nameplate).trim().toUpperCase() ? 'upper' : 'lower';
       refreshAssemblyView();
       if (stackState) {
         controls.target.y = stackSeparation() / 2;
@@ -2686,6 +2698,16 @@
       controls.update();
       syncStateToParent();
     });
+    for (const level of ['lower', 'upper']) {
+      document.getElementById('stack-tag-' + level).addEventListener('change', event => {
+        if (!stackState || readOnly) return;
+        collectAssemblyDesign();
+        const design = level === 'lower' ? lowerDesign : stackState.data;
+        design.nameplate = event.target.value.trim();
+        refreshAssemblyView();
+        syncStateToParent();
+      });
+    }
     document.getElementById('stack-level').addEventListener('change', event => {
       if (!stackState || readOnly) return;
       collectAssemblyDesign();
@@ -2707,7 +2729,9 @@
       const tag = document.getElementById('stack-import').value;
       if (!availableStackModels[tag]) return;
       collectAssemblyDesign();
-      const {stackedEquipment, ...data} = availableStackModels[tag];
+      const source = availableStackModels[tag];
+      const selected = source.stackedEquipment?.data;
+      const {stackedEquipment, ...data} = selected && String(selected.nameplate).trim().toUpperCase() === tag.trim().toUpperCase() ? selected : source;
       if ((data.nameplate || tag).trim().toUpperCase() === (lowerDesign.nameplate || '').trim().toUpperCase()) {
         document.getElementById('save-status').textContent = 'Selecciona un TAG distinto al equipo inferior.';
         return;
@@ -2742,7 +2766,7 @@
         }
       }
       const labels = [];
-      assemblyGroup.traverse(obj => {
+      heatExchanger.traverse(obj => {
         if (obj.setReportStyle && obj.userData.labelLeader) {
           const leader = obj.userData.labelLeader;
           const ancestors = [];
@@ -2810,8 +2834,18 @@
         }
         assemblyGroup.updateMatrixWorld(true);
       }
+      const companionLabels = [];
+      companionGroup?.traverse(obj => {
+        if (!obj.userData.labelLeader) return;
+        companionLabels.push({obj, visible: obj.visible, leader: obj.userData.labelLeader,
+          leaderVisible: obj.userData.labelLeader.visible});
+      });
       try {
-        assemblyGroup.traverse(obj => obj.setReportStyle?.(true));
+        for (const saved of companionLabels) {
+          saved.obj.visible = false;
+          saved.leader.visible = false;
+        }
+        heatExchanger.traverse(obj => obj.setReportStyle?.(true));
         reportRenderer.setPixelRatio(2);
         reportRenderer.setSize(width, height);
         reportRenderer.setClearColor(0xffffff, 1);
@@ -2835,12 +2869,16 @@
           action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage
         }});
       } finally {
+        for (const saved of companionLabels) {
+          saved.obj.visible = saved.visible;
+          saved.leader.visible = saved.leaderVisible;
+        }
         for (const saved of reportLights) {
           saved.light.position.copy(saved.position);
           saved.light.intensity = saved.intensity;
           saved.light.updateMatrixWorld(true);
         }
-        assemblyGroup.traverse(obj => obj.setReportStyle?.(false));
+        heatExchanger.traverse(obj => obj.setReportStyle?.(false));
         for (const saved of labels) {
           saved.sprite.updateText(saved.text);
           saved.sprite.position.copy(saved.position);
@@ -2868,7 +2906,7 @@
       document.getElementById('save-equipment').style.display = args.demo ? 'none' : '';
       if (!initialized) {
         loading = true;
-        loadAssemblyDesign(args.initial_data);
+        loadAssemblyDesign(args.initial_data, args.selected_tag);
         loading = false;
         initialized = true;
         document.getElementById('save-equipment').disabled = readOnly || Boolean(args.demo);
