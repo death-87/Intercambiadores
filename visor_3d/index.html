@@ -202,7 +202,7 @@
       <div class="input-group" id="edit-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="edit-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
     </div>
-    <div id="edit-elbow-controls" class="input-group"><label>Recto después del codo (m):</label><input id="edit-elbow-outlet-length" type="number" min="0" max="10" step="0.05" value="0">
+    <div id="edit-elbow-controls" class="input-group">
       <label>Forma de la salida:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90°</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
       <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="perimeter">Perímetro del cuerpo del codo · giro circular NS/FS</option><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Para girar NS/FS circularmente sobre la pared, elige Perímetro del cuerpo del codo y ajusta sus ángulos. X/Y/Z mantienen las direcciones de referencia.</small>
@@ -215,6 +215,11 @@
       <div class="input-group" id="edit-neck-control">
         <label>Largo del niple / recto antes del codo: <output id="edit-neck-length-value">0.30</output> m</label>
         <input type="range" id="edit-neck-length" min="0.10" max="10.00" step="0.05" value="0.30">
+      </div>
+      <div class="input-group" id="edit-outlet-length-control">
+        <label for="edit-elbow-outlet-length">Largo del niple / recto después del codo (m):</label>
+        <input id="edit-elbow-outlet-length" type="number" min="0" max="10" step="0.05" value="0">
+        <small>Se aplica cuando la salida tiene un codo de 90°.</small>
       </div>
 
       <div class="input-group">
@@ -359,7 +364,7 @@
       <div class="input-group" id="new-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="new-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
     </div>
-    <div id="new-elbow-controls" class="input-group"><label>Recto después del codo (m):</label><input id="new-elbow-outlet-length" type="number" min="0" max="10" step="0.05" value="0">
+    <div id="new-elbow-controls" class="input-group">
       <label>Forma de la salida:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90°</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
       <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="perimeter">Perímetro del cuerpo del codo · giro circular NS/FS</option><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Para girar NS/FS circularmente sobre la pared, elige Perímetro del cuerpo del codo y ajusta sus ángulos. X/Y/Z mantienen las direcciones de referencia.</small>
@@ -373,6 +378,11 @@
       <label>Largo del niple / recto antes del codo: <output id="new-neck-length-value">0.30</output> m</label>
       <input type="range" id="new-neck-length" min="0.10" max="10.00" step="0.05" value="0.30">
     </div>
+      <div class="input-group" id="new-outlet-length-control">
+        <label for="new-elbow-outlet-length">Largo del niple / recto después del codo (m):</label>
+        <input id="new-elbow-outlet-length" type="number" min="0" max="10" step="0.05" value="0">
+        <small>Se aplica cuando la salida tiene un codo de 90°.</small>
+      </div>
     
     <div class="input-group">
       <select id="new-nz-body"><option value="shellLower" disabled>Tubo inferior · horquilla</option>
@@ -2619,6 +2629,7 @@
     const editSubRearTag = document.getElementById('edit-sub-rear-tag');
 
     function updateElbowControls(prefix, type) {
+      document.getElementById(prefix+'-outlet-length-control').hidden = type !== 'flanged';
       document.getElementById(`${prefix}-elbow-controls`).hidden = type !== 'flanged';
       document.getElementById(`${prefix}-elbow-angle`).disabled = document.getElementById(`${prefix}-elbow`).value !== 'elbow';
       document.getElementById(`${prefix}-side-mount`).disabled = document.getElementById(`${prefix}-elbow`).value !== 'elbow';
