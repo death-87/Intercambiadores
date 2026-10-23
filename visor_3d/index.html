@@ -110,7 +110,8 @@
     <small>Una misma medida para ambas bridas cuadradas. Mínimo 25,4 mm. 0 = automático común.</small>
     <label><input type="checkbox" id="hairpin-spool-upper-enabled"> Agregar carrete o niple al tubo superior</label>
     <label>Pieza agregada al tubo superior:</label><select id="hairpin-spool-upper-piece"><option value="spool">Carrete con bridas en ambos extremos</option><option value="nipple">Niple simple · sin brida adicional</option></select>
-    <label>Forma de las caras · horquilla y carrete superior:</label><select id="hairpin-spool-upper-shape"><option value="round">Circular</option><option value="square">Cuadrada · medida de la horquilla</option></select><small>El flange de la horquilla y ambas bridas del carrete coinciden. La cara cuadrada usa el lado exterior común, en mm.</small>
+    <label>Forma del flange de unión a la horquilla · superior:</label><select id="hairpin-spool-upper-shape"><option value="round">Circular</option><option value="square">Cuadrada · medida de la horquilla</option></select><small>La brida de entrada del carrete coincide con el flange de la horquilla.</small>
+    <label for="hairpin-spool-upper-outlet-shape">Forma del flange en el extremo lejano · superior:</label><select id="hairpin-spool-upper-outlet-shape"><option value="auto">Igual que la unión a la horquilla</option><option value="round">Circular</option><option value="square">Cuadrada · medida común</option></select><small>El extremo lejano se elige por separado. Si es cuadrado, usa el lado exterior común en mm.</small>
     <label>Recorrido del carrete superior:</label><select id="hairpin-spool-upper-bend"><option value="0">Recto</option><option value="45">45°</option><option value="90">90°</option><option value="180">U · 180°</option></select>
     <label>Largo del tramo central / curva · superior (m):</label><input id="hairpin-spool-upper-length" type="number" min="0.2" max="10" step="0.05" value="0.8">
     <label>Recto antes de la curva · superior (m):</label><input id="hairpin-spool-upper-inlet" type="number" min="0" max="10" step="0.05" value="0">
@@ -121,7 +122,8 @@
     <small id="hairpin-spool-upper-info"></small>
     <label><input type="checkbox" id="hairpin-spool-lower-enabled"> Agregar carrete o niple al tubo inferior</label>
     <label>Pieza agregada al tubo inferior:</label><select id="hairpin-spool-lower-piece"><option value="spool">Carrete con bridas en ambos extremos</option><option value="nipple">Niple simple · sin brida adicional</option></select>
-    <label>Forma de las caras · horquilla y carrete inferior:</label><select id="hairpin-spool-lower-shape"><option value="round">Circular</option><option value="square">Cuadrada · medida de la horquilla</option></select><small>El flange de la horquilla y ambas bridas del carrete coinciden. La cara cuadrada usa el lado exterior común, en mm.</small>
+    <label>Forma del flange de unión a la horquilla · inferior:</label><select id="hairpin-spool-lower-shape"><option value="round">Circular</option><option value="square">Cuadrada · medida de la horquilla</option></select><small>La brida de entrada del carrete coincide con el flange de la horquilla.</small>
+    <label for="hairpin-spool-lower-outlet-shape">Forma del flange en el extremo lejano · inferior:</label><select id="hairpin-spool-lower-outlet-shape"><option value="auto">Igual que la unión a la horquilla</option><option value="round">Circular</option><option value="square">Cuadrada · medida común</option></select><small>El extremo lejano se elige por separado. Si es cuadrado, usa el lado exterior común en mm.</small>
     <label>Recorrido del carrete inferior:</label><select id="hairpin-spool-lower-bend"><option value="0">Recto</option><option value="45">45°</option><option value="90">90°</option><option value="180">U · 180°</option></select>
     <label>Largo del tramo central / curva · inferior (m):</label><input id="hairpin-spool-lower-length" type="number" min="0.2" max="10" step="0.05" value="0.8">
     <label>Recto antes de la curva · inferior (m):</label><input id="hairpin-spool-lower-inlet" type="number" min="0" max="10" step="0.05" value="0">
@@ -596,7 +598,7 @@
       let form=data.flangeShape||'auto',count=data.flangeBoltCount||0,size=data.flangeSquareSizeMM||0;
       if(currentModel==='H' && ['shell','shellLower'].includes(data.bodyPart) && data.pos==='axialPlus') {
         const prefix=data.bodyPart==='shell'?'hairpinSpoolUpper':'hairpinSpoolLower';
-        if(form==='auto') {form=currentDimensions[prefix+'Shape']||'round';if(!size) size=hairpinSquareSizeMM();}
+        if(form==='auto') {form=currentDimensions[prefix+'Enabled']!==false && !currentDimensions[prefix+'NippleOnly']?hairpinOutletShape(data.bodyPart==='shell'?'upper':'lower'):(currentDimensions[prefix+'Shape']||'round');if(!size) size=hairpinSquareSizeMM();}
         if(!count) count=currentDimensions[prefix+'Bolts']||0;
       }
       const dim=flangeDimensions(data.diaIndex,data.rating);
@@ -1314,6 +1316,7 @@
         boltCount:currentDimensions.hairpinBoltCount??24,
         spoolUpperRating:currentDimensions.hairpinSpoolUpperRating||'150#',spoolLowerRating:currentDimensions.hairpinSpoolLowerRating||'150#',
         spoolUpperBolts:currentDimensions.hairpinSpoolUpperBolts||0,spoolLowerBolts:currentDimensions.hairpinSpoolLowerBolts||0,
+        spoolUpperOutletShape:hairpinOutletShape('upper'),spoolLowerOutletShape:hairpinOutletShape('lower'),
         spoolUpperShape:currentDimensions.hairpinSpoolUpperShape||'round',spoolLowerShape:currentDimensions.hairpinSpoolLowerShape||'round',
         spoolUpperBend:bendFor('Upper'),spoolLowerBend:bendFor('Lower'),spoolUpperLength:upperLength,spoolLowerLength:lowerLength,
         spoolUpperRotation:currentDimensions.hairpinSpoolUpperRotation??0,spoolLowerRotation:currentDimensions.hairpinSpoolLowerRotation??180,headStyle:currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
@@ -1349,6 +1352,11 @@
       };
       return {...dim,...(form==='square'?squareFlangeSize(dim,squareSizeMM):{}),standard,diaIndex,rating,form,count:override||dim.bolts};
     }
+    function hairpinOutletShape(level) {
+      const prefix='hairpinSpool'+(level==='upper'?'Upper':'Lower');
+      const shape=currentDimensions[prefix+'OutletShape'];
+      return ['round','square'].includes(shape)?shape:(currentDimensions[prefix+'Shape']||'round');
+    }
     function hairpinSquareSizeMM() {
       const requested=currentDimensions.hairpinFlangeSquareSizeMM ?? (currentDimensions.hairpinSpoolUpperSquareSizeMM||currentDimensions.hairpinSpoolLowerSquareSizeMM||0);
       if(requested>0) return Math.max(25.4,requested);
@@ -1360,13 +1368,16 @@
       const p=hairpinLayout();
       const sizeInput=document.getElementById('hairpin-flange-square-size');
       sizeInput.value=currentDimensions.hairpinFlangeSquareSizeMM??0;
-      sizeInput.disabled=readOnly||!['Upper','Lower'].some(level=>currentDimensions['hairpinSpool'+level+'Shape']==='square');
+      sizeInput.disabled=readOnly||!['Upper','Lower'].some(level=>currentDimensions['hairpinSpool'+level+'Shape']==='square'||currentDimensions['hairpinSpool'+level+'OutletShape']==='square');
       for(const [level,radius,rating,count] of [['upper',p.upperRadius,p.spoolUpperRating,p.spoolUpperBolts],['lower',p.lowerRadius,p.spoolLowerRating,p.spoolLowerBolts]]) {
         document.getElementById('hairpin-spool-'+level+'-rating').value=rating;
         document.getElementById('hairpin-spool-'+level+'-bolts').value=count;
         const prefix=level==='upper'?'hairpinSpoolUpper':'hairpinSpoolLower',suffix=level==='upper'?'Upper':'Lower';
         const enabled=currentDimensions[prefix+'Enabled']!==false;
         document.getElementById('hairpin-spool-'+level+'-enabled').checked=enabled;
+        const outletInput=document.getElementById('hairpin-spool-'+level+'-outlet-shape');
+        outletInput.value=currentDimensions[prefix+'OutletShape']||'auto';
+        outletInput.disabled=!enabled||!!currentDimensions[prefix+'NippleOnly']||readOnly;
         document.getElementById('hairpin-spool-'+level+'-piece').value=currentDimensions[prefix+'NippleOnly']?'nipple':'spool';
         for(const key of ['piece','bend','length','rotation','inlet','outlet']) document.getElementById('hairpin-spool-'+level+'-'+key).disabled=!enabled||readOnly;
         document.getElementById('hairpin-spool-'+level+'-inlet').value=currentDimensions[prefix+'InletLength']||0;
@@ -1458,7 +1469,10 @@
         }
         const nippleOnly=sign>0?p.spoolUpperNippleOnly:p.spoolLowerNippleOnly;
         drawSpoolFlanges(0,0,bodyRadius,spec,start,!nippleOnly);
-        if(!nippleOnly) drawSpoolFlanges(0,0,bodyRadius,spec,end,false);
+        if(!nippleOnly) {
+          const outletSpec=hairpinSpoolFlangeSpec(bodyRadius,spec.rating,spec.count,hairpinOutletShape(level),hairpinSquareSizeMM());
+          drawSpoolFlanges(0,0,bodyRadius,outletSpec,end,false);
+        }
       }
       // Cabezal común con sección de cápsula que recibe ambos cuerpos.
       const shape=new THREE.Shape(),h=p.separation/2,circular=p.headContour==='circular';
@@ -1587,6 +1601,7 @@
         currentDimensions[prefix+'OutletLength']=Math.max(0,Math.min(10,Number(dimensions[prefix+'OutletLength'])||0));
         currentDimensions[prefix+'SquareSizeMM']=Math.max(0,Math.min(5000,Number(dimensions[prefix+'SquareSizeMM'])||0));
         currentDimensions[prefix+'Shape']=dimensions[prefix+'Shape']==='square'?'square':'round';
+        currentDimensions[prefix+'OutletShape']=['round','square'].includes(dimensions[prefix+'OutletShape'])?dimensions[prefix+'OutletShape']:'auto';
         currentDimensions[prefix+'Bend']=[0,45,90,180].includes(Number(dimensions[prefix+'Bend']))?Number(dimensions[prefix+'Bend']):0;
         currentDimensions[prefix+'Length']=Math.max(.2,Math.min(10,Number(dimensions[prefix+'Length'])||currentDimensions.bonnetLength));
         currentDimensions[prefix+'Rotation']=Number.isFinite(Number(dimensions[prefix+'Rotation']))?Number(dimensions[prefix+'Rotation']):(level==='Upper'?0:180);
@@ -3122,6 +3137,7 @@
           applyModel(currentModel,true);syncStateToParent();
         });
       }
+      document.getElementById('hairpin-spool-'+level+'-outlet-shape').addEventListener('change',event=>{if(readOnly)return;currentDimensions[prefix+'OutletShape']=event.target.value;applyModel(currentModel,true);syncStateToParent();});
       document.getElementById('hairpin-spool-'+level+'-rating').addEventListener('change',event=>{
         if(readOnly) return;
         currentDimensions[prefix+'Rating']=event.target.value;applyModel(currentModel,true);syncStateToParent();
