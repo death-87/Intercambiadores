@@ -10,6 +10,7 @@ import re
 import unicodedata
 import urllib.parse
 import uuid
+import zipfile
 from html import escape
 
 import pandas as pd
@@ -866,7 +867,22 @@ def aviso_diferencia_roscas(registro, config):
             f"Diferencia (modelo − Excel): {total_modelo - total_excel:+d}. Revisar los datos.")
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0):
+def pie_informe_planta(canvas, numero):
+    canvas.saveState()
+    canvas.setStrokeColor(colors.HexColor("#4D9824"))
+    canvas.line(15*mm, 14*mm, 195*mm, 14*mm)
+    canvas.setFillColor(colors.HexColor("#24451E"))
+    canvas.setFont("Helvetica", 7)
+    canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
+    canvas.drawRightString(195*mm, 10.5*mm, f"Página {numero}")
+    canvas.setFont("Helvetica", 6)
+    canvas.drawCentredString(105*mm, 6.5*mm,
+        "SERVICIO DE INSPECCIÓN Y EVALUACIÓN DE ACTIVOS FÍSICOS DE ENAP REFINERÍAS S.A.")
+    canvas.drawCentredString(105*mm, 3.2*mm, "CONTRATO N° AC 31104857")
+    canvas.restoreState()
+
+
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -896,6 +912,9 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         return Paragraph(escape(str(valor)), estilo)
 
     def pie(canvas, documento):
+        if informe_planta:
+            pie_informe_planta(canvas, pagina_inicial + documento.page)
+            return
         canvas.saveState()
         canvas.setStrokeColor(line)
         canvas.line(15 * mm, 12 * mm, 195 * mm, 12 * mm)
@@ -1131,12 +1150,7 @@ def preliminares_planta(equipos, planta, inicios):
         return t
     def pie(canvas, documento):
         canvas.saveState()
-        canvas.setStrokeColor(verde)
-        canvas.line(15*mm, 13*mm, 195*mm, 13*mm)
-        canvas.setFillColor(oscuro)
-        canvas.setFont("Helvetica", 8)
-        canvas.drawString(15*mm, 8*mm, "Elaborado por: Juan Navarrete A.")
-        canvas.drawRightString(195*mm, 8*mm, f"Página {documento.page}")
+        pie_informe_planta(canvas, documento.page)
         if documento.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
@@ -1201,7 +1215,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None):
         pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                           equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
-                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave))
+                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True)
         fichas.append(PdfReader(BytesIO(pdf)))
     paginas_previas = 3
     for intento in range(5):
@@ -1225,10 +1239,10 @@ def generar_pdf_planta(equipos, imagenes, planta=None):
             sello = BytesIO()
             canvas = pdfcanvas.Canvas(sello, pagesize=A4)
             canvas.setFillColor(colors.white)
-            canvas.rect(173*mm,5*mm,24*mm,6*mm,fill=1,stroke=0)
+            canvas.rect(173*mm,9*mm,24*mm,4*mm,fill=1,stroke=0)
             canvas.setFont("Helvetica",7)
             canvas.setFillColor(colors.HexColor("#626E5A"))
-            canvas.drawRightString(195*mm,7.5*mm,f"Página {len(writer.pages)+1}")
+            canvas.drawRightString(195*mm,10.5*mm,f"Página {len(writer.pages)+1}")
             canvas.save()
             pagina.merge_page(PdfReader(BytesIO(sello.getvalue())).pages[0])
             writer.add_page(pagina)
@@ -1237,6 +1251,27 @@ def generar_pdf_planta(equipos, imagenes, planta=None):
     salida = BytesIO()
     writer.write(salida)
     writer.close()
+    return salida.getvalue()
+
+
+def generar_zip_fichas(equipos, imagenes):
+    salida = BytesIO()
+    usados = set()
+    with zipfile.ZipFile(salida, "w", compression=zipfile.ZIP_DEFLATED) as archivo:
+        for equipo in equipos:
+            clave = equipo["captura_key"]
+            pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
+                equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
+                imagen_modelo=imagenes.get("captura_pdf_" + clave),
+                imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave))
+            nombre = re.sub(r"[^\w.-]+", "_", equipo["tag"]).strip(".") or "Equipo"
+            base = f"Ficha_{nombre}"
+            nombre_archivo, indice = base + ".pdf", 2
+            while nombre_archivo.casefold() in usados:
+                nombre_archivo = f"{base}_{indice}.pdf"
+                indice += 1
+            usados.add(nombre_archivo.casefold())
+            archivo.writestr(nombre_archivo, pdf)
     return salida.getvalue()
 
 
@@ -1249,6 +1284,9 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         plantas = sorted(v for v in df[col_unidad].unique() if informado(v))
         planta = st.selectbox("Planta / Unidad de proceso", plantas, key="informe_planta_unidad")
         st.caption("Incluye todos los equipos de la planta seleccionada. Los filtros del inventario no limitan este informe.")
+        formato = st.selectbox("Archivos a preparar", ["Informe general y PDF individuales (ZIP)",
+            "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
+        st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
         con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
@@ -1266,7 +1304,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             else:
                 st.session_state.pop("informe_planta_resultado", None)
                 st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
-                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": []}
+                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": [], "formato": formato}
                 st.rerun()
         if tarea:
             if st.button("Cancelar preparación", key="cancelar_planta"):
@@ -1299,16 +1337,20 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                     elif captura.get("action") == "capture_error":
                         st.warning("No se pudo capturar este modelo. Puedes continuar sin sus imágenes.")
                 st.stop()
-            with st.spinner("Uniendo las fichas en un solo PDF…"):
+            with st.spinner("Preparando los archivos PDF de la planta…"):
                 imagenes = st.session_state if tarea["con_imagenes"] else {}
                 try:
-                    pdf = generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"])
+                    formato = tarea.get("formato", "Solo informe general")
+                    pdf = (generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"])
+                           if formato != "Solo PDF individuales (ZIP)" else None)
+                    zip_pdf = (generar_zip_fichas(tarea["equipos"], imagenes)
+                               if formato != "Solo informe general" else None)
                 except Exception as exc:
                     st.error(f"No se pudo generar el informe de planta: {exc}. Revisa que requirements.txt esté actualizado.")
                     return
                 sin_imagen = [e["tag"] for e in tarea["equipos"] if tarea["con_imagenes"] and
                     (e["config"] is None or e["captura_key"] in tarea["omitidas"])]
-                st.session_state["informe_planta_resultado"] = {"planta": tarea["planta"], "pdf": pdf,
+                st.session_state["informe_planta_resultado"] = {"planta": tarea["planta"], "pdf": pdf, "zip": zip_pdf,
                     "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen}
                 st.session_state.pop("informe_planta_tarea", None)
                 st.rerun()
@@ -1318,8 +1360,12 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             if resultado["sin_imagen"]:
                 st.caption("Equipos incluidos sin vistas 3D: " + ", ".join(resultado["sin_imagen"]))
             nombre = re.sub(r'[^\w.-]+', '_', resultado["planta"])
-            st.download_button("Descargar informe de planta · PDF", data=resultado["pdf"],
-                file_name=f"Informe_{nombre}.pdf", mime="application/pdf", key="descargar_planta")
+            if resultado.get("pdf"):
+                st.download_button("Descargar informe de planta · PDF", data=resultado["pdf"],
+                    file_name=f"Informe_{nombre}.pdf", mime="application/pdf", key="descargar_planta")
+            if resultado.get("zip"):
+                st.download_button("Descargar PDF individuales · ZIP", data=resultado["zip"],
+                    file_name=f"Fichas_{nombre}.zip", mime="application/zip", key="descargar_fichas_planta")
 
 
 def main():
