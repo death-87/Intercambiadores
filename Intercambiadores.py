@@ -346,6 +346,13 @@ def validar_diseno(data, _nivel=0):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
+        pipe_idx = n.get("pipeDiaIndex", idx)
+        if type(pipe_idx) is not int or not 0 <= pipe_idx < len(DIAMETROS):
+            raise ValueError("diámetro del niple/codo inválido")
+        if n.get("connectionType", "flanged") == "flanged" and DIAMETROS_PULGADAS[pipe_idx] > DIAMETROS_PULGADAS[idx]:
+            raise ValueError("el niple/codo no puede superar la medida de la brida")
+        if n.get("connectionType") in {"threaded", "sw"} and pipe_idx != idx:
+            raise ValueError("el diámetro independiente del niple/codo requiere una brida")
         base_idx = n.get("baseDiaIndex", idx)
         if type(base_idx) is not int or not 0 <= base_idx < len(DIAMETROS):
             raise ValueError("diámetro de entrada fuera de la tabla")
@@ -1031,7 +1038,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v39"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v40"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1495,7 +1502,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v39"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v40"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1640,7 +1647,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v39"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v40"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
