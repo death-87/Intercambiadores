@@ -27,9 +27,11 @@
     #toggle-equipment-panel:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
     
     .panel-title { font-size: 12px; font-weight: bold; margin-top: 0; margin-bottom: 8px; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 3px; }
-    .input-group { margin-bottom: 6px; }
+    .input-group { margin-bottom: 6px; min-width: 0; }
+    .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .flange-details small { display: block; margin-top: 4px; color: #94a3b8; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
     .input-group label { display: block; font-size: 10px; color: #94a3b8; margin-bottom: 2px; }
-    .input-group input[type="text"], .input-group select { width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; outline: none; }
+    .input-group input[type="text"], .input-group input[type="number"], .input-group select { min-width: 0; width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; outline: none; }
     .input-group input[type="range"] { width: 100%; cursor: pointer; margin: 2px 0; }
     
     .plug-edit-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; background: rgba(0,0,0,0.2); padding: 3px; border-radius: 3px;}
@@ -182,11 +184,16 @@
       <label>Diámetro en el equipo (entrada):</label><select id="edit-base-dia"></select>
       <small>Mayor que la brida: niple con reducción concéntrica. Igual: niple recto.</small>
     </div>
-    <div id="edit-flange-details" style="display:flex;gap:4px">
-        <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Medida del niple/codo soldado (independiente de la brida):</label><select id="edit-pipe-dia"></select><small>Ejemplo: brida de 4″ con niple/codo de 2″. La medida de brida conserva su contorno y perforaciones; el tubo usa su propio diámetro.</small><label>Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+    <div id="edit-flange-details" class="flange-details">
+      <div class="form-row">
+        <div class="input-group"><label for="edit-flange-type">Brida:</label><input id="edit-flange-type" type="text" value="WN" disabled></div>
+        <div class="input-group"><label for="edit-nz-face">Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
       </div>
-      <div id="edit-sw-controls" hidden>
+      <div class="input-group"><label for="edit-flange-shape">Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select></div>
+      <div class="input-group"><label for="edit-pipe-dia">Medida del niple/codo soldado:</label><select id="edit-pipe-dia"></select><small>Independiente de la brida. Ejemplo: brida de 4″ con niple/codo de 2″.</small></div>
+      <div class="input-group"><label for="edit-flange-bolts">Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+    </div>
+    <div id="edit-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="edit-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
       <div class="input-group" id="edit-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="edit-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
@@ -330,9 +337,14 @@
       <label>Diámetro en el equipo (entrada):</label><select id="new-base-dia"></select>
       <small>Mayor que la brida: niple con reducción concéntrica. Igual: niple recto.</small>
     </div>
-    <div id="new-flange-details" style="display:flex;gap:4px">
-      <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Medida del niple/codo soldado (independiente de la brida):</label><select id="new-pipe-dia"></select><small>Ejemplo: brida de 4″ con niple/codo de 2″. La medida de brida conserva su contorno y perforaciones; el tubo usa su propio diámetro.</small><label>Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+    <div id="new-flange-details" class="flange-details">
+      <div class="form-row">
+        <div class="input-group"><label for="new-flange-type">Brida:</label><input id="new-flange-type" type="text" value="WN" disabled></div>
+        <div class="input-group"><label for="new-nz-face">Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
+      </div>
+      <div class="input-group"><label for="new-flange-shape">Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select></div>
+      <div class="input-group"><label for="new-pipe-dia">Medida del niple/codo soldado:</label><select id="new-pipe-dia"></select><small>Independiente de la brida. Ejemplo: brida de 4″ con niple/codo de 2″.</small></div>
+      <div class="input-group"><label for="new-flange-bolts">Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
     </div>
     <div id="new-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="new-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
@@ -2634,7 +2646,7 @@
       updateElbowControls('edit', type);
       updateSwControls('edit', type);
       populateRatingSelect(editRating, type, preferredRating);
-      document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
+      document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'block';
       document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
       document.getElementById('edit-neck-control').style.display = type === 'threaded' ? 'none' : '';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
@@ -2906,7 +2918,7 @@
       populatePipeDiameter('new',Number(newDia.value),type,Number(newDia.value));
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
         type !== 'flanged' ? '3000#' : '150#');
-      document.getElementById('new-flange-details').style.display = type !== 'flanged' ? 'none' : 'flex';
+      document.getElementById('new-flange-details').style.display = type !== 'flanged' ? 'none' : 'block';
       document.getElementById('new-neck-control').style.display = type === 'threaded' ? 'none' : '';
       if (type === 'flanged') {
         const neck = defaultNozzleNeckLength(newDia.value);
