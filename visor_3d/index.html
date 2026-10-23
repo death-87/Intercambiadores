@@ -97,14 +97,14 @@
     <small>Horquilla: dos shells paralelos con charretes de brida a brida y un cabezal común. Bonete común rígido y desmontable, siempre apernado a la brida ovalada que recibe ambos tubos. Es una sola pieza, equivalente al bonete de los otros modelos, con contorno ovalado. Largo de bonete = largo de charrete; largo de channel = profundidad del bonete común.</small>
     <label>Bonete ovalado rígido · unión apernada:</label><select id="hairpin-head-style"><option value="ellipticalBolted">Bonete ovalado abombado apernado</option><option value="flatBolted">Tapa ovalada plana apernada</option></select>
     <label>Separación libre entre shells: <output id="hairpin-gap-value">0.35</output> m</label><input type="range" id="hairpin-gap" min="0.05" max="2" step="0.05" value="0.35">
-    <label>Diámetro exterior del tubo superior: <output id="hairpin-outer-upper-value">1.098</output> m</label><input type="number" id="hairpin-outer-upper" min="0.2" max="2" step="0.01" value="1.098">
-    <label>Diámetro exterior del tubo inferior: <output id="hairpin-outer-lower-value">1.098</output> m</label><input type="number" id="hairpin-outer-lower" min="0.2" max="2" step="0.01" value="1.098">
+    <label>Medida nominal del tubo superior (NPS):</label><select id="hairpin-outer-upper"></select><small id="hairpin-outer-upper-value"></small>
+    <label>Medida nominal del tubo inferior (NPS):</label><select id="hairpin-outer-lower"></select><small id="hairpin-outer-lower-value"></small>
 
     <button type="button" id="hairpin-add-shell-upper">Agregar boquilla superior hacia arriba</button>
     <button type="button" id="hairpin-add-shell-lower">Agregar boquilla inferior hacia abajo</button>
     <button type="button" id="hairpin-add-upper">Agregar brida al tubo superior</button>
     <button type="button" id="hairpin-add-lower">Agregar brida al tubo inferior</button>
-    <small>Las bridas agregadas son boquillas editables: puedes cambiar medida, clase, TAG y conexiones NS/FS. La horquilla tiene únicamente dos tubos de flujo, con diámetros independientes. El diámetro general de Shell permite cambiar ambos a la vez.</small>
+    <small>Las bridas agregadas son boquillas editables: puedes cambiar medida, clase, TAG y conexiones NS/FS. La horquilla tiene únicamente dos tubos de flujo, con diámetros independientes. Las medidas nominales en pulgadas usan el diámetro exterior de cañería ASME B36.10M para el dibujo.</small>
   </div>
   <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
@@ -1263,11 +1263,24 @@
       shellDiameter: ['shell-diameter', 'shell-diameter-value'],
       channelDiameter: ['channel-diameter', 'channel-diameter-value'],
       bonnetDiameter: ['bonnet-diameter', 'bonnet-diameter-value'],
-      hairpinGap:['hairpin-gap','hairpin-gap-value'],
-      hairpinUpperDiameter:['hairpin-outer-upper','hairpin-outer-upper-value'],
-      hairpinLowerDiameter:['hairpin-outer-lower','hairpin-outer-lower-value']
+      hairpinGap:['hairpin-gap','hairpin-gap-value']
     };
+    function updateHairpinPipeSelectors() {
+      const allowed=FLANGED_DIAMETER_INDEXES.filter(index=>DIAMETER_INCHES[index]>=1);
+      for(const [field,level] of [['hairpinUpperDiameter','upper'],['hairpinLowerDiameter','lower']]) {
+        const select=document.getElementById('hairpin-outer-'+level),diameter=currentDimensions[field];
+        const matched=allowed.find(index=>Math.abs(pipeOutsideDiameter(index)-diameter)<1e-7);
+        select.replaceChildren(...allowed.map(index=>new Option(DIAMETERS[index],String(pipeOutsideDiameter(index)))));
+        if(matched===undefined) {
+          const previous=new Option('Medida anterior · DE '+(diameter*1000).toFixed(1)+' mm',String(diameter));
+          previous.disabled=true;select.prepend(previous);
+        }
+        select.value=String(diameter);
+        document.getElementById('hairpin-outer-'+level+'-value').textContent='Diámetro exterior: '+(diameter*1000).toFixed(1)+' mm'+(matched===undefined?' · medida anterior; seleccionar NPS para normalizar':' · ASME B36.10M');
+      }
+    }
     function updateDimensionControls() {
+      updateHairpinPipeSelectors();
       for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
         document.getElementById(inputId).value = currentDimensions[field];
         document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
@@ -1291,8 +1304,8 @@
           currentDimensions[field] = Math.min(Number(input.max), Math.max(Number(input.min), proposed));
         }
       }
-      if(!Number.isFinite(Number(dimensions.hairpinUpperDiameter))) currentDimensions.hairpinUpperDiameter=currentDimensions.shellDiameter;
-      if(!Number.isFinite(Number(dimensions.hairpinLowerDiameter))) currentDimensions.hairpinLowerDiameter=currentDimensions.shellDiameter;
+      currentDimensions.hairpinUpperDiameter=Number.isFinite(Number(dimensions.hairpinUpperDiameter))?Math.max(pipeOutsideDiameter(2),Math.min(2,Number(dimensions.hairpinUpperDiameter))):currentDimensions.shellDiameter;
+      currentDimensions.hairpinLowerDiameter=Number.isFinite(Number(dimensions.hairpinLowerDiameter))?Math.max(pipeOutsideDiameter(2),Math.min(2,Number(dimensions.hairpinLowerDiameter))):currentDimensions.shellDiameter;
       updateDimensionControls();
       buildModelB();
     }
@@ -1619,6 +1632,8 @@
       hairpinGroup.visible = currentModel === 'H';
       if(currentModel==='H') currentDimensions.hairpinHeadStyle=currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted';
       document.getElementById('hairpin-controls').hidden = currentModel !== 'H';
+      document.getElementById('shell-diameter').parentElement.style.display=currentModel==='H'?'none':'';
+      if(currentModel==='H') updateHairpinPipeSelectors();
       document.getElementById('hairpin-head-style').value=currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted';
       document.getElementById('channel-length').parentElement.querySelector('label').firstChild.textContent=currentModel==='H'?'Profundidad bonete ovalado: ':'Channel: ';
       document.getElementById('bonnet-diameter').disabled = currentModel === 'H';
@@ -2719,6 +2734,15 @@
       syncStateToParent();
     });
 
+    for(const [field,level] of [['hairpinUpperDiameter','upper'],['hairpinLowerDiameter','lower']]) {
+      document.getElementById('hairpin-outer-'+level).addEventListener('change',event=>{
+        if(readOnly||currentModel!=='H') return;
+        const diameter=Number(event.target.value);
+        if(!FLANGED_DIAMETER_INDEXES.some(index=>DIAMETER_INCHES[index]>=1 && Math.abs(pipeOutsideDiameter(index)-diameter)<1e-7)) return;
+        currentDimensions[field]=diameter;
+        applyModel(currentModel,true);syncStateToParent();
+      });
+    }
     document.getElementById('hairpin-head-style').addEventListener('change',event=>{
       currentDimensions.hairpinHeadStyle=event.target.value;
       applyModel(currentModel,true);syncStateToParent();
@@ -2832,13 +2856,6 @@
         const value=Number(event.target.value);
         if(event.target.value.trim()===''||!Number.isFinite(value)||value<Number(event.target.min)||value>Number(event.target.max)) return;
         currentDimensions[field] = value;
-        if(currentModel==='H' && field==='shellDiameter') {
-          currentDimensions.hairpinUpperDiameter=value;currentDimensions.hairpinLowerDiameter=value;
-          for(const level of ['upper','lower']) {
-            document.getElementById('hairpin-outer-'+level).value=value;
-            document.getElementById('hairpin-outer-'+level+'-value').textContent=value.toFixed(2);
-          }
-        }
         document.getElementById(outputId).textContent = currentDimensions[field].toFixed(2);
         buildModelB();
         applyModel(currentModel, true);
