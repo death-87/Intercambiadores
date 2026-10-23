@@ -175,7 +175,7 @@
     </div>
     <div id="edit-flange-details" style="display:flex;gap:4px">
         <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Medida del niple/codo soldado (independiente de la brida):</label><select id="edit-pipe-dia"></select><small>Ejemplo: brida de 4″ con niple/codo de 2″. La medida de brida conserva su contorno y perforaciones; el tubo usa su propio diámetro.</small><label>Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
       </div>
       <div id="edit-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="edit-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
@@ -323,7 +323,7 @@
     </div>
     <div id="new-flange-details" style="display:flex;gap:4px">
       <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Medida del niple/codo soldado (independiente de la brida):</label><select id="new-pipe-dia"></select><small>Ejemplo: brida de 4″ con niple/codo de 2″. La medida de brida conserva su contorno y perforaciones; el tubo usa su propio diámetro.</small><label>Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
     </div>
     <div id="new-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="new-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
@@ -653,6 +653,13 @@
         FLANGED_DIAMETER_INDEXES.includes(index) && DIAMETER_INCHES[index] >= DIAMETER_INCHES[outletIndex]
         ? index : outletIndex;
     }
+    function populatePipeDiameter(prefix,flangeIndex,type,preferred) {
+      const select=document.getElementById(prefix+'-pipe-dia');
+      const allowed=type==='flanged'?FLANGED_DIAMETER_INDEXES.filter(i=>DIAMETER_INCHES[i]<=DIAMETER_INCHES[flangeIndex]):[Number(flangeIndex)];
+      const desired=preferred===undefined||preferred===null?Number(flangeIndex):Number(preferred);
+      select.replaceChildren(...allowed.map(i=>new Option(DIAMETERS[i],String(i))));
+      select.value=String(allowed.includes(desired)?desired:flangeIndex);select.disabled=type!=='flanged';
+    }
     function populateBaseDiameter(prefix, outletIndex, type, preferred) {
       const select = document.getElementById(`${prefix}-base-dia`);
       const allowed = FLANGED_DIAMETER_INDEXES.filter(i => DIAMETER_INCHES[i] >= DIAMETER_INCHES[outletIndex]);
@@ -697,7 +704,7 @@
           direction: nz.userData.direction || 'radial',
           connectionType: nz.userData.connectionType || "flanged",
           diaIndex: nz.userData.diaIndex !== undefined ? nz.userData.diaIndex : 4,
-          baseDiaIndex: nz.userData.baseDiaIndex,
+          baseDiaIndex: nz.userData.baseDiaIndex, pipeDiaIndex:nz.userData.pipeDiaIndex??nz.userData.diaIndex,
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           swEnd: nz.userData.swEnd, swFlangeRating: nz.userData.swFlangeRating,
           flangeType: "WN",
@@ -2042,7 +2049,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -2054,6 +2061,7 @@
       const normalizedRating = type !== 'flanged'
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
+      const pipeIndex=type==='flanged' && pipeDiaIndex!==null && pipeDiaIndex!==undefined && Number.isInteger(Number(pipeDiaIndex)) && FLANGED_DIAMETER_INDEXES.includes(Number(pipeDiaIndex)) && DIAMETER_INCHES[Number(pipeDiaIndex)]<=DIAMETER_INCHES[dIndex]?Number(pipeDiaIndex):dIndex;
       const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
       
       const visualNeckLength = type !== 'threaded'
@@ -2069,7 +2077,7 @@
         swEnd: ['none', 'valve', 'flange'].includes(swEnd) ? swEnd : 'none',
         swFlangeRating: ['150#', '300#', '600#'].includes(swFlangeRating) ? swFlangeRating : '150#',
         isNozzle: true, idName: internalName, tagName: tagText,
-        diaIndex: dIndex, baseDiaIndex: normalizeBaseDiameter(baseDiaIndex, dIndex, type), connectionType: type, rating: normalizedRating, service: service,
+        diaIndex: dIndex, pipeDiaIndex:pipeIndex, baseDiaIndex: normalizeBaseDiameter(baseDiaIndex, dIndex, type), connectionType: type, rating: normalizedRating, service: service,
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
         pos: isAxial(pos) ? pos : closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
         offsetY: Number(offsetY) || 0, offsetZ: Number(offsetZ) || 0,
@@ -2080,8 +2088,8 @@
         ratingNS: ['3000#', '6000#'].includes(ratingNS) ? ratingNS : '3000#',
         hasFS: hasFS, sizeFS: sizeFS, tagFS: tagFS,
         ratingFS: ['3000#', '6000#'].includes(ratingFS) ? ratingFS : '3000#',
-        subFront: normalizeSubNozzle(subFront, dIndex),
-        subRear: normalizeSubNozzle(subRear, dIndex)
+        subFront: normalizeSubNozzle(subFront, pipeIndex),
+        subRear: normalizeSubNozzle(subRear, pipeIndex)
       };
 
       const nzMat = nozzleMatBase.clone();
@@ -2144,8 +2152,9 @@
         plugNS = new THREE.Group(); plugFS = new THREE.Group(); group.add(plugNS, plugFS);
       } else {
         const dim = flangeDimensions(dIndex, normalizedRating);
-        const pipeR = dim.OD / 2;
-        const pInner = Math.max(dim.OD * 0.40, pipeR - Math.min(0.012, dim.OD * 0.08));
+        const pipeOD=pipeOutsideDiameter(group.userData.pipeDiaIndex);
+        const pipeR = pipeOD / 2;
+        const pInner = Math.max(pipeOD * 0.40, pipeR - Math.min(0.012, pipeOD * 0.08));
         const hubR = dim.A / 2;
         const fOuter = dim.D / 2;
         const rfHeight = group.userData.face === 'RF' ? raisedFaceHeight(normalizedRating) : 0;
@@ -2153,7 +2162,7 @@
         const nippleLength = visualNeckLength;
         const baseR = flangeDimensions(group.userData.baseDiaIndex, normalizedRating).OD / 2;
         const baseInner = Math.max(baseR * 0.80, baseR - Math.min(0.012, baseR * 0.16));
-        const reduced = group.userData.baseDiaIndex !== dIndex;
+        const reduced = group.userData.baseDiaIndex !== group.userData.pipeDiaIndex;
         const radiusAt = fraction => !reduced ? pipeR : fraction <= 0.3 ? baseR
           : fraction >= 0.7 ? pipeR : baseR + (pipeR - baseR) * (fraction - 0.3) / 0.4;
         const sidePipeR = radiusAt(0.55);
@@ -2168,7 +2177,9 @@
           nipple = new THREE.Mesh(new THREE.CylinderGeometry(pipeR, pipeR, nippleLength, 48), nzMat);
           nipple.position.y = nippleLength / 2;
         }
-        nipple.name = reduced ? 'Niple reductor concéntrico' : 'Niple recto';
+        nipple.name = reduced ? 'Transición a niple de menor diámetro' : 'Niple recto';
+        nipple.userData.pipeDiaIndex=group.userData.pipeDiaIndex;
+        nipple.userData.flangeDiaIndex=dIndex;
         nipple.userData.baseRadius = baseR;
         nipple.userData.outletRadius = pipeR;
         group.add(nipple);
@@ -2202,12 +2213,12 @@
         baseWeld.position.y = 0.002;
         group.add(baseWeld);
         const neckWeld = new THREE.Mesh(new THREE.TorusGeometry(pipeR * 1.015,
-          Math.max(0.0010, dim.OD * 0.018), 8, 48), weldMat);
+          Math.max(0.0010, pipeOD * 0.018), 8, 48), weldMat);
         neckWeld.rotation.x = Math.PI / 2;
         neckWeld.position.y = nippleLength;
         group.add(neckWeld);
         if (group.userData.elbow90) {
-          const bendRadius = Math.max(dim.OD * 1.5, 0.075);
+          const bendRadius = Math.max(pipeOD * 1.5, 0.075);
           const bend = new THREE.Group();
           bend.name = 'Codo 90°';
           if (group.userData.sideMount === 'elbow') {
@@ -2337,7 +2348,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex
           );
           nozzlesList.push(newNz);
         });
@@ -2424,6 +2435,7 @@
       document.getElementById('edit-sw-flange-rating').value = data.swFlangeRating || '150#';
       populateDiameterSelect(document.getElementById('edit-nz-dia'), data.connectionType, data.diaIndex);
       populateBaseDiameter('edit', data.diaIndex, data.connectionType, data.baseDiaIndex);
+      populatePipeDiameter('edit',data.diaIndex,data.connectionType,data.pipeDiaIndex??data.diaIndex);
       document.getElementById('edit-nz-body').value = data.bodyPart;
       updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
       document.getElementById('edit-nz-face').value = data.face || 'RF';
@@ -2620,7 +2632,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -2652,6 +2664,7 @@
       rebuildSelectedNozzle({diaIndex: Number(e.target.value)});
     });
 
+    document.getElementById('edit-pipe-dia').addEventListener('change',event=>rebuildSelectedNozzle({pipeDiaIndex:Number(event.target.value)}));
     document.getElementById('edit-base-dia').addEventListener('change', e => {
       rebuildSelectedNozzle({baseDiaIndex: Number(e.target.value)});
     });
@@ -2844,6 +2857,7 @@
       updateSwControls('new', type);
       populateDiameterSelect(newDia, type, preferred);
       populateBaseDiameter('new', Number(newDia.value), type, Number(newDia.value));
+      populatePipeDiameter('new',Number(newDia.value),type,Number(newDia.value));
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
         type !== 'flanged' ? '3000#' : '150#');
       document.getElementById('new-flange-details').style.display = type !== 'flanged' ? 'none' : 'flex';
@@ -2859,6 +2873,7 @@
     newType.addEventListener('change', () => updateNewConnectionUI(newType.value !== 'flanged' ? 0 : 6));
     newDia.addEventListener('change', () => {
       populateBaseDiameter('new', Number(newDia.value), newType.value, Number(document.getElementById('new-base-dia').value));
+      populatePipeDiameter('new',Number(newDia.value),newType.value,document.getElementById('new-pipe-dia').value||undefined);
       if (newType.value === 'flanged') {
         const neck = defaultNozzleNeckLength(newDia.value);
         document.getElementById('new-neck-length').value = neck;
@@ -2913,7 +2928,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value));
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
