@@ -96,9 +96,12 @@
   <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo B: channel con tapa integral, sin tapa removible, apernado al shell. El otro extremo es un cabezal elíptico soldado que forma parte del shell.</small>
   <small id="model-f-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Bonete apernado en cada extremo del shell. El diámetro y largo de bonete se aplican a ambos extremos. Izquierdo y derecho solo identifican su ubicación en el editor.</small>
   <div id="hairpin-controls" class="input-group" hidden>
-    <small>Horquilla: dos shells paralelos con charretes de brida a brida y un cabezal común. Bonete común rígido y desmontable, siempre apernado a la brida que recibe ambos tubos. Es una sola pieza con contorno ovalado o circular. Largo de bonete = largo de charrete; largo de channel = profundidad del bonete común.</small>
+    <small>Horquilla: dos shells paralelos con charretes de brida a brida y un cabezal común. Bonete común rígido y desmontable, siempre apernado a la brida que recibe ambos tubos. Es una sola pieza con contorno ovalado o circular. La profundidad del bonete se ajusta por separado del largo de los carretes.</small>
     <label>Perfil de la tapa · unión apernada:</label><select id="hairpin-head-style"><option value="ellipticalBolted">Fondo elíptico abombado apernado</option><option value="flatBolted">Tapa plana apernada</option></select>
     <label>Contorno de brida y bonete:</label><select id="hairpin-head-contour"><option value="oval">Ovalado alargado</option><option value="circular">Circular / redondo</option></select>
+    <label for="hairpin-bonnet-depth">Profundidad / largo del bonete (m):</label>
+    <input id="hairpin-bonnet-depth" type="number" min="0.05" max="5" step="0.05" value="1.20">
+    <small>Aplica al bonete ovalado o circular, con fondo plano o redondeado. Es independiente del largo de los carretes.</small>
     <label>Cantidad de pernos del bonete:</label><input id="hairpin-bolt-count" type="number" min="4" max="120" step="1" value="24">
     <small>El contorno circular abarca ambos tubos. El fondo abombado conserva su perfil elíptico. Los pernos se distribuyen por el perímetro elegido.</small>
     <label>Separación libre entre shells: <output id="hairpin-gap-value">0.35</output> m</label><input type="range" id="hairpin-gap" min="0.05" max="2" step="0.05" value="0.35">
@@ -1315,7 +1318,7 @@
         spoolUpperEnabled:enabled('Upper'),spoolLowerEnabled:enabled('Lower'),
         spoolUpperNippleOnly:!!currentDimensions.hairpinSpoolUpperNippleOnly,spoolLowerNippleOnly:!!currentDimensions.hairpinSpoolLowerNippleOnly,
         spoolUpperInletLength:inlet('Upper'),spoolLowerInletLength:inlet('Lower'),spoolUpperOutletLength:outlet('Upper'),spoolLowerOutletLength:outlet('Lower'),
-        headerDepth:currentDimensions.channelLength,headContour:currentDimensions.hairpinHeadContour||'oval',
+        headerDepth:currentDimensions.hairpinBonnetDepth??currentDimensions.channelLength,headContour:currentDimensions.hairpinHeadContour||'oval',
         boltCount:currentDimensions.hairpinBoltCount??24,
         spoolUpperRating:currentDimensions.hairpinSpoolUpperRating||'150#',spoolLowerRating:currentDimensions.hairpinSpoolLowerRating||'150#',
         spoolUpperBolts:currentDimensions.hairpinSpoolUpperBolts||0,spoolLowerBolts:currentDimensions.hairpinSpoolLowerBolts||0,
@@ -1372,6 +1375,8 @@
     }
     function updateHairpinSpoolControls() {
       const p=hairpinLayout();
+      document.getElementById('hairpin-bonnet-depth').value=p.headerDepth;
+      document.getElementById('hairpin-bonnet-depth').disabled=readOnly;
       const sizeInput=document.getElementById('hairpin-flange-square-size');
       sizeInput.value=currentDimensions.hairpinFlangeSquareSizeMM??0;
       sizeInput.disabled=readOnly||!['Upper','Lower'].some(level=>currentDimensions['hairpinSpool'+level+'Shape']==='square'||currentDimensions['hairpinSpool'+level+'OutletShape']==='square');
@@ -1647,6 +1652,7 @@
         currentDimensions[prefix+'Length']=Math.max(.2,Math.min(10,Number(dimensions[prefix+'Length'])||currentDimensions.bonnetLength));
         currentDimensions[prefix+'Rotation']=Number.isFinite(Number(dimensions[prefix+'Rotation']))?Number(dimensions[prefix+'Rotation']):(level==='Upper'?0:180);
       }
+      currentDimensions.hairpinBonnetDepth=Number.isFinite(Number(dimensions.hairpinBonnetDepth))?Math.max(.05,Math.min(5,Number(dimensions.hairpinBonnetDepth))):currentDimensions.channelLength;
       const shared=Number(dimensions.hairpinFlangeSquareSizeMM ?? (dimensions.hairpinSpoolUpperSquareSizeMM||dimensions.hairpinSpoolLowerSquareSizeMM||0));
       currentDimensions.hairpinFlangeSquareSizeMM=shared>0?Math.max(25.4,Math.min(5000,shared)):0;
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
@@ -1996,6 +2002,7 @@
       document.getElementById('hairpin-head-style').value=currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted';
       document.getElementById('hairpin-head-contour').value=currentDimensions.hairpinHeadContour||'oval';
       document.getElementById('hairpin-bolt-count').value=currentDimensions.hairpinBoltCount??24;
+      document.getElementById('channel-length').parentElement.hidden=currentModel==='H';
       document.getElementById('channel-length').parentElement.querySelector('label').firstChild.textContent=currentModel==='H'?'Profundidad del bonete: ':'Channel: ';
       document.getElementById('bonnet-diameter').disabled = currentModel === 'H';
       document.getElementById('channel-diameter').disabled = currentModel === 'H';
@@ -3199,6 +3206,10 @@
       currentDimensions.hairpinFlangeSquareSizeMM=size>0?Math.max(25.4,size):0;
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
       applyModel(currentModel,true);syncStateToParent();
+    });
+    document.getElementById('hairpin-bonnet-depth').addEventListener('change',event=>{
+      const depth=Number(event.target.value);if(readOnly||!Number.isFinite(depth)||depth<.05||depth>5)return;
+      currentDimensions.hairpinBonnetDepth=depth;applyModel(currentModel,true);syncStateToParent();
     });
     document.getElementById('hairpin-head-contour').addEventListener('change',event=>{
       if(readOnly) return;
