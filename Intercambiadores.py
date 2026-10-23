@@ -310,6 +310,9 @@ def validar_diseno(data, _nivel=0):
     for nivel in ("Upper", "Lower"):
         if dimensions.get("hairpinSpool" + nivel + "Rating", "150#") not in {"150#", "300#", "600#"}:
             raise ValueError("clase de brida de carrete inválida")
+        lado = dimensions.get("hairpinSpool" + nivel + "SquareSizeMM", 0)
+        if type(lado) not in (int, float) or not math.isfinite(lado) or not 0 <= lado <= 5000:
+            raise ValueError("lado exterior de brida cuadrada fuera de rango")
         if dimensions.get("hairpinSpool" + nivel + "Shape", "round") not in {"round", "square"}:
             raise ValueError("forma de brida de carrete inválida")
         if not isinstance(dimensions.get("hairpinSpool" + nivel + "NippleOnly", False), bool):
@@ -379,6 +382,9 @@ def validar_diseno(data, _nivel=0):
         for extremo, defecto in (("inletFlange", False), ("outletFlange", True)):
             if not isinstance(n.get(extremo, defecto), bool):
                 raise ValueError("la opción de flange por extremo debe ser booleana")
+        lado = n.get("flangeSquareSizeMM", 0)
+        if type(lado) not in (int, float) or not math.isfinite(lado) or not 0 <= lado <= 5000:
+            raise ValueError("lado exterior de brida cuadrada fuera de rango")
         pernos_brida = n.get("flangeBoltCount", 0)
         if type(pernos_brida) is not int or not (pernos_brida == 0 or 4 <= pernos_brida <= 120):
             raise ValueError("cantidad de pernos de boquilla inválida")
@@ -1071,7 +1077,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v42"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v43"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1562,7 +1568,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v42"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v43"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1707,7 +1713,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v42"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v43"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
