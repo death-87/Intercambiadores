@@ -375,6 +375,9 @@ def validar_diseno(data, _nivel=0):
             n["bodyPart"] = {"tubeUpper":"shell", "tubeLower":"shellLower"}.get(n.get("bodyPart"), n.get("bodyPart"))
         if n.get("flangeShape", "auto") not in {"auto", "round", "square"}:
             raise ValueError("forma de brida de boquilla inválida")
+        for extremo, defecto in (("inletFlange", False), ("outletFlange", True)):
+            if not isinstance(n.get(extremo, defecto), bool):
+                raise ValueError("la opción de flange por extremo debe ser booleana")
         pernos_brida = n.get("flangeBoltCount", 0)
         if type(pernos_brida) is not int or not (pernos_brida == 0 or 4 <= pernos_brida <= 120):
             raise ValueError("cantidad de pernos de boquilla inválida")
@@ -1049,7 +1052,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v41"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v42"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1513,7 +1516,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v41"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v42"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1658,7 +1661,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v41"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v42"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
