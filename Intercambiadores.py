@@ -309,6 +309,15 @@ def validar_diseno(data, _nivel=0):
     for nivel in ("Upper", "Lower"):
         if dimensions.get("hairpinSpool" + nivel + "Rating", "150#") not in {"150#", "300#", "600#"}:
             raise ValueError("clase de brida de carrete inválida")
+        if dimensions.get("hairpinSpool" + nivel + "Shape", "round") not in {"round", "square"}:
+            raise ValueError("forma de brida de carrete inválida")
+        giro = dimensions.get("hairpinSpool" + nivel + "Bend", 0)
+        if type(giro) not in (int, float) or giro not in {0, 45, 90, 180}:
+            raise ValueError("recorrido del carrete inválido")
+        for sufijo, minimo, maximo in (("Length", .2, 10), ("Rotation", 0, 359)):
+            valor_carrete = dimensions.get("hairpinSpool" + nivel + sufijo, .8 if sufijo == "Length" else 0)
+            if type(valor_carrete) not in (int, float) or not math.isfinite(valor_carrete) or not minimo <= valor_carrete <= maximo:
+                raise ValueError("largo o giro de carrete fuera de rango")
         pernos_carrete = dimensions.get("hairpinSpool" + nivel + "Bolts", 0)
         if type(pernos_carrete) is not int or not (pernos_carrete == 0 or 4 <= pernos_carrete <= 120):
             raise ValueError("pernos de carrete: usa 0 para estándar o un entero entre 4 y 120")
@@ -346,6 +355,11 @@ def validar_diseno(data, _nivel=0):
             raise ValueError("la reducción requiere una boquilla enflanchada")
         if data.get("model") == "H":
             n["bodyPart"] = {"tubeUpper":"shell", "tubeLower":"shellLower"}.get(n.get("bodyPart"), n.get("bodyPart"))
+        if n.get("flangeShape", "auto") not in {"auto", "round", "square"}:
+            raise ValueError("forma de brida de boquilla inválida")
+        pernos_brida = n.get("flangeBoltCount", 0)
+        if type(pernos_brida) is not int or not (pernos_brida == 0 or 4 <= pernos_brida <= 120):
+            raise ValueError("cantidad de pernos de boquilla inválida")
         if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft", "shellLower", "tubeUpper", "tubeLower"}:
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded", "sw"}:
@@ -1017,7 +1031,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v38"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v39"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1481,7 +1495,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v38"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v39"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1626,7 +1640,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v38"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v39"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"

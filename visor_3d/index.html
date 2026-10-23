@@ -103,13 +103,21 @@
     <label>Medida nominal del tubo superior (NPS):</label><select id="hairpin-outer-upper"></select><small id="hairpin-outer-upper-value"></small>
     <label>Medida nominal del tubo inferior (NPS):</label><select id="hairpin-outer-lower"></select><small id="hairpin-outer-lower-value"></small>
 
+    <label>Forma de bridas del carrete superior:</label><select id="hairpin-spool-upper-shape"><option value="round">Circular</option><option value="square">Cuadrada · personalizada</option></select>
+    <label>Recorrido del carrete superior:</label><select id="hairpin-spool-upper-bend"><option value="0">Recto</option><option value="45">45°</option><option value="90">90°</option><option value="180">U · 180°</option></select>
+    <label>Largo del carrete superior por su eje (m):</label><input id="hairpin-spool-upper-length" type="number" min="0.2" max="10" step="0.05" value="0.8">
+    <label>Giro del plano del carrete superior (°):</label><input id="hairpin-spool-upper-rotation" type="number" min="0" max="359" step="1" value="0">
     <label>Clase de las bridas del carrete superior:</label><select id="hairpin-spool-upper-rating"><option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option></select>
     <label>Pernos por unión del carrete superior (0 = estándar):</label><input id="hairpin-spool-upper-bolts" type="number" min="0" max="120" step="1" value="0">
     <small id="hairpin-spool-upper-info"></small>
+    <label>Forma de bridas del carrete inferior:</label><select id="hairpin-spool-lower-shape"><option value="round">Circular</option><option value="square">Cuadrada · personalizada</option></select>
+    <label>Recorrido del carrete inferior:</label><select id="hairpin-spool-lower-bend"><option value="0">Recto</option><option value="45">45°</option><option value="90">90°</option><option value="180">U · 180°</option></select>
+    <label>Largo del carrete inferior por su eje (m):</label><input id="hairpin-spool-lower-length" type="number" min="0.2" max="10" step="0.05" value="0.8">
+    <label>Giro del plano del carrete inferior (°):</label><input id="hairpin-spool-lower-rotation" type="number" min="0" max="359" step="1" value="180">
     <label>Clase de las bridas del carrete inferior:</label><select id="hairpin-spool-lower-rating"><option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option></select>
     <label>Pernos por unión del carrete inferior (0 = estándar):</label><input id="hairpin-spool-lower-bolts" type="number" min="0" max="120" step="1" value="0">
     <small id="hairpin-spool-lower-info"></small>
-    <small>Bridas WN RF según tabla ASME B16.5. Una cantidad personalizada de pernos modifica el patrón de perforaciones del dibujo.</small>
+    <small>Bridas WN RF según tabla ASME B16.5. Las formas cuadradas y los patrones personalizados son geometría particular basada en dimensiones de referencia. En los tramos curvos, el largo se mide por el eje y se limita para evitar que el radio de curva sea menor a 1,5 veces el radio del tubo.</small>
     <button type="button" id="hairpin-add-shell-upper">Agregar boquilla superior hacia arriba</button>
     <button type="button" id="hairpin-add-shell-lower">Agregar boquilla inferior hacia abajo</button>
     <button type="button" id="hairpin-add-upper">Agregar brida al tubo superior</button>
@@ -167,7 +175,7 @@
     </div>
     <div id="edit-flange-details" style="display:flex;gap:4px">
         <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
+        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
       </div>
       <div id="edit-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="edit-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
@@ -185,7 +193,7 @@
     </div>
     <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
       <div class="input-group" id="edit-neck-control">
-        <label>Largo niple visual: <output id="edit-neck-length-value">0.30</output> m</label>
+        <label>Largo del niple: <output id="edit-neck-length-value">0.30</output> m</label>
         <input type="range" id="edit-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
       </div>
 
@@ -315,7 +323,7 @@
     </div>
     <div id="new-flange-details" style="display:flex;gap:4px">
       <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
+      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
     </div>
     <div id="new-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="new-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
@@ -333,7 +341,7 @@
     </div>
     <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
     <div class="input-group" id="new-neck-control">
-      <label>Largo niple visual: <output id="new-neck-length-value">0.30</output> m</label>
+      <label>Largo del niple: <output id="new-neck-length-value">0.30</output> m</label>
       <input type="range" id="new-neck-length" min="0.10" max="1.50" step="0.05" value="0.30">
     </div>
     
@@ -519,6 +527,48 @@
         K:K*INCH, L:L*INCH, bolts, R:RAISED_FACE_DIAMETER_INCHES[diaIndex]*INCH};
     }
 
+    function flangeOutline(diameter,form='round') {
+      const shape=new THREE.Shape(),r=diameter/2;
+      if(form==='square') {shape.moveTo(-r,-r);shape.lineTo(r,-r);shape.lineTo(r,r);shape.lineTo(-r,r);shape.closePath();}
+      else shape.absarc(0,0,r,0,Math.PI*2,false);
+      return shape;
+    }
+    function flangeBoltPoints(count,pitch,form='round') {
+      const r=pitch/2,result=[];
+      for(let i=0;i<count;i++) {
+        if(form==='square') {
+          const t=i*4/count,side=Math.floor(t)%4,u=t-Math.floor(t);
+          result.push(new THREE.Vector2(...[[-r+2*r*u,-r],[r,-r+2*r*u],[r-2*r*u,r],[-r,r-2*r*u]][side]));
+        } else {const a=(i+.5)*Math.PI*2/count;result.push(new THREE.Vector2(Math.cos(a)*r,Math.sin(a)*r));}
+      }
+      return result;
+    }
+    function nozzleFlangeSettings(data) {
+      let form=data.flangeShape||'auto',count=data.flangeBoltCount||0;
+      if(currentModel==='H' && ['shell','shellLower'].includes(data.bodyPart) && data.pos==='axialPlus') {
+        const prefix=data.bodyPart==='shell'?'hairpinSpoolUpper':'hairpinSpoolLower';
+        if(form==='auto') form=currentDimensions[prefix+'Shape']||'round';
+        if(!count) count=currentDimensions[prefix+'Bolts']||0;
+      }
+      return {form:form==='square'?'square':'round',count:count||flangeDimensions(data.diaIndex,data.rating).bolts};
+    }
+    function nozzlePlateGeometry(data,bore) {
+      const dim=flangeDimensions(data.diaIndex,data.rating),settings=nozzleFlangeSettings(data);
+      const shape=flangeOutline(dim.D,settings.form),hole=new THREE.Path();hole.absarc(0,0,bore,0,Math.PI*2,true);shape.holes.push(hole);
+      for(const p of flangeBoltPoints(settings.count,dim.K,settings.form)) {
+        const h=new THREE.Path();h.absarc(p.x,p.y,dim.L/2,0,Math.PI*2,true);shape.holes.push(h);
+      }
+      return new THREE.ExtrudeGeometry(shape,{depth:dim.B,bevelEnabled:true,bevelThickness:Math.min(.0015,dim.B*.06),bevelSize:Math.min(.0015,dim.B*.06),bevelSegments:1,steps:1,curveSegments:48});
+    }
+    function updateNozzleFlangePlate(nozzle) {
+      const plate=nozzle.userData.flangePlate;
+      if(!plate) return;
+      const settings=nozzleFlangeSettings(nozzle.userData),key=JSON.stringify(settings);
+      if(nozzle.userData.flangePlateKey===key) return;
+      plate.geometry.dispose();plate.geometry=nozzlePlateGeometry(nozzle.userData,nozzle.userData.flangeBore);
+      nozzle.userData.flangePlateKey=key;
+    }
+
     function raisedFaceHeight(rating) {
       return (rating === '600#' ? 0.250 : 0.0625) * INCH;
     }
@@ -660,6 +710,7 @@
           offsetY: nz.userData.offsetY || 0, offsetZ: nz.userData.offsetZ || 0,
           sideMount: nz.userData.sideMount, sideAxis: nz.userData.sideAxis,
           headMount: !!nz.userData.headMount, headAngle: nz.userData.headAngle ?? 45,
+          flangeShape:nz.userData.flangeShape||'auto',flangeBoltCount:nz.userData.flangeBoltCount||0,
           angleNS: nz.userData.angleNS, angleFS: nz.userData.angleFS,
           hasNS: !!nz.userData.hasNS,
           sizeNS: nz.userData.sizeNS || "",
@@ -1170,28 +1221,54 @@
       const radius = Math.max(upperRadius,lowerRadius);
       const separation = upperRadius+lowerRadius+(currentDimensions.hairpinGap ?? .35);
       const left = -currentDimensions.shellLength/2, right = currentDimensions.shellLength/2;
-      const spoolEnd = right + currentDimensions.bonnetLength;
+      const bendFor=level=>Number(currentDimensions['hairpinSpool'+level+'Bend'])||0;
+      const lengthFor=(level,r)=>Math.max(currentDimensions['hairpinSpool'+level+'Length']??currentDimensions.bonnetLength,THREE.MathUtils.degToRad(bendFor(level))*r*1.5);
+      const upperLength=lengthFor('Upper',upperRadius),lowerLength=lengthFor('Lower',lowerRadius);
+      const spoolEnd = right + Math.max(upperLength,lowerLength);
       return {radius,upperRadius,lowerRadius, separation, left, right, spoolEnd,
         headerDepth:currentDimensions.channelLength,headContour:currentDimensions.hairpinHeadContour||'oval',
         boltCount:currentDimensions.hairpinBoltCount??24,
         spoolUpperRating:currentDimensions.hairpinSpoolUpperRating||'150#',spoolLowerRating:currentDimensions.hairpinSpoolLowerRating||'150#',
-        spoolUpperBolts:currentDimensions.hairpinSpoolUpperBolts||0,spoolLowerBolts:currentDimensions.hairpinSpoolLowerBolts||0,headStyle:currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
+        spoolUpperBolts:currentDimensions.hairpinSpoolUpperBolts||0,spoolLowerBolts:currentDimensions.hairpinSpoolLowerBolts||0,
+        spoolUpperShape:currentDimensions.hairpinSpoolUpperShape||'round',spoolLowerShape:currentDimensions.hairpinSpoolLowerShape||'round',
+        spoolUpperBend:bendFor('Upper'),spoolLowerBend:bendFor('Lower'),spoolUpperLength:upperLength,spoolLowerLength:lowerLength,
+        spoolUpperRotation:currentDimensions.hairpinSpoolUpperRotation??0,spoolLowerRotation:currentDimensions.hairpinSpoolLowerRotation??180,headStyle:currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
     }
-    function hairpinSpoolFlangeSpec(radius,rating,override=0) {
+    function hairpinSpoolFrame(level,fraction=1,p=hairpinLayout()) {
+      const upper=level==='upper',r=upper?p.upperRadius:p.lowerRadius;
+      const angle=THREE.MathUtils.degToRad(upper?p.spoolUpperBend:p.spoolLowerBend);
+      const phi=THREE.MathUtils.degToRad(upper?p.spoolUpperRotation:p.spoolLowerRotation);
+      const length=upper?p.spoolUpperLength:p.spoolLowerLength;
+      const origin=new THREE.Vector3(p.right,(upper?1:-1)*p.separation/2,0);
+      let offset,tangent;
+      if(angle===0) {offset=new THREE.Vector3(length*fraction,0,0);tangent=new THREE.Vector3(1,0,0);}
+      else {
+        const radius=length/angle,a=angle*fraction;
+        offset=new THREE.Vector3(radius*Math.sin(a),radius*(1-Math.cos(a))*Math.cos(phi),radius*(1-Math.cos(a))*Math.sin(phi));
+        tangent=new THREE.Vector3(Math.cos(a),Math.sin(a)*Math.cos(phi),Math.sin(a)*Math.sin(phi));
+      }
+      return {position:origin.add(offset),tangent,length,radius:r};
+    }
+
+    function hairpinSpoolFlangeSpec(radius,rating,override=0,form='round') {
       const diaIndex=FLANGED_DIAMETER_INDEXES.find(index=>Math.abs(pipeOutsideDiameter(index)-radius*2)<1e-7);
       const standard=diaIndex!==undefined;
       const dim=standard?flangeDimensions(diaIndex,rating):{
         D:radius*3.2,B:Math.max(.01,radius*.2),A:radius*2.2,OD:radius*2,
         H:Math.max(.03,radius*.6),K:radius*2.6,L:Math.max(.008,radius*.12),bolts:8,R:radius*2.1
       };
-      return {...dim,standard,diaIndex,rating,count:override||dim.bolts};
+      return {...dim,standard,diaIndex,rating,form,count:override||dim.bolts};
     }
     function updateHairpinSpoolControls() {
       const p=hairpinLayout();
       for(const [level,radius,rating,count] of [['upper',p.upperRadius,p.spoolUpperRating,p.spoolUpperBolts],['lower',p.lowerRadius,p.spoolLowerRating,p.spoolLowerBolts]]) {
         document.getElementById('hairpin-spool-'+level+'-rating').value=rating;
         document.getElementById('hairpin-spool-'+level+'-bolts').value=count;
-        const spec=hairpinSpoolFlangeSpec(radius,rating,count);
+        const prefix=level==='upper'?'hairpinSpoolUpper':'hairpinSpoolLower',suffix=level==='upper'?'Upper':'Lower';
+        for(const field of ['Shape','Bend','Rotation']) document.getElementById('hairpin-spool-'+level+'-'+field.toLowerCase()).value=currentDimensions[prefix+field]??(field==='Shape'?'round':0);
+        const length=level==='upper'?p.spoolUpperLength:p.spoolLowerLength;
+        currentDimensions[prefix+'Length']=length;document.getElementById('hairpin-spool-'+level+'-length').value=length.toFixed(3);
+        const spec=hairpinSpoolFlangeSpec(radius,rating,count,currentDimensions[prefix+'Shape']||'round');
         document.getElementById('hairpin-spool-'+level+'-info').textContent=spec.standard
           ? DIAMETERS[spec.diaIndex]+' · '+rating+' · '+(spec.D*1000).toFixed(1)+' mm exterior · '+(spec.B*1000).toFixed(1)+' mm espesor · '+spec.bolts+' pernos estándar'
           : 'Diámetro anterior sin NPS: brida ilustrativa. Selecciona un NPS de tubo para usar las dimensiones de tabla.';
@@ -1212,41 +1289,46 @@
         mesh.rotation.z=Math.PI/2;mesh.position.set((x1+x2)/2,y,0);mesh.name=name;
         hairpinGroup.add(mesh);return mesh;
       }
-      function drawSpoolFlanges(joint,y,radius,spec) {
+      function drawSpoolFlanges(joint,y,radius,spec,frame=null) {
+        const assembly=new THREE.Group();assembly.name='Unión de bridas del carrete';hairpinGroup.add(assembly);
+        assembly.position.copy(frame?frame.position:new THREE.Vector3(joint,y,0));
+        if(frame) assembly.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),frame.tangent);
+        joint=0;y=0;
         const bore=radius*.85,gap=2*raisedFaceHeight(spec.rating)+.003;
         const hubHeight=Math.max(.005,spec.H-spec.B),holeRadius=spec.L/2;
         function plate(sign) {
-          const shape=new THREE.Shape();shape.absarc(0,0,spec.D/2,0,Math.PI*2,false);
+          const shape=flangeOutline(spec.D,spec.form);
           const hole=new THREE.Path();hole.absarc(0,0,bore,0,Math.PI*2,true);shape.holes.push(hole);
-          for(let i=0;i<spec.count;i++) {
-            const a=(i+.5)*Math.PI*2/spec.count,path=new THREE.Path();
-            path.absarc(Math.cos(a)*spec.K/2,Math.sin(a)*spec.K/2,holeRadius,0,Math.PI*2,true);shape.holes.push(path);
+          const pattern=flangeBoltPoints(spec.count,spec.K,spec.form);
+          for(const point of pattern) {
+            const path=new THREE.Path();path.absarc(point.x,point.y,holeRadius,0,Math.PI*2,true);shape.holes.push(path);
           }
           const flange=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:spec.B,bevelEnabled:false,curveSegments:64}),flangeMatBase);
           flange.rotation.y=Math.PI/2;
           flange.position.set(sign<0?joint-gap/2-spec.B:joint+gap/2,y,0);
-          flange.name='Brida de charrete';flange.userData.catalog={...spec};hairpinGroup.add(flange);
+          flange.name='Brida de charrete';flange.userData.catalog={...spec};assembly.add(flange);
           const profile=[[bore,0],[radius,0],[spec.A/2,hubHeight],[bore,hubHeight],[bore,0]].map(([r,x])=>new THREE.Vector2(r,x));
           const hub=new THREE.Mesh(new THREE.LatheGeometry(profile,64),shellMat);
           hub.rotation.z=sign<0?-Math.PI/2:Math.PI/2;
-          hub.position.set(joint+sign*(gap/2+spec.H),y,0);hub.name='Cuello WN de carrete';hairpinGroup.add(hub);
+          hub.position.set(joint+sign*(gap/2+spec.H),y,0);hub.name='Cuello WN de carrete';assembly.add(hub);
           const faceShape=new THREE.Shape();faceShape.absarc(0,0,spec.R/2,0,Math.PI*2,false);
           const faceHole=new THREE.Path();faceHole.absarc(0,0,bore,0,Math.PI*2,true);faceShape.holes.push(faceHole);
           const rf=raisedFaceHeight(spec.rating);
           const face=new THREE.Mesh(new THREE.ExtrudeGeometry(faceShape,{depth:rf,bevelEnabled:false,curveSegments:64}),flangeMatBase);
           face.rotation.y=Math.PI/2;face.position.set(sign<0?joint-gap/2:joint+gap/2-rf,y,0);
-          face.name='Cara elevada RF de carrete';hairpinGroup.add(face);
+          face.name='Cara elevada RF de carrete';assembly.add(face);
         }
         plate(-1);plate(1);
         const bolts=new THREE.Group();bolts.position.y=y;bolts.name='Pernos de unión del carrete';
-        bolts.userData={boltCount:spec.count,catalogBoltCount:spec.bolts,rating:spec.rating};hairpinGroup.add(bolts);
+        bolts.userData={boltCount:spec.count,catalogBoltCount:spec.bolts,rating:spec.rating};assembly.add(bolts);
         const diameter=Math.max(.006,spec.L-.125*INCH),nutHeight=diameter*.85;
         const length=2*spec.B+gap+nutHeight*3;
         const shafts=new THREE.InstancedMesh(new THREE.CylinderGeometry(diameter/2,diameter/2,length,12),studMat,spec.count);
         const nuts=new THREE.InstancedMesh(new THREE.CylinderGeometry(diameter*.9,diameter*.9,nutHeight,6),nutMat,spec.count*2);
         shafts.name='Espárragos del carrete';nuts.name='Tuercas del carrete';const transform=new THREE.Object3D();
+        const pattern=flangeBoltPoints(spec.count,spec.K,spec.form);
         for(let i=0;i<spec.count;i++) {
-          const a=(i+.5)*Math.PI*2/spec.count,yy=Math.sin(a)*spec.K/2,z=-Math.cos(a)*spec.K/2;
+          const yy=pattern[i].y,z=-pattern[i].x;
           transform.rotation.z=Math.PI/2;transform.position.set(joint,yy,z);transform.updateMatrix();shafts.setMatrixAt(i,transform.matrix);
           for(const [j,sign] of [[0,-1],[1,1]]) {
             transform.position.x=joint+sign*(gap/2+spec.B+nutHeight/2);transform.updateMatrix();nuts.setMatrixAt(i*2+j,transform.matrix);
@@ -1257,9 +1339,16 @@
       for(const sign of [-1,1]) {
         const y=sign*p.separation/2,bodyRadius=sign>0?p.upperRadius:p.lowerRadius;
         pipe(p.left,p.right,y,bodyRadius,shellMat,sign>0?'Shell superior':'Shell inferior');
-        pipe(p.right,p.spoolEnd,y,bodyRadius,shellMat,'Charrete: niple entre bridas');
-        const spec=hairpinSpoolFlangeSpec(bodyRadius,sign>0?p.spoolUpperRating:p.spoolLowerRating,sign>0?p.spoolUpperBolts:p.spoolLowerBolts);
-        for(const joint of [p.right,p.spoolEnd]) drawSpoolFlanges(joint,y,bodyRadius,spec);
+        const level=sign>0?'upper':'lower',bend=sign>0?p.spoolUpperBend:p.spoolLowerBend;
+        const start=hairpinSpoolFrame(level,0,p),end=hairpinSpoolFrame(level,1,p);
+        if(bend===0) pipe(p.right,end.position.x,y,bodyRadius,shellMat,'Charrete: niple entre bridas');
+        else {
+          const path=new THREE.Curve();path.getPoint=t=>hairpinSpoolFrame(level,t,p).position;
+          const mesh=new THREE.Mesh(new THREE.TubeGeometry(path,96,bodyRadius,48,false),shellMat);
+          mesh.name='Carrete curvo '+(bend===180?'U':bend+'°');hairpinGroup.add(mesh);
+        }
+        const spec=hairpinSpoolFlangeSpec(bodyRadius,sign>0?p.spoolUpperRating:p.spoolLowerRating,sign>0?p.spoolUpperBolts:p.spoolLowerBolts,sign>0?p.spoolUpperShape:p.spoolLowerShape);
+        drawSpoolFlanges(0,0,bodyRadius,spec,start);drawSpoolFlanges(0,0,bodyRadius,spec,end);
       }
       // Cabezal común con sección de cápsula que recibe ambos cuerpos.
       const shape=new THREE.Shape(),h=p.separation/2,circular=p.headContour==='circular';
@@ -1380,6 +1469,13 @@
       }
       currentDimensions.hairpinUpperDiameter=Number.isFinite(Number(dimensions.hairpinUpperDiameter))?Math.max(pipeOutsideDiameter(2),Math.min(2,Number(dimensions.hairpinUpperDiameter))):currentDimensions.shellDiameter;
       currentDimensions.hairpinLowerDiameter=Number.isFinite(Number(dimensions.hairpinLowerDiameter))?Math.max(pipeOutsideDiameter(2),Math.min(2,Number(dimensions.hairpinLowerDiameter))):currentDimensions.shellDiameter;
+      for(const level of ['Upper','Lower']) {
+        const prefix='hairpinSpool'+level;
+        currentDimensions[prefix+'Shape']=dimensions[prefix+'Shape']==='square'?'square':'round';
+        currentDimensions[prefix+'Bend']=[0,45,90,180].includes(Number(dimensions[prefix+'Bend']))?Number(dimensions[prefix+'Bend']):0;
+        currentDimensions[prefix+'Length']=Math.max(.2,Math.min(10,Number(dimensions[prefix+'Length'])||currentDimensions.bonnetLength));
+        currentDimensions[prefix+'Rotation']=Number.isFinite(Number(dimensions[prefix+'Rotation']))?Number(dimensions[prefix+'Rotation']):(level==='Upper'?0:180);
+      }
       updateDimensionControls();
       buildModelB();
     }
@@ -1661,6 +1757,21 @@
           return;
         }
       }
+      if(currentModel==='H' && ['shell','shellLower'].includes(bodyPart) && pos==='axialPlus') {
+        const frame=hairpinSpoolFrame(bodyPart==='shell'?'upper':'lower');
+        nozzle.position.copy(frame.position).addScaledVector(frame.tangent,Number(x)||0);
+        nozzle.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),frame.tangent);
+        applyNozzleDirection(nozzle,0);return;
+      }
+      if(currentModel==='H' && ['shell','shellLower'].includes(bodyPart) && !isAxial(pos) && x>hairpinLayout().right) {
+        const p=hairpinLayout(),level=bodyPart==='shell'?'upper':'lower',length=level==='upper'?p.spoolUpperLength:p.spoolLowerLength;
+        const frame=hairpinSpoolFrame(level,Math.max(0,Math.min(1,(x-p.right)/length)),p);
+        const angle=THREE.MathUtils.degToRad(normalizedPerimeterAngle(angleDeg,pos));
+        const radial=new THREE.Vector3(0,Math.cos(angle),Math.sin(angle)).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0),frame.tangent));
+        nozzle.position.copy(frame.position).addScaledVector(radial,Math.max(.005,frame.radius-.005));
+        nozzle.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),radial);
+        applyNozzleDirection(nozzle,THREE.MathUtils.radToDeg(angle));return;
+      }
       const offsetY = nozzle.userData.offsetY || 0;
       const offsetZ = nozzle.userData.offsetZ || 0;
       if (isAxial(pos)) {
@@ -1786,7 +1897,8 @@
       if (currentModel === 'H') {
         const p=hairpinLayout();
         BODY_BOUNDS.shell={min:p.left+.05,max:p.spoolEnd-.05,center:0};
-        BODY_BOUNDS.shellLower={...BODY_BOUNDS.shell};
+        BODY_BOUNDS.shell.max=p.right+p.spoolUpperLength-.05;
+        BODY_BOUNDS.shellLower={...BODY_BOUNDS.shell,max:p.right+p.spoolLowerLength-.05};
         BODY_BOUNDS.channel={min:p.left-p.headerDepth+.05,max:p.left-.05,center:p.left-p.headerDepth/2};
       }
       for (const prefix of ['edit','new']) {
@@ -1812,6 +1924,7 @@
         const bounds = BODY_BOUNDS[data.bodyPart];
         // Preserve manually entered positions when dimensions change.
         placeNozzle(nozzle, data.valX, data.pos, data.bodyPart);
+        updateNozzleFlangePlate(nozzle);
       });
       updateNameplatePlacement();
       if (reposition && selectedNozzle) {
@@ -1929,7 +2042,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -1960,6 +2073,7 @@
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
         pos: isAxial(pos) ? pos : closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
         offsetY: Number(offsetY) || 0, offsetZ: Number(offsetZ) || 0,
+        flangeShape:['auto','round','square'].includes(flangeShape)?flangeShape:'auto',flangeBoltCount:Number(flangeBoltCount)||0,
         headMount: !!headMount, headAngle: Math.max(0, Math.min(90, Number(headAngle) || 0)),
         valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
         hasNS: hasNS, sizeNS: sizeNS, tagNS: tagNS,
@@ -2064,22 +2178,9 @@
         ].map(([x, y]) => new THREE.Vector2(x, y));
         const flangeHub = new THREE.Mesh(new THREE.LatheGeometry(tubeProfile, 48), nzMat);
         group.add(flangeHub);
-        const flangeShape = new THREE.Shape();
-        flangeShape.absarc(0, 0, fOuter, 0, Math.PI * 2, false);
-        const bore = new THREE.Path();
-        bore.absarc(0, 0, pInner, 0, Math.PI * 2, true);
-        flangeShape.holes.push(bore);
-        for (let i = 0; i < dim.bolts; i++) {
-          const angle = (i + 0.5) * Math.PI * 2 / dim.bolts;
-          const boltHole = new THREE.Path();
-          boltHole.absarc(Math.cos(angle) * dim.K / 2, Math.sin(angle) * dim.K / 2,
-            dim.L / 2, 0, Math.PI * 2, true);
-          flangeShape.holes.push(boltHole);
-        }
-        const flange = new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape, {
-          depth: dim.B, bevelEnabled: true, bevelThickness: Math.min(0.0015, dim.B * 0.06),
-          bevelSize: Math.min(0.0015, dim.B * 0.06), bevelSegments: 1, steps: 1, curveSegments: 48
-        }), flMat);
+        const flange = new THREE.Mesh(nozzlePlateGeometry(group.userData,pInner),flMat);
+        group.userData.flangePlate=flange;group.userData.flangeBore=pInner;
+        group.userData.flangePlateKey=JSON.stringify(nozzleFlangeSettings(group.userData));
         flange.rotation.x = -Math.PI / 2;
         flange.position.y = nippleLength + hubHeight;
         group.add(flange);
@@ -2236,7 +2337,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount
           );
           nozzlesList.push(newNz);
         });
@@ -2326,6 +2427,8 @@
       document.getElementById('edit-nz-body').value = data.bodyPart;
       updateConnectionTypeUI(data.connectionType || 'flanged', data.rating);
       document.getElementById('edit-nz-face').value = data.face || 'RF';
+      document.getElementById('edit-flange-shape').value=data.flangeShape||'auto';
+      document.getElementById('edit-flange-bolts').value=data.flangeBoltCount||0;
       updateAsmeInfo('edit-asme-info', data.diaIndex, data.rating, data.connectionType, data.face);
       const editNeckLength = document.getElementById('edit-neck-length');
       editNeckLength.value = data.neckLength || defaultNozzleNeckLength(data.diaIndex);
@@ -2517,7 +2620,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -2537,6 +2640,10 @@
       });
     });
 
+    document.getElementById('edit-flange-shape').addEventListener('change',event=>rebuildSelectedNozzle({flangeShape:event.target.value}));
+    document.getElementById('edit-flange-bolts').addEventListener('change',event=>{
+      const n=Number(event.target.value);if(Number.isInteger(n)&&(n===0||(n>=4&&n<=120))) rebuildSelectedNozzle({flangeBoltCount:n});
+    });
     document.getElementById('edit-nz-direction').addEventListener('change', event => {
       rebuildSelectedNozzle({direction: event.target.value});
     });
@@ -2789,6 +2896,8 @@
     updatePerimeterAngleOutput('new-nz-angle-value', newAngle.value);
 
     document.getElementById('btn-add-nz').addEventListener('click', () => {
+      const requestedBolts=Number(document.getElementById('new-flange-bolts').value);
+      if(!Number.isInteger(requestedBolts)||(requestedBolts!==0&&(requestedBolts<4||requestedBolts>120))) {document.getElementById('save-status').textContent='Usa 0 para pernos automáticos, o un entero entre 4 y 120.';return;}
       customNozzleCount++;
       const connectionType = newType.value;
       const diaIndex = Number(newDia.value);
@@ -2804,7 +2913,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value);
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
@@ -2821,6 +2930,16 @@
     }
     for(const level of ['upper','lower']) {
       const prefix=level==='upper'?'hairpinSpoolUpper':'hairpinSpoolLower';
+      for(const [suffix,eventType] of [['shape','change'],['bend','change'],['rotation','change'],['length','change']]) {
+        document.getElementById('hairpin-spool-'+level+'-'+suffix).addEventListener(eventType,event=>{
+          if(readOnly) return;
+          const value=suffix==='shape'?event.target.value:Number(event.target.value);
+          if(suffix!=='shape'&&!Number.isFinite(value)) return;
+          if(suffix==='length'&&(value<.2||value>10)||suffix==='rotation'&&(value<0||value>359)) return;
+          currentDimensions[prefix+suffix[0].toUpperCase()+suffix.slice(1)]=value;
+          applyModel(currentModel,true);syncStateToParent();
+        });
+      }
       document.getElementById('hairpin-spool-'+level+'-rating').addEventListener('change',event=>{
         if(readOnly) return;
         currentDimensions[prefix+'Rating']=event.target.value;applyModel(currentModel,true);syncStateToParent();
@@ -2859,7 +2978,7 @@
         document.getElementById('new-elbow').value='straight';
         document.getElementById('btn-add-nz').click();
         if(selectedNozzle) {
-          const x=hairpinLayout().right+currentDimensions.bonnetLength*.5;
+          const x=hairpinLayout().right+(body==='shell'?hairpinLayout().spoolUpperLength:hairpinLayout().spoolLowerLength)*.5;
           selectedNozzle.userData.valX=x;
           let number=body==='shell'?1:2;
           while(nozzlesList.some(n=>n!==selectedNozzle&&n.userData.tagName===`S${number}`)) number++;
@@ -2875,6 +2994,8 @@
         if(readOnly || currentModel!=='H') return;
         newType.value='flanged';newType.dispatchEvent(new Event('change'));
         const desired=(body==='shell'?hairpinLayout().upperRadius:hairpinLayout().lowerRadius)*2;
+        document.getElementById('new-flange-shape').value='auto';document.getElementById('new-flange-bolts').value=0;
+        document.getElementById('new-nz-rating').value=body==='shell'?hairpinLayout().spoolUpperRating:hairpinLayout().spoolLowerRating;
         const idx=FLANGED_DIAMETER_INDEXES.reduce((best,index)=>Math.abs(pipeOutsideDiameter(index)-desired)<Math.abs(pipeOutsideDiameter(best)-desired)?index:best,0);
         newDia.value=idx;newDia.dispatchEvent(new Event('change'));
         document.getElementById('new-nz-body').value=body;
