@@ -311,6 +311,14 @@ def validar_diseno(data, _nivel=0):
             raise ValueError("clase de brida de carrete inválida")
         if dimensions.get("hairpinSpool" + nivel + "Shape", "round") not in {"round", "square"}:
             raise ValueError("forma de brida de carrete inválida")
+        if not isinstance(dimensions.get("hairpinSpool" + nivel + "NippleOnly", False), bool):
+            raise ValueError("la opción de niple simple debe ser booleana")
+        if not isinstance(dimensions.get("hairpinSpool" + nivel + "Enabled", True), bool):
+            raise ValueError("la opción de agregar carrete debe ser booleana")
+        for tramo in ("InletLength", "OutletLength"):
+            largo_tramo = dimensions.get("hairpinSpool" + nivel + tramo, 0)
+            if type(largo_tramo) not in (int, float) or not math.isfinite(largo_tramo) or not 0 <= largo_tramo <= 10:
+                raise ValueError("largo del tramo recto del carrete fuera de rango")
         giro = dimensions.get("hairpinSpool" + nivel + "Bend", 0)
         if type(giro) not in (int, float) or giro not in {0, 45, 90, 180}:
             raise ValueError("recorrido del carrete inválido")
@@ -346,6 +354,9 @@ def validar_diseno(data, _nivel=0):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
+        largo_salida = n.get("elbowOutletLength", 0)
+        if type(largo_salida) not in (int, float) or not math.isfinite(largo_salida) or not 0 <= largo_salida <= 10:
+            raise ValueError("largo recto de salida del codo fuera de rango")
         pipe_idx = n.get("pipeDiaIndex", idx)
         if type(pipe_idx) is not int or not 0 <= pipe_idx < len(DIAMETROS):
             raise ValueError("diámetro del niple/codo inválido")
@@ -422,9 +433,9 @@ def validar_diseno(data, _nivel=0):
         neck_length = n.get("neckLength")
         if neck_length is not None and (
             type(neck_length) not in (int, float) or not math.isfinite(neck_length)
-            or not 0.10 <= neck_length <= 1.50
+            or not 0.10 <= neck_length <= 10
         ):
-            raise ValueError("largo visual del niple fuera de rango")
+            raise ValueError("largo del niple fuera de rango")
         for field in ("hasNS", "hasFS"):
             if field in n and not isinstance(n[field], bool):
                 raise ValueError(f"{field} debe ser booleano")
@@ -1038,7 +1049,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v40"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v41"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1502,7 +1513,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v40"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v41"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1647,7 +1658,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v40"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v41"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
