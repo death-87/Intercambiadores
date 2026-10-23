@@ -94,8 +94,8 @@
   <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo B: channel con tapa integral, sin tapa removible, apernado al shell. El otro extremo es un cabezal elíptico soldado que forma parte del shell.</small>
   <small id="model-f-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Bonete apernado en cada extremo del shell. El diámetro y largo de bonete se aplican a ambos extremos. Izquierdo y derecho solo identifican su ubicación en el editor.</small>
   <div id="hairpin-controls" hidden>
-    <small>Horquilla: dos shells paralelos con charretes de brida a brida y un cabezal común. Largo de bonete = largo de charrete; largo de channel = profundidad del cabezal común.</small>
-    <label>Cabezal común / tapa:</label><select id="hairpin-head-style"><option value="flatIntegral">Plano integral</option><option value="ellipticalIntegral">Elíptico integral</option><option value="flatBolted">Tapa plana apernada</option><option value="ellipticalBolted">Tapa elíptica apernada</option></select>
+    <small>Horquilla: dos shells paralelos con charretes de brida a brida y un cabezal común. El bonete común tiene contorno ovalado alargado que abarca ambos tubos. Puede tener fondo abombado, como un bonete, y unión apernada. Largo de bonete = largo de charrete; largo de channel = profundidad del bonete común.</small>
+    <label>Cabezal común / tapa:</label><select id="hairpin-head-style"><option value="flatIntegral">Plano integral</option><option value="ellipticalIntegral">Bonete ovalado abombado integral</option><option value="flatBolted">Tapa ovalada plana apernada</option><option value="ellipticalBolted">Bonete ovalado abombado apernado</option></select>
     <label>Separación libre entre shells: <output id="hairpin-gap-value">0.35</output> m</label><input type="range" id="hairpin-gap" min="0.05" max="2" step="0.05" value="0.35">
     <label>Diámetro visual del tubo interior: <output id="hairpin-tube-value">0.16</output> m</label><input type="range" id="hairpin-tube" min="0.02" max="1.40" step="0.01" value="0.16">
     <button type="button" id="hairpin-add-shell-upper">Agregar boquilla superior hacia arriba</button>
@@ -1214,13 +1214,19 @@
         const outline=shape.getSpacedPoints(128),vertices=[],indices=[],steps=32,stride=outline.length;
         for(let i=0;i<=steps;i++) {
           const theta=i/steps*Math.PI/2,scale=Math.cos(theta);
-          for(const point of outline) vertices.push(p.left-collarDepth-(p.headerDepth-collarDepth)*Math.sin(theta),point.y*scale,-point.x*scale);
+          for(const point of outline) {
+            // Mantiene la parte central alargada del óvalo. Solo se redondean
+            // sus bordes: el bonete no converge a una punta en el centro.
+            const spine=Math.max(-h,Math.min(h,point.y));
+            vertices.push(p.left-collarDepth-(p.headerDepth-collarDepth)*Math.sin(theta),
+              spine+(point.y-spine)*scale,-point.x*scale);
+          }
         }
         for(let i=0;i<steps;i++)for(let j=0;j<stride-1;j++) {
           const a=i*stride+j,b=a+1,c=a+stride,d=c+1;indices.push(a,c,b,b,c,d);
         }
         const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(indices);geometry.computeVertexNormals();
-        const dome=new THREE.Mesh(geometry,shellMat);dome.name=bolted?'Tapa elíptica apernada':'Cabezal elíptico integral';hairpinGroup.add(dome);
+        const dome=new THREE.Mesh(geometry,shellMat);dome.name=bolted?'Bonete ovalado abombado apernado':'Bonete ovalado abombado integral';hairpinGroup.add(dome);
       }
       if(bolted) {
         const joint=p.left-(elliptical?collarDepth:.10*p.headerDepth);
@@ -1586,7 +1592,7 @@
         const p=hairpinLayout(),phi=THREE.MathUtils.degToRad(normalizedPerimeterAngle(angleDeg,pos));
         const collar=p.headerDepth*.15,start=p.left-collar,depth=p.headerDepth-collar;
         const fraction=p.headStyle.startsWith('elliptical')&&x<start?Math.sqrt(Math.max(0,1-((x-start)/depth)**2)):1;
-        const half=p.separation/2*fraction,headRadius=p.radius*1.08*fraction;
+        const half=p.separation/2,headRadius=p.radius*1.08*fraction;
         let lo=0,hi=half+headRadius*2;
         for(let step=0;step<36;step++) {
           const mid=(lo+hi)/2,y=Math.abs(Math.cos(phi)*mid),z=Math.sin(phi)*mid;
@@ -1615,6 +1621,7 @@
       hairpinGroup.visible = currentModel === 'H';
       document.getElementById('hairpin-controls').hidden = currentModel !== 'H';
       document.getElementById('hairpin-head-style').value=currentDimensions.hairpinHeadStyle||'flatIntegral';
+      document.getElementById('channel-length').parentElement.querySelector('label').firstChild.textContent=currentModel==='H'?'Profundidad bonete ovalado: ':'Channel: ';
       document.getElementById('bonnet-diameter').disabled = currentModel === 'H';
       document.getElementById('channel-diameter').disabled = currentModel === 'H';
       if (currentModel === 'H') buildHairpin();
