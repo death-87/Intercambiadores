@@ -306,6 +306,12 @@ def validar_diseno(data, _nivel=0):
     pernos = dimensions.get("hairpinBoltCount", 24)
     if type(pernos) is not int or not 4 <= pernos <= 120:
         raise ValueError("la cantidad de pernos del bonete debe ser un entero entre 4 y 120")
+    for nivel in ("Upper", "Lower"):
+        if dimensions.get("hairpinSpool" + nivel + "Rating", "150#") not in {"150#", "300#", "600#"}:
+            raise ValueError("clase de brida de carrete inválida")
+        pernos_carrete = dimensions.get("hairpinSpool" + nivel + "Bolts", 0)
+        if type(pernos_carrete) is not int or not (pernos_carrete == 0 or 4 <= pernos_carrete <= 120):
+            raise ValueError("pernos de carrete: usa 0 para estándar o un entero entre 4 y 120")
     for field in ("nameplate", "vent", "drain"):
         if field in data and not isinstance(data[field], str):
             raise ValueError(f"{field} debe ser texto")
@@ -1011,7 +1017,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v37"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v38"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1475,7 +1481,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v37"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v38"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1620,7 +1626,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v37"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v38"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"

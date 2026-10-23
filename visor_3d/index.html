@@ -103,6 +103,13 @@
     <label>Medida nominal del tubo superior (NPS):</label><select id="hairpin-outer-upper"></select><small id="hairpin-outer-upper-value"></small>
     <label>Medida nominal del tubo inferior (NPS):</label><select id="hairpin-outer-lower"></select><small id="hairpin-outer-lower-value"></small>
 
+    <label>Clase de las bridas del carrete superior:</label><select id="hairpin-spool-upper-rating"><option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option></select>
+    <label>Pernos por unión del carrete superior (0 = estándar):</label><input id="hairpin-spool-upper-bolts" type="number" min="0" max="120" step="1" value="0">
+    <small id="hairpin-spool-upper-info"></small>
+    <label>Clase de las bridas del carrete inferior:</label><select id="hairpin-spool-lower-rating"><option value="150#">150#</option><option value="300#">300#</option><option value="600#">600#</option></select>
+    <label>Pernos por unión del carrete inferior (0 = estándar):</label><input id="hairpin-spool-lower-bolts" type="number" min="0" max="120" step="1" value="0">
+    <small id="hairpin-spool-lower-info"></small>
+    <small>Bridas WN RF según tabla ASME B16.5. Una cantidad personalizada de pernos modifica el patrón de perforaciones del dibujo.</small>
     <button type="button" id="hairpin-add-shell-upper">Agregar boquilla superior hacia arriba</button>
     <button type="button" id="hairpin-add-shell-lower">Agregar boquilla inferior hacia abajo</button>
     <button type="button" id="hairpin-add-upper">Agregar brida al tubo superior</button>
@@ -1166,8 +1173,31 @@
       const spoolEnd = right + currentDimensions.bonnetLength;
       return {radius,upperRadius,lowerRadius, separation, left, right, spoolEnd,
         headerDepth:currentDimensions.channelLength,headContour:currentDimensions.hairpinHeadContour||'oval',
-        boltCount:currentDimensions.hairpinBoltCount??24,headStyle:currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
+        boltCount:currentDimensions.hairpinBoltCount??24,
+        spoolUpperRating:currentDimensions.hairpinSpoolUpperRating||'150#',spoolLowerRating:currentDimensions.hairpinSpoolLowerRating||'150#',
+        spoolUpperBolts:currentDimensions.hairpinSpoolUpperBolts||0,spoolLowerBolts:currentDimensions.hairpinSpoolLowerBolts||0,headStyle:currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
     }
+    function hairpinSpoolFlangeSpec(radius,rating,override=0) {
+      const diaIndex=FLANGED_DIAMETER_INDEXES.find(index=>Math.abs(pipeOutsideDiameter(index)-radius*2)<1e-7);
+      const standard=diaIndex!==undefined;
+      const dim=standard?flangeDimensions(diaIndex,rating):{
+        D:radius*3.2,B:Math.max(.01,radius*.2),A:radius*2.2,OD:radius*2,
+        H:Math.max(.03,radius*.6),K:radius*2.6,L:Math.max(.008,radius*.12),bolts:8,R:radius*2.1
+      };
+      return {...dim,standard,diaIndex,rating,count:override||dim.bolts};
+    }
+    function updateHairpinSpoolControls() {
+      const p=hairpinLayout();
+      for(const [level,radius,rating,count] of [['upper',p.upperRadius,p.spoolUpperRating,p.spoolUpperBolts],['lower',p.lowerRadius,p.spoolLowerRating,p.spoolLowerBolts]]) {
+        document.getElementById('hairpin-spool-'+level+'-rating').value=rating;
+        document.getElementById('hairpin-spool-'+level+'-bolts').value=count;
+        const spec=hairpinSpoolFlangeSpec(radius,rating,count);
+        document.getElementById('hairpin-spool-'+level+'-info').textContent=spec.standard
+          ? DIAMETERS[spec.diaIndex]+' · '+rating+' · '+(spec.D*1000).toFixed(1)+' mm exterior · '+(spec.B*1000).toFixed(1)+' mm espesor · '+spec.bolts+' pernos estándar'
+          : 'Diámetro anterior sin NPS: brida ilustrativa. Selecciona un NPS de tubo para usar las dimensiones de tabla.';
+      }
+    }
+
     function buildHairpin() {
       const layout=hairpinLayout(),signature=JSON.stringify(layout);
       if(buildHairpin.signature===signature && hairpinGroup.children.length) return;
@@ -1182,21 +1212,54 @@
         mesh.rotation.z=Math.PI/2;mesh.position.set((x1+x2)/2,y,0);mesh.name=name;
         hairpinGroup.add(mesh);return mesh;
       }
-      function flange(x,y,bodyRadius) {
-        const shape=new THREE.Shape();shape.absarc(0,0,bodyRadius*1.26,0,Math.PI*2,false);
-        const bore=new THREE.Path();bore.absarc(0,0,bodyRadius*.85,0,Math.PI*2,true);shape.holes.push(bore);
-        const mesh=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false,curveSegments:64}),flangeMatBase);
-        mesh.rotation.y=Math.PI/2;mesh.position.set(x-thickness/2,y,0);mesh.name='Brida de charrete';hairpinGroup.add(mesh);
+      function drawSpoolFlanges(joint,y,radius,spec) {
+        const bore=radius*.85,gap=2*raisedFaceHeight(spec.rating)+.003;
+        const hubHeight=Math.max(.005,spec.H-spec.B),holeRadius=spec.L/2;
+        function plate(sign) {
+          const shape=new THREE.Shape();shape.absarc(0,0,spec.D/2,0,Math.PI*2,false);
+          const hole=new THREE.Path();hole.absarc(0,0,bore,0,Math.PI*2,true);shape.holes.push(hole);
+          for(let i=0;i<spec.count;i++) {
+            const a=(i+.5)*Math.PI*2/spec.count,path=new THREE.Path();
+            path.absarc(Math.cos(a)*spec.K/2,Math.sin(a)*spec.K/2,holeRadius,0,Math.PI*2,true);shape.holes.push(path);
+          }
+          const flange=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:spec.B,bevelEnabled:false,curveSegments:64}),flangeMatBase);
+          flange.rotation.y=Math.PI/2;
+          flange.position.set(sign<0?joint-gap/2-spec.B:joint+gap/2,y,0);
+          flange.name='Brida de charrete';flange.userData.catalog={...spec};hairpinGroup.add(flange);
+          const profile=[[bore,0],[radius,0],[spec.A/2,hubHeight],[bore,hubHeight],[bore,0]].map(([r,x])=>new THREE.Vector2(r,x));
+          const hub=new THREE.Mesh(new THREE.LatheGeometry(profile,64),shellMat);
+          hub.rotation.z=sign<0?-Math.PI/2:Math.PI/2;
+          hub.position.set(joint+sign*(gap/2+spec.H),y,0);hub.name='Cuello WN de carrete';hairpinGroup.add(hub);
+          const faceShape=new THREE.Shape();faceShape.absarc(0,0,spec.R/2,0,Math.PI*2,false);
+          const faceHole=new THREE.Path();faceHole.absarc(0,0,bore,0,Math.PI*2,true);faceShape.holes.push(faceHole);
+          const rf=raisedFaceHeight(spec.rating);
+          const face=new THREE.Mesh(new THREE.ExtrudeGeometry(faceShape,{depth:rf,bevelEnabled:false,curveSegments:64}),flangeMatBase);
+          face.rotation.y=Math.PI/2;face.position.set(sign<0?joint-gap/2:joint+gap/2-rf,y,0);
+          face.name='Cara elevada RF de carrete';hairpinGroup.add(face);
+        }
+        plate(-1);plate(1);
+        const bolts=new THREE.Group();bolts.position.y=y;bolts.name='Pernos de unión del carrete';
+        bolts.userData={boltCount:spec.count,catalogBoltCount:spec.bolts,rating:spec.rating};hairpinGroup.add(bolts);
+        const diameter=Math.max(.006,spec.L-.125*INCH),nutHeight=diameter*.85;
+        const length=2*spec.B+gap+nutHeight*3;
+        const shafts=new THREE.InstancedMesh(new THREE.CylinderGeometry(diameter/2,diameter/2,length,12),studMat,spec.count);
+        const nuts=new THREE.InstancedMesh(new THREE.CylinderGeometry(diameter*.9,diameter*.9,nutHeight,6),nutMat,spec.count*2);
+        shafts.name='Espárragos del carrete';nuts.name='Tuercas del carrete';const transform=new THREE.Object3D();
+        for(let i=0;i<spec.count;i++) {
+          const a=(i+.5)*Math.PI*2/spec.count,yy=Math.sin(a)*spec.K/2,z=-Math.cos(a)*spec.K/2;
+          transform.rotation.z=Math.PI/2;transform.position.set(joint,yy,z);transform.updateMatrix();shafts.setMatrixAt(i,transform.matrix);
+          for(const [j,sign] of [[0,-1],[1,1]]) {
+            transform.position.x=joint+sign*(gap/2+spec.B+nutHeight/2);transform.updateMatrix();nuts.setMatrixAt(i*2+j,transform.matrix);
+          }
+        }
+        bolts.add(shafts,nuts);
       }
       for(const sign of [-1,1]) {
         const y=sign*p.separation/2,bodyRadius=sign>0?p.upperRadius:p.lowerRadius;
         pipe(p.left,p.right,y,bodyRadius,shellMat,sign>0?'Shell superior':'Shell inferior');
         pipe(p.right,p.spoolEnd,y,bodyRadius,shellMat,'Charrete: niple entre bridas');
-        for(const joint of [p.right,p.spoolEnd]) {
-          flange(joint-thickness*.65,y,bodyRadius);flange(joint+thickness*.65,y,bodyRadius);
-          const bolts=new THREE.Group();bolts.position.y=y;hairpinGroup.add(bolts);
-          studCircle(bolts,joint-thickness*1.4,joint+thickness*1.4,12,bodyRadius*1.12);
-        }
+        const spec=hairpinSpoolFlangeSpec(bodyRadius,sign>0?p.spoolUpperRating:p.spoolLowerRating,sign>0?p.spoolUpperBolts:p.spoolLowerBolts);
+        for(const joint of [p.right,p.spoolEnd]) drawSpoolFlanges(joint,y,bodyRadius,spec);
       }
       // Cabezal común con sección de cápsula que recibe ambos cuerpos.
       const shape=new THREE.Shape(),h=p.separation/2,circular=p.headContour==='circular';
@@ -1300,6 +1363,10 @@
       currentDimensions = {...defaults, hairpinGap:.35,
         hairpinUpperDiameter:defaults.shellDiameter,hairpinLowerDiameter:defaults.shellDiameter,
         hairpinHeadContour:dimensions.hairpinHeadContour==='circular'?'circular':'oval',
+        hairpinSpoolUpperRating:['150#','300#','600#'].includes(dimensions.hairpinSpoolUpperRating)?dimensions.hairpinSpoolUpperRating:'150#',
+        hairpinSpoolLowerRating:['150#','300#','600#'].includes(dimensions.hairpinSpoolLowerRating)?dimensions.hairpinSpoolLowerRating:'150#',
+        hairpinSpoolUpperBolts:Number.isInteger(dimensions.hairpinSpoolUpperBolts)&&dimensions.hairpinSpoolUpperBolts>=4&&dimensions.hairpinSpoolUpperBolts<=120?dimensions.hairpinSpoolUpperBolts:0,
+        hairpinSpoolLowerBolts:Number.isInteger(dimensions.hairpinSpoolLowerBolts)&&dimensions.hairpinSpoolLowerBolts>=4&&dimensions.hairpinSpoolLowerBolts<=120?dimensions.hairpinSpoolLowerBolts:0,
         hairpinBoltCount:Number.isInteger(dimensions.hairpinBoltCount)&&dimensions.hairpinBoltCount>=4&&dimensions.hairpinBoltCount<=120?dimensions.hairpinBoltCount:24,
         hairpinHeadStyle:dimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
       const legacyModelA = model !== 'B' && dimensions.modelALengthsEnabled !== true;
@@ -1640,7 +1707,7 @@
       if(currentModel==='H') currentDimensions.hairpinHeadStyle=currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted';
       document.getElementById('hairpin-controls').hidden = currentModel !== 'H';
       document.getElementById('shell-diameter').parentElement.style.display=currentModel==='H'?'none':'';
-      if(currentModel==='H') updateHairpinPipeSelectors();
+      if(currentModel==='H') {updateHairpinPipeSelectors();updateHairpinSpoolControls();}
       document.getElementById('hairpin-head-style').value=currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted';
       document.getElementById('hairpin-head-contour').value=currentDimensions.hairpinHeadContour||'oval';
       document.getElementById('hairpin-bolt-count').value=currentDimensions.hairpinBoltCount??24;
@@ -2750,6 +2817,19 @@
         if(!FLANGED_DIAMETER_INDEXES.some(index=>DIAMETER_INCHES[index]>=1 && Math.abs(pipeOutsideDiameter(index)-diameter)<1e-7)) return;
         currentDimensions[field]=diameter;
         applyModel(currentModel,true);syncStateToParent();
+      });
+    }
+    for(const level of ['upper','lower']) {
+      const prefix=level==='upper'?'hairpinSpoolUpper':'hairpinSpoolLower';
+      document.getElementById('hairpin-spool-'+level+'-rating').addEventListener('change',event=>{
+        if(readOnly) return;
+        currentDimensions[prefix+'Rating']=event.target.value;applyModel(currentModel,true);syncStateToParent();
+      });
+      document.getElementById('hairpin-spool-'+level+'-bolts').addEventListener('input',event=>{
+        if(readOnly||event.target.value.trim()==='') return;
+        const count=Number(event.target.value);
+        if(!Number.isInteger(count)||(count!==0&&(count<4||count>120))) return;
+        currentDimensions[prefix+'Bolts']=count;applyModel(currentModel,true);syncStateToParent();
       });
     }
     document.getElementById('hairpin-head-contour').addEventListener('change',event=>{
