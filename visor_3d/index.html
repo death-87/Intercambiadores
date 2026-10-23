@@ -102,6 +102,9 @@
     <label for="hairpin-bonnet-depth">Profundidad / largo del bonete (m):</label>
     <input id="hairpin-bonnet-depth" type="number" min="0.05" max="5" step="0.05" value="1.20">
     <small>Aplica al bonete ovalado o circular, con fondo plano o redondeado. Es independiente del largo de los carretes.</small>
+    <label for="hairpin-bonnet-straight">Largo del tramo recto soldado al flange (m):</label>
+    <input id="hairpin-bonnet-straight" type="number" min="0" max="5" step="0.01" value="0.84">
+    <small>El resto de la profundidad forma el fondo redondeado. La unión apernada permanece junto a los tubos de la horquilla.</small>
     <label>Cantidad de pernos del bonete:</label><input id="hairpin-bolt-count" type="number" min="4" max="120" step="1" value="24">
     <small>El contorno circular abarca ambos tubos. El fondo abombado conserva su perfil elíptico. Los pernos se distribuyen por el perímetro elegido.</small>
     <label>Separación libre entre shells: <output id="hairpin-gap-value">0.35</output> m</label><input type="range" id="hairpin-gap" min="0.05" max="2" step="0.05" value="0.35">
@@ -1313,12 +1316,14 @@
       const inlet=level=>Number(currentDimensions['hairpinSpool'+level+'InletLength'])||0;
       const outlet=level=>Number(currentDimensions['hairpinSpool'+level+'OutletLength'])||0;
       const spoolEnd = right + Math.max(enabled('Upper')?upperLength+inlet('Upper')+outlet('Upper'):0,enabled('Lower')?lowerLength+inlet('Lower')+outlet('Lower'):0);
+      const headerDepth=currentDimensions.hairpinBonnetDepth??currentDimensions.channelLength;
+      const headerStraightLength=Math.min(headerDepth*.95,Math.max(0,currentDimensions.hairpinBonnetStraightLength??headerDepth*.7));
       return {radius,upperRadius,lowerRadius,spoolUpperRadius,spoolLowerRadius, separation, left, right, spoolEnd,
         squareSizeMM:currentDimensions.hairpinFlangeSquareSizeMM??(currentDimensions.hairpinSpoolUpperSquareSizeMM||currentDimensions.hairpinSpoolLowerSquareSizeMM||0),
         spoolUpperEnabled:enabled('Upper'),spoolLowerEnabled:enabled('Lower'),
         spoolUpperNippleOnly:!!currentDimensions.hairpinSpoolUpperNippleOnly,spoolLowerNippleOnly:!!currentDimensions.hairpinSpoolLowerNippleOnly,
         spoolUpperInletLength:inlet('Upper'),spoolLowerInletLength:inlet('Lower'),spoolUpperOutletLength:outlet('Upper'),spoolLowerOutletLength:outlet('Lower'),
-        headerDepth:currentDimensions.hairpinBonnetDepth??currentDimensions.channelLength,headContour:currentDimensions.hairpinHeadContour||'oval',
+        headerDepth,headerStraightLength,headContour:currentDimensions.hairpinHeadContour||'oval',
         boltCount:currentDimensions.hairpinBoltCount??24,
         spoolUpperRating:currentDimensions.hairpinSpoolUpperRating||'150#',spoolLowerRating:currentDimensions.hairpinSpoolLowerRating||'150#',
         spoolUpperBolts:currentDimensions.hairpinSpoolUpperBolts||0,spoolLowerBolts:currentDimensions.hairpinSpoolLowerBolts||0,
@@ -1377,6 +1382,9 @@
       const p=hairpinLayout();
       document.getElementById('hairpin-bonnet-depth').value=p.headerDepth;
       document.getElementById('hairpin-bonnet-depth').disabled=readOnly;
+      const straightInput=document.getElementById('hairpin-bonnet-straight');
+      straightInput.value=Number(p.headerStraightLength.toFixed(3));straightInput.max=Number((p.headerDepth*.95).toFixed(3));
+      straightInput.disabled=readOnly||p.headStyle==='flatBolted';
       const sizeInput=document.getElementById('hairpin-flange-square-size');
       sizeInput.value=currentDimensions.hairpinFlangeSquareSizeMM??0;
       sizeInput.disabled=readOnly||!['Upper','Lower'].some(level=>currentDimensions['hairpinSpool'+level+'Shape']==='square'||currentDimensions['hairpinSpool'+level+'OutletShape']==='square');
@@ -1525,9 +1533,9 @@
         outline.absarc(0,headSpine,radius,0,Math.PI,false);outline.lineTo(-radius,-headSpine);
         outline.absarc(0,-headSpine,radius,Math.PI,Math.PI*2,false);return outline;
       }
-      const collarDepth=elliptical?p.headerDepth*.15:p.headerDepth;
+      const collarDepth=elliptical?p.headerStraightLength:p.headerDepth;
       const header=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:collarDepth,bevelEnabled:false,curveSegments:48}),shellMat);
-      header.rotation.y=Math.PI/2;header.position.x=p.left-collarDepth;header.name='Bonete / channel común';(elliptical?hairpinGroup:bonnetAssembly).add(header);
+      header.rotation.y=Math.PI/2;header.position.x=p.left-collarDepth;header.name='Bonete / channel común';bonnetAssembly.add(header);
       if(elliptical) {
         const outline=shape.getSpacedPoints(128),vertices=[],indices=[],steps=32,stride=outline.length;
         for(let i=0;i<=steps;i++) {
@@ -1547,7 +1555,7 @@
         const dome=new THREE.Mesh(geometry,shellMat);dome.name=circular?'Bonete circular de fondo elíptico apernado':'Bonete ovalado abombado apernado';bonnetAssembly.add(dome);
       }
       if(bolted) {
-        const joint=p.left-(elliptical?collarDepth:.10*p.headerDepth);
+        const joint=p.left;
         const flangeShape=capsule(r*1.22),hole=new THREE.Path(capsule(r*.98).getPoints(96));flangeShape.holes.push(hole);
         for(const sign of [-1,1]) {
           const ring=new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape,{depth:thickness,bevelEnabled:false,curveSegments:48}),flangeMatBase);
@@ -1653,6 +1661,7 @@
         currentDimensions[prefix+'Rotation']=Number.isFinite(Number(dimensions[prefix+'Rotation']))?Number(dimensions[prefix+'Rotation']):(level==='Upper'?0:180);
       }
       currentDimensions.hairpinBonnetDepth=Number.isFinite(Number(dimensions.hairpinBonnetDepth))?Math.max(.05,Math.min(5,Number(dimensions.hairpinBonnetDepth))):currentDimensions.channelLength;
+      if(Number.isFinite(dimensions.hairpinBonnetStraightLength)) currentDimensions.hairpinBonnetStraightLength=Math.max(0,Math.min(5,dimensions.hairpinBonnetStraightLength));
       const shared=Number(dimensions.hairpinFlangeSquareSizeMM ?? (dimensions.hairpinSpoolUpperSquareSizeMM||dimensions.hairpinSpoolLowerSquareSizeMM||0));
       currentDimensions.hairpinFlangeSquareSizeMM=shared>0?Math.max(25.4,Math.min(5000,shared)):0;
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
@@ -1966,7 +1975,7 @@
       let radius = Math.max(0.005, section.radius - 0.01);
       if (currentModel === 'H' && bodyPart === 'channel') {
         const p=hairpinLayout(),phi=THREE.MathUtils.degToRad(normalizedPerimeterAngle(angleDeg,pos));
-        const collar=p.headerDepth*.15,start=p.left-collar,depth=p.headerDepth-collar;
+        const collar=p.headerStraightLength,start=p.left-collar,depth=p.headerDepth-collar;
         const fraction=p.headStyle.startsWith('elliptical')&&x<start?Math.sqrt(Math.max(0,1-((x-start)/depth)**2)):1;
         const half=p.headContour==='circular'?0:p.separation/2,headRadius=(p.radius*1.08+(p.headContour==='circular'?p.separation/2:0))*fraction;
         let lo=0,hi=half+headRadius*2;
@@ -3205,6 +3214,11 @@
       const size=Number(event.target.value);if(readOnly||!Number.isFinite(size)||size<0||size>5000)return;
       currentDimensions.hairpinFlangeSquareSizeMM=size>0?Math.max(25.4,size):0;
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
+      applyModel(currentModel,true);syncStateToParent();
+    });
+    document.getElementById('hairpin-bonnet-straight').addEventListener('change',event=>{
+      const length=Number(event.target.value);if(readOnly||!Number.isFinite(length)||length<0||length>5)return;
+      currentDimensions.hairpinBonnetStraightLength=Math.min(hairpinLayout().headerDepth*.95,length);
       applyModel(currentModel,true);syncStateToParent();
     });
     document.getElementById('hairpin-bonnet-depth').addEventListener('change',event=>{
