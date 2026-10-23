@@ -27,9 +27,11 @@
     #toggle-equipment-panel:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
     
     .panel-title { font-size: 12px; font-weight: bold; margin-top: 0; margin-bottom: 8px; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 3px; }
-    .input-group { margin-bottom: 6px; }
+    .input-group { margin-bottom: 6px; min-width: 0; }
+    .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .input-group small { display: block; margin-top: 4px; color: #94a3b8; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
     .input-group label { display: block; font-size: 10px; color: #94a3b8; margin-bottom: 2px; }
-    .input-group input[type="text"], .input-group select { width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; outline: none; }
+    .input-group input[type="text"], .input-group input[type="number"], .input-group select { min-width: 0; width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 3px; outline: none; }
     .input-group input[type="range"] { width: 100%; cursor: pointer; margin: 2px 0; }
     
     .plug-edit-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; background: rgba(0,0,0,0.2); padding: 3px; border-radius: 3px;}
@@ -162,7 +164,7 @@
       <div class="input-group">
         <label>Tipo de conexión:</label>
         <select id="edit-nz-type">
-          <option value="flanged">Bridada</option>
+          <option value="flanged">Niple / codo · flanges opcionales</option>
           <option value="threaded">Roscada (plug)</option><option value="sw">SW (socket weld · soldada)</option>
         </select>
       </div>
@@ -182,17 +184,26 @@
       <label>Diámetro en el equipo (entrada):</label><select id="edit-base-dia"></select>
       <small>Mayor que la brida: niple con reducción concéntrica. Igual: niple recto.</small>
     </div>
-    <div id="edit-flange-details" style="display:flex;gap:4px">
-        <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-        <div class="input-group" style="flex:1"><label>Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Medida del niple/codo soldado (independiente de la brida):</label><select id="edit-pipe-dia"></select><small>Ejemplo: brida de 4″ con niple/codo de 2″. La medida de brida conserva su contorno y perforaciones; el tubo usa su propio diámetro.</small><label>Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+    <div id="edit-flange-details" class="flange-details">
+      <div class="form-row">
+        <div class="input-group"><label for="edit-inlet-flange">Flange en entrada:</label><select id="edit-inlet-flange"><option value="no">Sin flange · soldada</option><option value="yes">Con flange</option></select></div>
+        <div class="input-group"><label for="edit-outlet-flange">Flange en salida:</label><select id="edit-outlet-flange"><option value="yes">Con flange</option><option value="no">Sin flange · soldada</option></select></div>
       </div>
-      <div id="edit-sw-controls" hidden>
+      <div class="form-row">
+        <div class="input-group"><label for="edit-flange-type">Brida:</label><input id="edit-flange-type" type="text" value="WN" disabled></div>
+        <div class="input-group"><label for="edit-nz-face">Cara:</label><select id="edit-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
+      </div>
+      <div class="input-group"><label for="edit-flange-shape">Forma de brida:</label><select id="edit-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select></div>
+      <div class="input-group"><label for="edit-pipe-dia">Medida del niple/codo soldado:</label><select id="edit-pipe-dia"></select><small>Independiente de la brida. Ejemplo: brida de 4″ con niple/codo de 2″.</small></div>
+      <div class="input-group"><label for="edit-flange-bolts">Pernos / agujeros (0 = automático):</label><input id="edit-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+    </div>
+    <div id="edit-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="edit-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
       <div class="input-group" id="edit-sw-flange-control" hidden><label>Clase del flange (independiente de SW):</label><select id="edit-sw-flange-rating"><option>150#</option><option>300#</option><option>600#</option></select></div>
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
     </div>
     <div id="edit-elbow-controls" class="input-group"><label>Recto después del codo (m):</label><input id="edit-elbow-outlet-length" type="number" min="0" max="10" step="0.05" value="0">
-      <label>Salida enflanchada:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
+      <label>Forma de la salida:</label><select id="edit-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90°</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="edit-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
       <label>Dirección NS / FS en el codo:</label><select id="edit-side-axis"><option value="perimeter">Perímetro del cuerpo del codo · giro circular NS/FS</option><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Para girar NS/FS circularmente sobre la pared, elige Perímetro del cuerpo del codo y ajusta sus ángulos. X/Y/Z mantienen las direcciones de referencia.</small>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
@@ -330,9 +341,18 @@
       <label>Diámetro en el equipo (entrada):</label><select id="new-base-dia"></select>
       <small>Mayor que la brida: niple con reducción concéntrica. Igual: niple recto.</small>
     </div>
-    <div id="new-flange-details" style="display:flex;gap:4px">
-      <div class="input-group" style="flex:1"><label>Brida:</label><input value="WN" disabled></div>
-      <div class="input-group" style="flex:1"><label>Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select><label>Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select><label>Medida del niple/codo soldado (independiente de la brida):</label><select id="new-pipe-dia"></select><small>Ejemplo: brida de 4″ con niple/codo de 2″. La medida de brida conserva su contorno y perforaciones; el tubo usa su propio diámetro.</small><label>Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
+    <div id="new-flange-details" class="flange-details">
+      <div class="form-row">
+        <div class="input-group"><label for="new-inlet-flange">Flange en entrada:</label><select id="new-inlet-flange"><option value="no">Sin flange · soldada</option><option value="yes">Con flange</option></select></div>
+        <div class="input-group"><label for="new-outlet-flange">Flange en salida:</label><select id="new-outlet-flange"><option value="yes">Con flange</option><option value="no">Sin flange · soldada</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="input-group"><label for="new-flange-type">Brida:</label><input id="new-flange-type" type="text" value="WN" disabled></div>
+        <div class="input-group"><label for="new-nz-face">Cara:</label><select id="new-nz-face"><option value="RF">RF</option><option value="FF">FF</option></select></div>
+      </div>
+      <div class="input-group"><label for="new-flange-shape">Forma de brida:</label><select id="new-flange-shape"><option value="auto">Automática · heredar del carrete</option><option value="round">Circular</option><option value="square">Cuadrada</option></select></div>
+      <div class="input-group"><label for="new-pipe-dia">Medida del niple/codo soldado:</label><select id="new-pipe-dia"></select><small>Independiente de la brida. Ejemplo: brida de 4″ con niple/codo de 2″.</small></div>
+      <div class="input-group"><label for="new-flange-bolts">Pernos / agujeros (0 = automático):</label><input id="new-flange-bolts" type="number" min="0" max="120" step="1" value="0"></div>
     </div>
     <div id="new-sw-controls" hidden>
       <div class="input-group"><label>Terminación del niple:</label><select id="new-sw-end"><option value="none">Sin accesorio</option><option value="valve">Válvula soldada</option><option value="flange">Flange soldado</option></select></div>
@@ -340,7 +360,7 @@
       <small>Boquilla SW soldada al equipo → niple → accesorio opcional. Geometría SW y válvula esquemáticas.</small>
     </div>
     <div id="new-elbow-controls" class="input-group"><label>Recto después del codo (m):</label><input id="new-elbow-outlet-length" type="number" min="0" max="10" step="0.05" value="0">
-      <label>Salida enflanchada:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90° + flange</option></select>
+      <label>Forma de la salida:</label><select id="new-elbow"><option value="straight">Recta</option><option value="elbow">Codo de 90°</option></select>
       <label>Ubicación de conexiones NS / FS:</label><select id="new-side-mount"><option value="straight">Tramo recto</option><option value="elbow">Centro del codo (45°)</option></select>
       <label>Dirección NS / FS en el codo:</label><select id="new-side-axis"><option value="perimeter">Perímetro del cuerpo del codo · giro circular NS/FS</option><option value="X">+X · paralelas al shell</option><option value="-X">−X · paralelas al shell</option><option value="Z" selected>+Z · perpendiculares al shell (lateral)</option><option value="-Z">−Z · perpendiculares al shell (lateral)</option><option value="Y">+Y · perpendiculares al shell (vertical)</option><option value="-Y">−Y · perpendiculares al shell (vertical)</option></select><small>Para girar NS/FS circularmente sobre la pared, elige Perímetro del cuerpo del codo y ajusta sus ángulos. X/Y/Z mantienen las direcciones de referencia.</small>
       <small>Los plugs salen rectos del centro de la curva, en sentidos opuestos. El eje elegido no gira con el codo.</small>
@@ -716,6 +736,7 @@
           baseDiaIndex: nz.userData.baseDiaIndex, pipeDiaIndex:nz.userData.pipeDiaIndex??nz.userData.diaIndex,
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           swEnd: nz.userData.swEnd, swFlangeRating: nz.userData.swFlangeRating,
+          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false,
           flangeType: "WN",
           face: nz.userData.face || "RF",
           neckLength: nz.userData.neckLength || undefined,
@@ -2084,7 +2105,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -2107,6 +2128,7 @@
         angleNS: Math.max(-180, Math.min(180, Number(angleNS) || 0)),
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
         elbow90: type === 'flanged' && elbow90 === true,
+        inletFlange:inletFlange===true, outletFlange:outletFlange!==false,
         elbowOutletLength:Math.max(0,Math.min(10,Number(elbowOutletLength)||0)),
         elbowRotation: Number.isFinite(Number(elbowRotation)) ? ((Number(elbowRotation) % 360) + 360) % 360 : 0,
         direction: NOZZLE_DIRECTIONS.includes(direction) ? direction : 'radial',
@@ -2302,6 +2324,26 @@
           labelHeight = dim.H;
           totalH += bendRadius+outletLength;
         }
+        if(group.userData.outletFlange === false) {
+          for(const part of [flangeHub,flange,faceMesh,neckWeld]) part.visible=false;
+          if(group.userData.elbow90) {labelHeight=0;totalH-=dim.H;}
+          else totalH=nippleLength;
+        }
+        if(group.userData.inletFlange) {
+          const inletData={...group.userData,diaIndex:group.userData.baseDiaIndex};
+          const inletDim=flangeDimensions(inletData.diaIndex,normalizedRating);
+          const inlet=new THREE.Group();inlet.name='Flange en entrada';group.add(inlet);
+          const plate=new THREE.Mesh(nozzlePlateGeometry(inletData,baseInner),flMat);
+          plate.rotation.x=-Math.PI/2;inlet.add(plate);
+          const h=Math.max(inletDim.B,inletDim.H);
+          const profile=[[baseInner,inletDim.B],[inletDim.A/2,inletDim.B],[baseR,h],[baseInner,h],[baseInner,inletDim.B]].map(([r,y])=>new THREE.Vector2(r,y));
+          inlet.add(new THREE.Mesh(new THREE.LatheGeometry(profile,48),nzMat));
+          if(group.userData.face==='RF') {
+            const rf=raisedFaceHeight(normalizedRating);
+            const profile=[[baseInner,-rf],[inletDim.R/2,-rf],[inletDim.R/2,0],[baseInner,0],[baseInner,-rf]].map(([r,y])=>new THREE.Vector2(r,y));
+            inlet.add(new THREE.Mesh(new THREE.LatheGeometry(profile,48),rfMat));
+          }
+        }
         plugNS = createNozzlePlug(flMat, tagNS, group.userData.ratingNS, true, sizeNS);
         plugNS.rotation.x = Math.PI / 2;
         plugNS.position.set(0, nippleLength * 0.55, sidePipeR + 0.008);
@@ -2390,7 +2432,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange
           );
           nozzlesList.push(newNz);
         });
@@ -2469,6 +2511,8 @@
       document.getElementById('edit-side-mount').value = data.sideMount || 'straight';
       document.getElementById('edit-elbow').value = data.elbow90 ? 'elbow' : 'straight';
       document.getElementById('edit-elbow-outlet-length').value=data.elbowOutletLength||0;
+      document.getElementById('edit-inlet-flange').value=data.inletFlange?'yes':'no';
+      document.getElementById('edit-outlet-flange').value=data.outletFlange===false?'no':'yes';
       document.getElementById('edit-elbow-angle').value = data.elbowRotation || 0;
       document.getElementById('edit-elbow-angle-value').value = `${data.elbowRotation || 0}°`;
       document.getElementById('edit-nz-direction').value = data.direction || 'radial';
@@ -2634,7 +2678,7 @@
       updateElbowControls('edit', type);
       updateSwControls('edit', type);
       populateRatingSelect(editRating, type, preferredRating);
-      document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'flex';
+      document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'block';
       document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
       document.getElementById('edit-neck-control').style.display = type === 'threaded' ? 'none' : '';
       document.getElementById('flange-plugs-editor').style.display = threaded ? 'none' : '';
@@ -2675,7 +2719,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -2696,6 +2740,7 @@
     });
 
     document.getElementById('edit-flange-shape').addEventListener('change',event=>rebuildSelectedNozzle({flangeShape:event.target.value}));
+    for(const [end,field] of [['inlet','inletFlange'],['outlet','outletFlange']]) document.getElementById('edit-'+end+'-flange').addEventListener('change',event=>rebuildSelectedNozzle({[field]:event.target.value==='yes'}));
     document.getElementById('edit-flange-bolts').addEventListener('change',event=>{
       const n=Number(event.target.value);if(Number.isInteger(n)&&(n===0||(n>=4&&n<=120))) rebuildSelectedNozzle({flangeBoltCount:n});
     });
@@ -2906,7 +2951,7 @@
       populatePipeDiameter('new',Number(newDia.value),type,Number(newDia.value));
       populateRatingSelect(document.getElementById('new-nz-rating'), type,
         type !== 'flanged' ? '3000#' : '150#');
-      document.getElementById('new-flange-details').style.display = type !== 'flanged' ? 'none' : 'flex';
+      document.getElementById('new-flange-details').style.display = type !== 'flanged' ? 'none' : 'block';
       document.getElementById('new-neck-control').style.display = type === 'threaded' ? 'none' : '';
       if (type === 'flanged') {
         const neck = defaultNozzleNeckLength(newDia.value);
@@ -2974,7 +3019,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value));
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes');
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
