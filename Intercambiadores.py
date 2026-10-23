@@ -354,11 +354,15 @@ def validar_diseno(data, _nivel=0):
             valor = apilado.get(campo, .4 if campo == "gap" else 0)
             if type(valor) not in (int, float) or not math.isfinite(valor) or not limites[0] <= valor <= limites[1]:
                 raise ValueError(f"{campo} del conjunto fuera de rango")
+        if not isinstance(apilado.get("sameEquipment", False), bool):
+            raise ValueError("la opción de mismo equipo debe ser booleana")
         validar_diseno(apilado["data"], _nivel=1)
         inferior, superior = normalizar(data.get("nameplate", "")), normalizar(apilado["data"].get("nameplate", ""))
         if inferior and not superior:
             raise ValueError("el equipo superior necesita su propio TAG")
-        if inferior and inferior == superior:
+        if apilado.get("sameEquipment") and inferior != superior:
+            raise ValueError("los componentes del mismo equipo deben compartir TAG")
+        if not apilado.get("sameEquipment") and inferior and inferior == superior:
             raise ValueError("los dos equipos deben tener TAG distintos")
     for n in data["nozzles"]:
         if not isinstance(n, dict):
@@ -508,6 +512,8 @@ def cargar_disenos():
             errores[clave] = f"{tag}: {exc}"
     propietarios = {}
     for owner, entry in list(db.items()):
+        if entry["data"].get("stackedEquipment", {}).get("sameEquipment"):
+            continue
         upper = entry["data"].get("stackedEquipment", {}).get("data")
         if not upper:
             continue
@@ -586,6 +592,9 @@ def filas_boquillas(config):
                 "CUERPO": nombre_cuerpo("bonnet"), "POSICIÓN": posicion,
                 "NS": "—", "FS": "—",
             })
+    apilado = config.get("stackedEquipment", {})
+    if apilado.get("sameEquipment") and apilado.get("data"):
+        filas.extend(filas_boquillas(apilado["data"]))
     return filas
 
 
@@ -634,6 +643,10 @@ def contar_conexiones(registro, col_roscadas, config, incluir_bonete):
         # Compatibilidad con diseños antiguos que aún no migraron ambos plugs a nozzles.
         n += int("vent" not in servicios and informado(config.get("vent", "")))
         n += int("drain" not in servicios and informado(config.get("drain", "")))
+    apilado = config.get("stackedEquipment", {})
+    if apilado.get("sameEquipment") and apilado.get("data"):
+        adicional, _ = contar_conexiones({}, None, apilado["data"], incluir_bonete)
+        n += adicional or 0
     return n, "Calculado del diseño: conexiones de la lista + NS/FS"
 
 
@@ -770,6 +783,9 @@ def filas_roscas(config):
     for campo, lado in (("vent", "VENTEO"), ("drain", "DRENAJE")):
         if campo not in servicios and informado(config.get(campo, "")):
             agregar("—", lado + " BONETE", config[campo], "3000#", "", "bonnet")
+    apilado = config.get("stackedEquipment", {})
+    if apilado.get("sameEquipment") and apilado.get("data"):
+        filas.extend(filas_roscas(apilado["data"]))
     return filas
 
 
@@ -1085,7 +1101,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v49"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v50"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1576,7 +1592,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v49"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v50"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1721,7 +1737,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v49"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v50"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"

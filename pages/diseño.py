@@ -78,6 +78,8 @@ def cargar_db():
     conjuntos = list(db.items())
     propietarios = {}
     for owner, data in conjuntos:
+        if data.get("stackedEquipment", {}).get("sameEquipment"):
+            continue
         upper = data.get("stackedEquipment", {}).get("data", {})
         upper_tag = str(upper.get("nameplate", "")).strip()
         if not upper_tag:
@@ -271,7 +273,7 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                 ss.ex_loaded = None
                 ss.pop("ex_template_source", None)
                 ss.design_revision = ss.get("design_revision", 0) + 1
-                message = f"✅ Conjunto '{tag}' / '{upper_tag}' guardado; cada TAG conserva sus propias boquillas." if upper_tag else f"✅ Equipo '{tag}' guardado y verificado en Sheets."
+                message = (f"✅ Equipo '{tag}' guardado con ambos niveles y todas sus conexiones." if data.get("stackedEquipment", {}).get("sameEquipment") else f"✅ Conjunto '{tag}' / '{upper_tag}' guardado; cada TAG conserva sus propias boquillas." if upper_tag else f"✅ Equipo '{tag}' guardado y verificado en Sheets.")
             except Exception as exc:
                 message = f"❌ Guardado no confirmado: {exc}"
             ss.ex_ack = {"event_id": event_id, "message": message}
