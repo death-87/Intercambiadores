@@ -94,21 +94,17 @@
   <small id="model-e-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Tipo B: channel con tapa integral, sin tapa removible, apernado al shell. El otro extremo es un cabezal elíptico soldado que forma parte del shell.</small>
   <small id="model-f-note" style="display:none;color:#7dd3fc;font-size:9px;line-height:1.35;margin-bottom:7px">Bonete apernado en cada extremo del shell. El diámetro y largo de bonete se aplican a ambos extremos. Izquierdo y derecho solo identifican su ubicación en el editor.</small>
   <div id="hairpin-controls" hidden>
-    <input id="hairpin-tube" type="hidden" min="0.02" max="1.4" value="0.16"><output id="hairpin-tube-value" hidden>0.16</output>
     <small>Horquilla: dos shells paralelos con charretes de brida a brida y un cabezal común. Bonete común rígido y desmontable, siempre apernado a la brida ovalada que recibe ambos tubos. Es una sola pieza, equivalente al bonete de los otros modelos, con contorno ovalado. Largo de bonete = largo de charrete; largo de channel = profundidad del bonete común.</small>
     <label>Bonete ovalado rígido · unión apernada:</label><select id="hairpin-head-style"><option value="ellipticalBolted">Bonete ovalado abombado apernado</option><option value="flatBolted">Tapa ovalada plana apernada</option></select>
     <label>Separación libre entre shells: <output id="hairpin-gap-value">0.35</output> m</label><input type="range" id="hairpin-gap" min="0.05" max="2" step="0.05" value="0.35">
-    <label>Diámetro exterior del cuerpo superior: <output id="hairpin-outer-upper-value">1.098</output> m</label><input type="number" id="hairpin-outer-upper" min="0.2" max="2" step="0.01" value="1.098">
-    <label>Diámetro exterior del cuerpo inferior: <output id="hairpin-outer-lower-value">1.098</output> m</label><input type="number" id="hairpin-outer-lower" min="0.2" max="2" step="0.01" value="1.098">
-    <label>Diámetro exterior del tubo interior superior: <output id="hairpin-inner-upper-value">0.16</output> m</label><input type="number" id="hairpin-inner-upper" min="0.02" max="1.4" step="0.01" value="0.16">
-    <label>Diámetro exterior del tubo interior inferior: <output id="hairpin-inner-lower-value">0.16</output> m</label><input type="number" id="hairpin-inner-lower" min="0.02" max="1.4" step="0.01" value="0.16">
-    <small>Con una boquilla axial instalada, el diámetro exterior de ese tubo interior se ajusta desde la medida de su niple en el editor de boquillas. Sin boquilla, usa estos campos. El diámetro general de Shell permite cambiar ambos cuerpos a la vez.</small>
+    <label>Diámetro exterior del tubo superior: <output id="hairpin-outer-upper-value">1.098</output> m</label><input type="number" id="hairpin-outer-upper" min="0.2" max="2" step="0.01" value="1.098">
+    <label>Diámetro exterior del tubo inferior: <output id="hairpin-outer-lower-value">1.098</output> m</label><input type="number" id="hairpin-outer-lower" min="0.2" max="2" step="0.01" value="1.098">
 
     <button type="button" id="hairpin-add-shell-upper">Agregar boquilla superior hacia arriba</button>
     <button type="button" id="hairpin-add-shell-lower">Agregar boquilla inferior hacia abajo</button>
     <button type="button" id="hairpin-add-upper">Agregar brida al tubo superior</button>
     <button type="button" id="hairpin-add-lower">Agregar brida al tubo inferior</button>
-    <small>Las bridas agregadas son boquillas editables: puedes cambiar medida, clase, TAG y conexiones NS/FS. El diámetro visual del tubo se limita al 70% del shell.</small>
+    <small>Las bridas agregadas son boquillas editables: puedes cambiar medida, clase, TAG y conexiones NS/FS. La horquilla tiene únicamente dos tubos de flujo, con diámetros independientes. El diámetro general de Shell permite cambiar ambos a la vez.</small>
   </div>
   <div id="equipment-lengths" style="border-top:1px solid #334155;padding-top:7px">
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
@@ -185,7 +181,7 @@
 
       <div class="input-group">
         <label>Cuerpo:</label>
-        <select id="edit-nz-body"><option value="shellLower" disabled>Shell inferior · horquilla</option><option value="tubeUpper" disabled>Tubo interior superior · horquilla</option><option value="tubeLower" disabled>Tubo interior inferior · horquilla</option>
+        <select id="edit-nz-body"><option value="shellLower" disabled>Tubo inferior · horquilla</option>
           <option value="shell">Shell</option>
           <option value="transition" disabled>Transición</option>
           <option value="channel">Channel</option>
@@ -332,7 +328,7 @@
     </div>
     
     <div class="input-group">
-      <select id="new-nz-body"><option value="shellLower" disabled>Shell inferior · horquilla</option><option value="tubeUpper" disabled>Tubo interior superior · horquilla</option><option value="tubeLower" disabled>Tubo interior inferior · horquilla</option>
+      <select id="new-nz-body"><option value="shellLower" disabled>Tubo inferior · horquilla</option>
         <option value="shell" selected>Shell</option>
         <option value="transition" disabled>Transición</option>
         <option value="channel">Channel</option>
@@ -1060,8 +1056,8 @@
       bonnetLength: 0.80,
       shellDiameter: 1.098,
       channelDiameter: 1.098,
-      bonnetDiameter: 1.098, hairpinGap:.35, hairpinTubeDiameter:.16,
-      hairpinUpperDiameter:1.098,hairpinLowerDiameter:1.098,hairpinInnerUpperDiameter:.16,hairpinInnerLowerDiameter:.16
+      bonnetDiameter: 1.098, hairpinGap:.35,
+      hairpinUpperDiameter:1.098,hairpinLowerDiameter:1.098
     };
     function modelBLayout() {
       const shellRadius = currentDimensions.shellDiameter / 2;
@@ -1165,28 +1161,10 @@
       const separation = upperRadius+lowerRadius+(currentDimensions.hairpinGap ?? .35);
       const left = -currentDimensions.shellLength/2, right = currentDimensions.shellLength/2;
       const spoolEnd = right + currentDimensions.bonnetLength;
-      const tubeRadiusFor = body => {
-        const nozzle = nozzlesList.find(n=>n.userData.bodyPart===body && n.userData.pos==='axialPlus');
-        return nozzle ? pipeOutsideDiameter(nozzle.userData.baseDiaIndex ?? nozzle.userData.diaIndex)/2
-          : Math.min((body==='tubeUpper'?currentDimensions.hairpinInnerUpperDiameter:currentDimensions.hairpinInnerLowerDiameter)??currentDimensions.hairpinTubeDiameter??.16,
-            (body==='tubeUpper'?upperRadius:lowerRadius)*1.4)/2;
-      };
-      return {radius,upperRadius,lowerRadius, separation, left, right, spoolEnd, tubeEnd:spoolEnd+.20,
-        upperTubeRadius:tubeRadiusFor('tubeUpper'),lowerTubeRadius:tubeRadiusFor('tubeLower'),
-        tubeRadius:Math.min(currentDimensions.hairpinTubeDiameter ?? .16, currentDimensions.shellDiameter*.7)/2,
+      return {radius,upperRadius,lowerRadius, separation, left, right, spoolEnd,
         headerDepth:currentDimensions.channelLength,headStyle:currentDimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
     }
-    function updateHairpinDiameterControls() {
-      if(currentModel!=='H') return;
-      const p=hairpinLayout();
-      for(const [body,id,diameter] of [['tubeUpper','hairpin-inner-upper',p.upperTubeRadius*2],['tubeLower','hairpin-inner-lower',p.lowerTubeRadius*2]]) {
-        const input=document.getElementById(id),locked=nozzlesList.some(n=>n.userData.bodyPart===body&&n.userData.pos==='axialPlus');
-        input.disabled=locked||readOnly;input.value=diameter.toFixed(4);
-        document.getElementById(id+'-value').textContent=diameter.toFixed(4)+(locked?' · según niple':'');
-      }
-    }
     function buildHairpin() {
-      updateHairpinDiameterControls();
       const layout=hairpinLayout(),signature=JSON.stringify(layout);
       if(buildHairpin.signature===signature && hairpinGroup.children.length) return;
       buildHairpin.signature=signature;
@@ -1200,22 +1178,21 @@
         mesh.rotation.z=Math.PI/2;mesh.position.set((x1+x2)/2,y,0);mesh.name=name;
         hairpinGroup.add(mesh);return mesh;
       }
-      function flange(x,y,tubeRadius,bodyRadius) {
+      function flange(x,y,bodyRadius) {
         const shape=new THREE.Shape();shape.absarc(0,0,bodyRadius*1.26,0,Math.PI*2,false);
-        const bore=new THREE.Path();bore.absarc(0,0,tubeRadius*1.07,0,Math.PI*2,true);shape.holes.push(bore);
+        const bore=new THREE.Path();bore.absarc(0,0,bodyRadius*.85,0,Math.PI*2,true);shape.holes.push(bore);
         const mesh=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false,curveSegments:64}),flangeMatBase);
         mesh.rotation.y=Math.PI/2;mesh.position.set(x-thickness/2,y,0);mesh.name='Brida de charrete';hairpinGroup.add(mesh);
       }
       for(const sign of [-1,1]) {
-        const y=sign*p.separation/2,tubeRadius=sign>0?p.upperTubeRadius:p.lowerTubeRadius,bodyRadius=sign>0?p.upperRadius:p.lowerRadius;
+        const y=sign*p.separation/2,bodyRadius=sign>0?p.upperRadius:p.lowerRadius;
         pipe(p.left,p.right,y,bodyRadius,shellMat,sign>0?'Shell superior':'Shell inferior');
-        pipe(p.right,p.spoolEnd,y,bodyRadius*.96,shellMat,'Charrete: niple entre bridas');
+        pipe(p.right,p.spoolEnd,y,bodyRadius,shellMat,'Charrete: niple entre bridas');
         for(const joint of [p.right,p.spoolEnd]) {
-          flange(joint-thickness*.65,y,tubeRadius,bodyRadius);flange(joint+thickness*.65,y,tubeRadius,bodyRadius);
+          flange(joint-thickness*.65,y,bodyRadius);flange(joint+thickness*.65,y,bodyRadius);
           const bolts=new THREE.Group();bolts.position.y=y;hairpinGroup.add(bolts);
           studCircle(bolts,joint-thickness*1.4,joint+thickness*1.4,12,bodyRadius*1.12);
         }
-        pipe(p.spoolEnd,p.tubeEnd,y,tubeRadius,shellMat,sign>0?'Tubo interior superior':'Tubo interior inferior');
       }
       // Cabezal común con sección de cápsula que recibe ambos cuerpos.
       const shape=new THREE.Shape(),r=p.radius*1.08,h=p.separation/2;
@@ -1269,11 +1246,6 @@
           }
         }
       }
-      // U interior real, contenida dentro del cabezal común.
-      const points=[];const bendRadius=p.separation/2;
-      for(let i=0;i<=64;i++) {const a=i/64*Math.PI;points.push(new THREE.Vector3(p.left-Math.sin(a)*Math.min(p.headerDepth*.8,bendRadius),Math.cos(a)*bendRadius,0));}
-      const u=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),64,p.tubeRadius,32,false),shellMat);
-      u.name='Retorno U de tubos interiores';hairpinGroup.add(u);
       for(const x of [p.left*.65,p.right*.65]) {
         const support=new THREE.Shape(),w=p.radius*1.5,top=h+p.radius*1.35;
         support.moveTo(-w,-top);support.lineTo(w,-top);support.lineTo(w,top);support.lineTo(-w,top);support.closePath();
@@ -1292,11 +1264,8 @@
       channelDiameter: ['channel-diameter', 'channel-diameter-value'],
       bonnetDiameter: ['bonnet-diameter', 'bonnet-diameter-value'],
       hairpinGap:['hairpin-gap','hairpin-gap-value'],
-      hairpinTubeDiameter:['hairpin-tube','hairpin-tube-value'],
       hairpinUpperDiameter:['hairpin-outer-upper','hairpin-outer-upper-value'],
-      hairpinLowerDiameter:['hairpin-outer-lower','hairpin-outer-lower-value'],
-      hairpinInnerUpperDiameter:['hairpin-inner-upper','hairpin-inner-upper-value'],
-      hairpinInnerLowerDiameter:['hairpin-inner-lower','hairpin-inner-lower-value']
+      hairpinLowerDiameter:['hairpin-outer-lower','hairpin-outer-lower-value']
     };
     function updateDimensionControls() {
       for (const [field, [inputId, outputId]] of Object.entries(dimensionControls)) {
@@ -1310,9 +1279,8 @@
            shellDiameter: 1.44, channelDiameter: 0.72, bonnetDiameter: 1.44}
         : {shellLength: 4.275, reducerLength: 0.9, channelLength: 1.20, bonnetLength: 0.80,
            shellDiameter: 1.098, channelDiameter: 1.098, bonnetDiameter: 1.098};
-      currentDimensions = {...defaults, hairpinGap:.35, hairpinTubeDiameter:.16,
+      currentDimensions = {...defaults, hairpinGap:.35,
         hairpinUpperDiameter:defaults.shellDiameter,hairpinLowerDiameter:defaults.shellDiameter,
-        hairpinInnerUpperDiameter:.16,hairpinInnerLowerDiameter:.16,
         hairpinHeadStyle:dimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
       const legacyModelA = model !== 'B' && dimensions.modelALengthsEnabled !== true;
       for (const [field, [inputId]] of Object.entries(dimensionControls)) {
@@ -1325,8 +1293,6 @@
       }
       if(!Number.isFinite(Number(dimensions.hairpinUpperDiameter))) currentDimensions.hairpinUpperDiameter=currentDimensions.shellDiameter;
       if(!Number.isFinite(Number(dimensions.hairpinLowerDiameter))) currentDimensions.hairpinLowerDiameter=currentDimensions.shellDiameter;
-      if(!Number.isFinite(Number(dimensions.hairpinInnerUpperDiameter))) currentDimensions.hairpinInnerUpperDiameter=currentDimensions.hairpinTubeDiameter;
-      if(!Number.isFinite(Number(dimensions.hairpinInnerLowerDiameter))) currentDimensions.hairpinInnerLowerDiameter=currentDimensions.hairpinTubeDiameter;
       updateDimensionControls();
       buildModelB();
     }
@@ -1406,7 +1372,7 @@
     function componentRadius(bodyPart) {
       if (currentModel === 'H') {
         const p=hairpinLayout();
-        return bodyPart==='tubeUpper'?p.upperTubeRadius:bodyPart==='tubeLower'?p.lowerTubeRadius:bodyPart==='shellLower'?p.lowerRadius:bodyPart==='shell'?p.upperRadius:p.radius;
+        return bodyPart==='shellLower'?p.lowerRadius:bodyPart==='shell'?p.upperRadius:p.radius;
       }
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
       if (bodyPart === 'bonnet' || bodyPart === 'bonnetLeft') return currentDimensions.bonnetDiameter / 2;
@@ -1414,9 +1380,9 @@
     }
     function sectionAt(x, bodyPart = 'shell') {
       if (currentModel === 'H') {
-        const p=hairpinLayout(),lower=['shellLower','tubeLower'].includes(bodyPart);
+        const p=hairpinLayout(),lower=bodyPart==='shellLower';
         return {centerY:bodyPart==='channel'?0:(lower?-1:1)*p.separation/2,
-          radius:['shell','shellLower'].includes(bodyPart)&&x>p.right?componentRadius(bodyPart)*.96:componentRadius(bodyPart)};
+          radius:componentRadius(bodyPart)};
       }
       if (currentModel !== 'B') {
         return {centerY: 0, radius: componentRadius(bodyPart)};
@@ -1552,7 +1518,7 @@
       if (currentModel === 'H') {
         const p=hairpinLayout();
         if (bodyPart==='channel') return positive?p.left:p.left-p.headerDepth;
-        return positive?(bodyPart.startsWith('tube')?p.tubeEnd:p.spoolEnd):p.left;
+        return positive?p.spoolEnd:p.left;
       }
       if (bodyPart === 'channel' && !positive) {
         return currentModel === 'B' ? modelBLayout().channelBodyLeft - 0.10
@@ -1730,16 +1696,14 @@
         const p=hairpinLayout();
         BODY_BOUNDS.shell={min:p.left+.05,max:p.spoolEnd-.05,center:0};
         BODY_BOUNDS.shellLower={...BODY_BOUNDS.shell};
-        BODY_BOUNDS.tubeUpper={min:p.spoolEnd,max:p.tubeEnd,center:(p.spoolEnd+p.tubeEnd)/2};
-        BODY_BOUNDS.tubeLower={...BODY_BOUNDS.tubeUpper};
         BODY_BOUNDS.channel={min:p.left-p.headerDepth+.05,max:p.left-.05,center:p.left-p.headerDepth/2};
       }
       for (const prefix of ['edit','new']) {
         const shellOption=document.querySelector(`#${prefix}-nz-body option[value="shell"]`);
         const channelOption=document.querySelector(`#${prefix}-nz-body option[value="channel"]`);
-        if (shellOption) shellOption.textContent=currentModel==='H'?'Shell superior · horquilla':'Shell';
+        if (shellOption) shellOption.textContent=currentModel==='H'?'Tubo superior · horquilla':'Shell';
         if (currentModel==='H' && channelOption) channelOption.textContent='Bonete ovalado apernado común · horquilla';
-        for(const part of ['shellLower','tubeUpper','tubeLower']) {
+        for(const part of ['shellLower']) {
           const option=document.querySelector(`#${prefix}-nz-body option[value="${part}"]`);
           if(option) option.disabled=currentModel!=='H';
         }
@@ -1863,6 +1827,8 @@
     }
 
     function normalizeBodyPartForCurrentModel(bodyPart) {
+      if(currentModel==='H' && bodyPart==='tubeUpper') return 'shell';
+      if(currentModel==='H' && bodyPart==='tubeLower') return 'shellLower';
       if (currentModel === 'H' && ['bonnet','bonnetLeft','transition'].includes(bodyPart)) return 'channel';
       if (currentModel !== 'H' && ['shellLower','tubeUpper','tubeLower'].includes(bodyPart)) return 'shell';
       if (['D', 'E', 'F'].includes(currentModel) && bodyPart === 'channel') return 'bonnetLeft';
@@ -2779,11 +2745,11 @@
         }
       });
     }
-    for (const [id,body] of [['hairpin-add-upper','tubeUpper'],['hairpin-add-lower','tubeLower']]) {
+    for (const [id,body] of [['hairpin-add-upper','shell'],['hairpin-add-lower','shellLower']]) {
       document.getElementById(id).addEventListener('click',()=>{
         if(readOnly || currentModel!=='H') return;
         newType.value='flanged';newType.dispatchEvent(new Event('change'));
-        const desired=(body==='tubeUpper'?hairpinLayout().upperTubeRadius:hairpinLayout().lowerTubeRadius)*2;
+        const desired=(body==='shell'?hairpinLayout().upperRadius:hairpinLayout().lowerRadius)*2;
         const idx=FLANGED_DIAMETER_INDEXES.reduce((best,index)=>Math.abs(pipeOutsideDiameter(index)-desired)<Math.abs(pipeOutsideDiameter(best)-desired)?index:best,0);
         newDia.value=idx;newDia.dispatchEvent(new Event('change'));
         document.getElementById('new-nz-body').value=body;
@@ -2793,7 +2759,7 @@
         document.getElementById('new-elbow').value='straight';
         document.getElementById('btn-add-nz').click();
         if (selectedNozzle) {
-          let number=body==='tubeUpper'?1:2;
+          let number=body==='shell'?1:2;
           while(nozzlesList.some(n=>n!==selectedNozzle && n.userData.tagName===`T${number}`)) number++;
           selectedNozzle.userData.tagName=`T${number}`;
           selectedNozzle.userData.nozzleSprite.updateText(`T${number}`);
