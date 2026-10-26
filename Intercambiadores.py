@@ -909,12 +909,12 @@ def pie_informe_planta(canvas, numero):
     canvas.line(15*mm, 14*mm, 195*mm, 14*mm)
     canvas.setFillColor(colors.HexColor("#24451E"))
     canvas.setFont("Helvetica", 7)
-    canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
     canvas.drawRightString(195*mm, 10.5*mm, f"Página {numero}")
     canvas.setFont("Helvetica", 6)
     canvas.drawCentredString(105*mm, 6.5*mm,
         "SERVICIO DE INSPECCIÓN Y EVALUACIÓN DE ACTIVOS FÍSICOS DE ENAP REFINERÍAS S.A.")
     canvas.drawCentredString(105*mm, 3.2*mm, "CONTRATO N° AC 31104857")
+    canvas.drawString(15*mm, 3.2*mm, "Elaborado por: Juan Navarrete A.")
     canvas.restoreState()
 
 
@@ -958,7 +958,8 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         canvas.setFillColor(muted)
         canvas.drawString(15 * mm, 7.5 * mm, "INGEMARS · CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
         canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {pagina_inicial + documento.page}")
-        canvas.drawString(15 * mm, 3.5 * mm, "Elaborado por: Juan Navarrete A.")
+        canvas.setFont("Helvetica", 6)
+        canvas.drawString(15 * mm, 3.2 * mm, "Elaborado por: Juan Navarrete A.")
         canvas.restoreState()
 
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
