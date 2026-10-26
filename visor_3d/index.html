@@ -70,7 +70,7 @@
   </div>
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
-<div class="input-group"><label>TAG del equipo seleccionado:</label><input id="nameplate-input" type="text"></div>
+<div class="input-group"><label for="nameplate-input">TAG del equipo seleccionado:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
 <div id="stack-controls" style="margin:8px 0;padding:7px;border:1px solid #475569;border-radius:5px">
@@ -78,6 +78,7 @@
   <label><input type="checkbox" id="stack-enabled"> Dos intercambiadores apilados</label>
   <div id="stack-options" hidden>
     <label><input type="checkbox" id="stack-same-equipment"> Ambos niveles pertenecen al mismo equipo (un TAG)</label>
+    <div class="input-group" id="stack-equipment-tag-control" hidden><label for="stack-equipment-tag">TAG único en Excel e informe:</label><input id="stack-equipment-tag" type="text" placeholder="Ejemplo: C965"><small>Los identificadores del dibujo pueden ser C965_1 y C965_2. Ambos componentes se registran bajo este único TAG.</small></div>
     <label>TAG del equipo inferior:</label><input type="text" id="stack-tag-lower">
     <label>TAG del equipo superior:</label><input type="text" id="stack-tag-upper">
     <label>Equipo que estás editando:</label><select id="stack-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select>
@@ -86,7 +87,7 @@
     <label>Ubicación del equipo que vas a importar:</label><select id="stack-import-level"><option value="upper">Superior</option><option value="lower">Inferior</option></select>
     <label>Importar diseño guardado:</label><select id="stack-import"><option value="">Seleccionar TAG…</option></select>
     <button id="stack-import-button" type="button">Importar equipo seleccionado</button>
-    <small>Elige si el equipo actual va arriba o abajo. Al activar se crea una copia editable para el otro nivel. Cada nivel tiene sus propias boquillas y dimensiones. Con TAG independientes, el informe usa las boquillas del equipo elegido. Si ambos niveles pertenecen al mismo equipo, comparten TAG y sus conexiones se incluyen juntas en el informe.</small>
+    <small>Elige si el equipo actual va arriba o abajo. Al activar se crea una copia editable para el otro nivel. Cada nivel tiene sus propias boquillas y dimensiones. Con TAG independientes, el informe usa las boquillas del equipo elegido. Si ambos niveles pertenecen al mismo equipo, comparten un TAG de registro y sus conexiones se incluyen juntas en el informe; los identificadores del dibujo pueden ser distintos.</small>
   </div>
 </div>
 <div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option><option value="F">Dos bonetes apernados · uno en cada extremo</option><option value="H">Horquilla · charretes y bonete común apernado</option></select></div>
@@ -828,9 +829,8 @@
       if (!stackState) return active;
       if (editingLevel === 'upper') stackState.data = active;
       else lowerDesign = active;
-      if(stackState.sameEquipment) lowerDesign.nameplate=stackState.data.nameplate=active.nameplate;
       return {...lowerDesign, stackedEquipment: {
-        gap: stackState.gap, offsetX: stackState.offsetX, sameEquipment:!!stackState.sameEquipment, data: stackState.data
+        gap: stackState.gap, offsetX: stackState.offsetX, sameEquipment:!!stackState.sameEquipment, equipmentTag:stackState.equipmentTag||lowerDesign.nameplate, data: stackState.data
       }};
     }
     function syncStateToParent(action = "change") {
@@ -3421,6 +3421,9 @@
           return;
         }
       }
+      if(stackState?.sameEquipment&&!String(stackState.equipmentTag||'').trim()) {
+        document.getElementById('save-status').textContent='Ingresa el TAG único del equipo en Excel e informe.';return;
+      }
       saving = true;
       document.querySelectorAll('#ui-container input, #ui-container select, #ui-container button').forEach(el => el.disabled = true);
       document.getElementById('save-status').textContent = 'Guardando y verificando en Sheets...';
@@ -3510,7 +3513,7 @@
       const height = stackSeparation(), x = stackState.offsetX || 0;
       heatExchanger.position.set(editingLevel === 'upper' ? x : 0, editingLevel === 'upper' ? height : 0, 0);
       if (companionGroup) companionGroup.position.set(editingLevel === 'lower' ? x : 0, editingLevel === 'lower' ? height : 0, 0);
-      document.getElementById('save-equipment').textContent = (stackState.sameEquipment?'GUARDAR EQUIPO · DOS NIVELES: ':'GUARDAR CONJUNTO · TAG INFERIOR: ') + (lowerDesign?.nameplate || 'Sin TAG');
+      document.getElementById('save-equipment').textContent = (stackState.sameEquipment?'GUARDAR EQUIPO · DOS NIVELES: ':'GUARDAR CONJUNTO · TAG INFERIOR: ') + ((stackState.sameEquipment?stackState.equipmentTag:lowerDesign?.nameplate) || 'Sin TAG');
     }
     function updateStackControls() {
       document.getElementById('stack-enabled').checked = !!stackState;
@@ -3519,8 +3522,12 @@
       document.getElementById('stack-import-level').value = editingLevel === 'upper' ? 'lower' : 'upper';
       document.getElementById('stack-level').value = editingLevel;
       document.getElementById('stack-same-equipment').checked=!!stackState?.sameEquipment;
+      document.getElementById('stack-equipment-tag-control').hidden=!stackState?.sameEquipment;
+      document.getElementById('stack-equipment-tag').value=stackState?.equipmentTag||lowerDesign?.nameplate||'';
+      document.querySelector('label[for="nameplate-input"]').textContent=stackState?.sameEquipment?'Identificador del componente seleccionado (dibujo):':'TAG del equipo seleccionado:';
+      for(const level of ['lower','upper']) document.getElementById('stack-tag-'+level).previousElementSibling.textContent=stackState?.sameEquipment?'Identificador del dibujo '+(level==='lower'?'inferior:':'superior:'):'TAG del equipo '+(level==='lower'?'inferior:':'superior:');
       for(const level of ['lower','upper']) {
-        document.getElementById('stack-tag-'+level).disabled=readOnly||!!stackState?.sameEquipment;
+        document.getElementById('stack-tag-'+level).disabled=readOnly;
         const button=document.getElementById('edit-'+level+'-level');
         button.setAttribute('aria-pressed',String(editingLevel===level));
         button.setAttribute('aria-expanded',String(editingLevel===level&&!window.exchangerBridge.isPanelCollapsed()));
@@ -3563,6 +3570,7 @@
       lowerDesign = base;
       stackState = stackedEquipment?.data ? {
         sameEquipment:stackedEquipment.sameEquipment===true,
+        equipmentTag:stackedEquipment.equipmentTag||base.nameplate,
         gap: Math.min(5, Math.max(0, Number(stackedEquipment.gap) || 0)),
         offsetX: Math.min(20, Math.max(-20, Number(stackedEquipment.offsetX) || 0)),
         data: {...stackedEquipment.data}
@@ -3616,15 +3624,13 @@
     document.getElementById('stack-same-equipment').addEventListener('change',event=>{
       if(!stackState||readOnly)return;collectAssemblyDesign();
       stackState.sameEquipment=event.target.checked;
-      if(stackState.sameEquipment) {
-        stackState.independentNames=[lowerDesign.nameplate,stackState.data.nameplate];
-        lowerDesign.nameplate=stackState.data.nameplate=lowerDesign.nameplate||currentNameplate;
-      } else {
-        const names=stackState.independentNames;
-        if(names) [lowerDesign.nameplate,stackState.data.nameplate]=names;
-        if(lowerDesign.nameplate===stackState.data.nameplate) stackState.data.nameplate=(lowerDesign.nameplate||'EQUIPO')+' B';
-      }
+      if(stackState.sameEquipment) stackState.equipmentTag=stackState.equipmentTag||lowerDesign.nameplate||currentNameplate;
+      else if(lowerDesign.nameplate===stackState.data.nameplate) stackState.data.nameplate=(lowerDesign.nameplate||'EQUIPO')+' B';
       refreshAssemblyView();syncStateToParent();
+    });
+    document.getElementById('stack-equipment-tag').addEventListener('change',event=>{
+      if(!stackState||readOnly)return;
+      stackState.equipmentTag=event.target.value.trim();updateStackControls();syncStateToParent();
     });
     document.getElementById('nameplate-input').addEventListener('change',()=>{if(stackState?.sameEquipment){collectAssemblyDesign();refreshAssemblyView();}});
     for (const [id, field, low, high] of [['stack-gap','gap',0,5], ['stack-offset-x','offsetX',-20,20]]) {
@@ -3651,7 +3657,7 @@
         document.getElementById('save-status').textContent = 'Selecciona un TAG distinto al equipo del otro nivel.';
         return;
       }
-      const imported = JSON.parse(JSON.stringify({...data, nameplate: stackState.sameEquipment?other.nameplate:(data.nameplate || tag)}));
+      const imported = JSON.parse(JSON.stringify({...data, nameplate: data.nameplate || tag}));
       if (destination === 'lower') lowerDesign = imported;
       else stackState.data = imported;
       refreshAssemblyView(); syncStateToParent();
