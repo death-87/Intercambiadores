@@ -909,12 +909,12 @@ def pie_informe_planta(canvas, numero):
     canvas.line(15*mm, 14*mm, 195*mm, 14*mm)
     canvas.setFillColor(colors.HexColor("#24451E"))
     canvas.setFont("Helvetica", 7)
+    canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
     canvas.drawRightString(195*mm, 10.5*mm, f"Página {numero}")
     canvas.setFont("Helvetica", 6)
     canvas.drawCentredString(105*mm, 6.5*mm,
         "SERVICIO DE INSPECCIÓN Y EVALUACIÓN DE ACTIVOS FÍSICOS DE ENAP REFINERÍAS S.A.")
     canvas.drawCentredString(105*mm, 3.2*mm, "CONTRATO N° AC 31104857")
-    canvas.drawString(15*mm, 3.2*mm, "Elaborado por: Juan Navarrete A.")
     canvas.restoreState()
 
 
@@ -958,8 +958,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         canvas.setFillColor(muted)
         canvas.drawString(15 * mm, 7.5 * mm, "INGEMARS · CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
         canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {pagina_inicial + documento.page}")
-        canvas.setFont("Helvetica", 6)
-        canvas.drawString(15 * mm, 3.2 * mm, "Elaborado por: Juan Navarrete A.")
+        canvas.drawString(15 * mm, 3.5 * mm, "Elaborado por: Juan Navarrete A.")
         canvas.restoreState()
 
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
@@ -1008,9 +1007,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             fontSize=13, leading=17, textColor=navy)
         mensaje = "REVISAR · DISCREPANCIA EN CONEXIONES ROSCADAS" if conflicto else "EQUIPO SIN CONEXIONES ROSCADAS"
         detalle = ("El comentario o el total cero no coinciden con las conexiones registradas. Revisar antes de dar por verificada la ausencia de roscas."
-            if conflicto else "Ausencia de conexiones roscadas declarada en comentarios de Hoja 1."
+            if conflicto else None
             if sin_roscas_declarado(registro) else "Cantidad registrada de conexiones roscadas: 0.")
-        destacado = Table([[p(mensaje, destacado_style)], [p(detalle, body)]], colWidths=[180 * mm])
+        filas_destacado = [[p(mensaje, destacado_style)]]
+        if detalle:
+            filas_destacado.append([p(detalle, body)])
+        destacado = Table(filas_destacado, colWidths=[180 * mm])
         destacado.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF2CC") if conflicto else pale),
             ("BOX", (0, 0), (-1, -1), 1.5, colors.HexColor("#C58A18") if conflicto else teal),
@@ -1069,9 +1071,6 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ]))
         elementos += [aviso_tabla, Spacer(1, 3 * mm)]
-    if config is None and conexiones:
-        elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
-                      Spacer(1, 2 * mm)]
     if conexiones:
         encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG CPLG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
@@ -1207,6 +1206,11 @@ def preliminares_planta(equipos, planta, inicios):
         if documento.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
+            canvas.setFillColor(oscuro)
+            canvas.setFont("Helvetica", 8)
+            canvas.drawRightString(195*mm, 27*mm, "ELABORADO POR:")
+            canvas.setFont("Helvetica-Bold", 10)
+            canvas.drawRightString(195*mm, 22*mm, "Juan Navarrete A.")
         canvas.restoreState()
     logos = []
     for archivo, ancho, alto in (("logoingemar.png", 75*mm, 25*mm), ("logoenap.png", 28*mm, 28*mm)):
@@ -1216,22 +1220,12 @@ def preliminares_planta(equipos, planta, inicios):
             logos.append(texto("INGEMARS" if "ingemar" in archivo else "ENAP"))
     logo_tabla = Table([logos], colWidths=[140*mm,40*mm])
     logo_tabla.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
-    autor_label = ParagraphStyle("autor_label", parent=cuerpo, fontName="Helvetica-Bold",
-                                 fontSize=11, leading=15, textColor=oscuro)
-    autor_nombre = ParagraphStyle("autor_nombre", parent=cuerpo, fontName="Helvetica-Bold",
-                                  fontSize=18, leading=24, textColor=oscuro)
-    autor = Table([[texto("ELABORADO POR:", autor_label)],
-                   [texto("Juan Navarrete A.", autor_nombre)]], colWidths=[180*mm])
-    autor.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),claro),
-        ("LINEBEFORE",(0,0),(0,-1),4,verde),
-        ("LEFTPADDING",(0,0),(-1,-1),12), ("RIGHTPADDING",(0,0),(-1,-1),12),
-        ("TOPPADDING",(0,0),(-1,0),10), ("BOTTOMPADDING",(0,1),(-1,1),12)]))
     elementos = [logo_tabla, Spacer(1,24*mm), texto("INFORME TÉCNICO", cuerpo),
         Spacer(1,5*mm), texto("LEVANTAMIENTO DE CONEXIONES ROSCADAS", titulo),
         Spacer(1,5*mm), texto("Y DATOS OPERACIONALES", subtitulo), Spacer(1,12*mm),
         texto("INTERCAMBIADORES DE CALOR", cuerpo), Spacer(1,9*mm),
         texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
-        texto(nombre_planta_informe(planta), subtitulo), Spacer(1,18*mm), autor, PageBreak()]
+        texto(nombre_planta_informe(planta), subtitulo), PageBreak()]
     resumen = resumen_informe_planta(equipos)
     elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
