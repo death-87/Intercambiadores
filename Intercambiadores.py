@@ -1094,27 +1094,21 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         inferior = conjunto.get("nameplate", "—")
         superior = conjunto["stackedEquipment"]["data"].get("nameplate", "—")
         elementos.append(p(f"Inferior: {inferior} · Superior: {superior}. Boquillas y datos de esta ficha: {tag}.", small))
-    vistas_laterales = estado_roscas == "Sin conexiones roscadas"
-    if vistas_laterales and (imagen_modelo or imagen_posterior):
-        imagen_ns = (Image(BytesIO(imagen_modelo), width=86*mm, height=37.625*mm)
-                     if imagen_modelo else p("Sin vista NS disponible.", small))
-        imagen_fs = (Image(BytesIO(imagen_posterior), width=86*mm, height=37.625*mm)
-                     if imagen_posterior else p("Sin vista FS disponible.", small))
-        vistas = Table([[p("NS (NEAR SIDE)", section_style), "", p("FS (FAR SIDE)", section_style)],
-                        [imagen_ns, "", imagen_fs]], colWidths=[86*mm,8*mm,86*mm])
-        vistas.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
-            ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
-        elementos.append(KeepTogether([Spacer(1,6*mm), Paragraph(titulo_vistas,section_style), vistas]))
-    else:
-        if imagen_modelo:
-            imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
-            elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
-        if imagen_posterior:
-            imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
-            elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
+    solo_venteo_drenaje = bool(conexiones) and all(
+        re.match(r"^(VENTEO|DRENAJE)\b", normalizar(fila.get("LADO", ""))) for fila in conexiones)
+    solo_venteo_drenaje = (solo_venteo_drenaje and estado_roscas != "Revisar discrepancia"
+                          and (cantidad is None or cantidad == len(conexiones)))
+    solo_near_side = estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje
+    if imagen_modelo:
+        imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
+        elementos.append(KeepTogether([Spacer(1, 6 * mm),
+            Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
+    elif solo_near_side and imagen_posterior:
+        elementos.append(p("Vista NS (NEAR SIDE) no disponible.", small))
+    if imagen_posterior and not solo_near_side:
+        imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
+        elementos.append(KeepTogether([Spacer(1, 6 * mm),
+            Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
@@ -1339,7 +1333,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         formato = st.selectbox("Archivos a preparar", ["Informe general y PDF individuales (ZIP)",
             "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
-        st.caption("Cada equipo tiene su propia ficha. En los equipos sin roscas, las vistas NS y FS se muestran lado a lado.")
+        st.caption("Cada equipo tiene su propia ficha. Sin roscas o solo con venteos/drenajes se incluye únicamente la vista NS, en tamaño grande.")
         con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
