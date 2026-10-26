@@ -1219,10 +1219,20 @@ def preliminares_planta(equipos, planta, inicios):
             logos.append(texto("INGEMARS" if "ingemar" in archivo else "ENAP"))
     logo_tabla = Table([logos], colWidths=[140*mm,40*mm])
     logo_tabla.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
+    titulo_franja = ParagraphStyle("portada_titulo_franja", parent=titulo,
+                                    fontSize=26, leading=32, textColor=colors.white)
+    sub_franja = ParagraphStyle("portada_sub_franja", parent=subtitulo, textColor=colors.white)
+    equipo_franja = ParagraphStyle("portada_equipo_franja", parent=sub_franja, fontSize=18, leading=24)
+    franja_titulo = Table([[texto("LEVANTAMIENTO DE CONEXIONES ROSCADAS", titulo_franja)],
+                          [texto("Y DATOS OPERACIONALES", sub_franja)],
+                          [texto("INTERCAMBIADORES DE CALOR", equipo_franja)]], colWidths=[180*mm])
+    franja_titulo.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),oscuro),
+        ("LINEBEFORE",(0,0),(0,-1),3,amarillo),
+        ("LEFTPADDING",(0,0),(-1,-1),10*mm), ("RIGHTPADDING",(0,0),(-1,-1),10*mm),
+        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ("TOPPADDING",(0,0),(-1,0),12), ("BOTTOMPADDING",(0,-1),(-1,-1),14)]))
     elementos = [logo_tabla, Spacer(1,24*mm), texto("INFORME TÉCNICO", cuerpo),
-        Spacer(1,5*mm), texto("LEVANTAMIENTO DE CONEXIONES ROSCADAS", titulo),
-        Spacer(1,5*mm), texto("Y DATOS OPERACIONALES", subtitulo), Spacer(1,12*mm),
-        texto("INTERCAMBIADORES DE CALOR", cuerpo), Spacer(1,9*mm),
+        Spacer(1,5*mm), franja_titulo, Spacer(1,12*mm),
         texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
         texto(nombre_planta_informe(planta), subtitulo), PageBreak()]
     resumen = resumen_informe_planta(equipos)
