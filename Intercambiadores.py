@@ -1166,17 +1166,20 @@ def preliminares_planta(equipos, planta, inicios):
                             fontSize=28, leading=34, textColor=oscuro, alignment=TA_LEFT)
     subtitulo = ParagraphStyle("planta_sub", parent=titulo, fontSize=20, leading=26)
     cuerpo = ParagraphStyle("planta_cuerpo", parent=estilos["Normal"], fontSize=9, leading=13)
-    cabecera = ParagraphStyle("planta_col", parent=cuerpo, fontName="Helvetica-Bold", textColor=colors.white)
+    seccion = ParagraphStyle("planta_seccion", parent=cuerpo, fontName="Helvetica-Bold",
+                             fontSize=11, leading=14, textColor=oscuro, keepWithNext=True)
+    celda = ParagraphStyle("planta_celda", parent=cuerpo, fontSize=7.2, leading=9)
+    cabecera = ParagraphStyle("planta_col", parent=celda, fontName="Helvetica-Bold", textColor=colors.white)
     def texto(valor, estilo=cuerpo):
         return Paragraph(escape(str(valor)), estilo)
     def tabla(datos, anchos):
-        t = Table([[texto(v, cabecera if i == 0 else cuerpo) for v in fila] for i, fila in enumerate(datos)],
+        t = Table([[texto(v, cabecera if i == 0 else celda) for v in fila] for i, fila in enumerate(datos)],
                   colWidths=anchos, repeatRows=1)
         t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), verde),
             ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, claro]),
             ("GRID", (0,0), (-1,-1), .4, colors.HexColor("#CAD8BF")),
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING", (0,0), (-1,-1), 7), ("BOTTOMPADDING", (0,0), (-1,-1), 7)]))
+            ("TOPPADDING", (0,0), (-1,-1), 3), ("BOTTOMPADDING", (0,0), (-1,-1), 3)]))
         return t
     def pie(canvas, documento):
         canvas.saveState()
@@ -1210,21 +1213,18 @@ def preliminares_planta(equipos, planta, inicios):
         texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
         texto(nombre_planta_informe(planta), subtitulo), Spacer(1,18*mm), autor, PageBreak()]
     resumen = resumen_informe_planta(equipos)
-    elementos += [texto("RESUMEN DE LA PLANTA", subtitulo), Spacer(1,7*mm),
+    elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
                ["Total de conexiones roscadas · conteos disponibles", resumen["total"]],
                ["Conexiones con descripción detallada", resumen["detalladas"]],
                ["Equipos sin conteo disponible", resumen["sin_conteo"]]], [140*mm,40*mm]),
-        Spacer(1,9*mm), texto("CONEXIONES POR MEDIDA Y CLASE", subtitulo), Spacer(1,5*mm)]
+        Spacer(1,4*mm), texto("CONEXIONES POR MEDIDA Y CLASE", seccion), Spacer(1,2*mm)]
     if resumen["distribucion"]:
         elementos.append(tabla([["MEDIDA", "CLASE / RATING", "CONEXIONES"]] +
             [list(fila) for fila in resumen["distribucion"]], [65*mm,65*mm,50*mm]))
     else:
         elementos.append(texto("No hay conexiones detalladas para distribuir por medida y clase."))
-    elementos += [Spacer(1,5*mm), texto("El total conserva el criterio de la ficha: Excel válido, con respaldo del modelo o de las descripciones. "
-        "La distribución cuenta conexiones detalladas del modelo; sin modelo, usa H–AC de Hoja 1. "
-        "Los campos desconocidos se agrupan como Sin identificar. Ambos totales pueden diferir si falta detalle o hay discrepancias."),
-        PageBreak(), texto("ÍNDICE DE EQUIPOS", subtitulo), Spacer(1,7*mm),
+    elementos += [Spacer(1,4*mm), texto("ÍNDICE DE EQUIPOS", seccion), Spacer(1,2*mm),
         tabla([["EQUIPO", "CONEXIONES ROSCADAS", "PÁGINA"]] + [[equipo["tag"],
             equipo["cantidad"] if equipo["cantidad"] is not None else "Sin dato", inicios[i]]
             for i, equipo in enumerate(equipos)], [80*mm,65*mm,35*mm])]
@@ -1232,26 +1232,101 @@ def preliminares_planta(equipos, planta, inicios):
     return salida.getvalue()
 
 
-def generar_pdf_planta(equipos, imagenes, planta=None):
+def equipo_sin_roscas_confirmado(equipo):
+    if registro_roscas(equipo["config"], equipo["registro"]):
+        return False
+    cantidad = equipo["cantidad"]
+    return cantidad == 0 if cantidad is not None else sin_roscas_declarado(equipo["registro"])
+
+
+def generar_galeria_referencial(equipos, imagenes, planta):
+    from reportlab.platypus import Flowable
+    salida, paginas = BytesIO(), {}
+    verde, oscuro, claro = map(colors.HexColor, ("#4D9824", "#24451E", "#F0F6E9"))
+    estilos = getSampleStyleSheet()
+    titulo = ParagraphStyle("ref_titulo", parent=estilos["Heading1"], fontSize=14, leading=18, textColor=oscuro)
+    tag_style = ParagraphStyle("ref_tag", parent=estilos["Heading3"], fontSize=11, leading=14, textColor=oscuro)
+    detalle = ParagraphStyle("ref_detalle", parent=estilos["Normal"], fontSize=6.5, leading=8)
+    def p(valor, estilo=detalle):
+        return Paragraph(escape(str(valor)), estilo)
+    class Tarjeta(Flowable):
+        def __init__(self, equipo):
+            super().__init__()
+            self.tag = equipo["tag"]
+            contenido = [[p(self.tag, tag_style)], [p("SIN CONEXIONES ROSCADAS · REFERENCIAL")]]
+            clave = equipo["captura_key"]
+            for nombre, prefijo in (("NS (NEAR SIDE)", "captura_pdf_"), ("FS (FAR SIDE)", "captura_posterior_pdf_")):
+                contenido.append([p(nombre)])
+                imagen = imagenes.get(prefijo + clave)
+                contenido.append([Image(BytesIO(imagen), width=77*mm, height=33.6875*mm)
+                                  if imagen else p("Sin vista 3D disponible.")])
+            operacion = datos_operacionales(equipo.get("operacion") or {})
+            if operacion:
+                columnas = list(operacion[0])
+                tabla = Table([[p(k) for k in columnas]] + [[p(fila[k]) for k in columnas] for fila in operacion],
+                              colWidths=[77*mm/len(columnas)]*len(columnas))
+                tabla.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),claro),
+                    ("GRID",(0,0),(-1,-1),.3,colors.HexColor("#CAD8BF")),
+                    ("VALIGN",(0,0),(-1,-1),"TOP"), ("LEFTPADDING",(0,0),(-1,-1),3),
+                    ("RIGHTPADDING",(0,0),(-1,-1),3)]))
+                contenido.append([tabla])
+            else:
+                contenido.append([p("Sin datos operacionales registrados.")])
+            self.tabla = Table(contenido, colWidths=[87*mm])
+            self.tabla.setStyle(TableStyle([("BOX",(0,0),(-1,-1),.6,verde),
+                ("BACKGROUND",(0,0),(-1,1),claro), ("VALIGN",(0,0),(-1,-1),"TOP"),
+                ("LEFTPADDING",(0,0),(-1,-1),5*mm), ("RIGHTPADDING",(0,0),(-1,-1),5*mm),
+                ("TOPPADDING",(0,0),(-1,-1),2), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+        def wrap(self, ancho, alto):
+            self.width, self.height = self.tabla.wrap(87*mm, alto)
+            return self.width, self.height
+        def draw(self):
+            paginas[self.tag] = self.canv.getPageNumber()-1
+            self.tabla.drawOn(self.canv, 0, 0)
+    filas = []
+    for i in range(0, len(equipos), 2):
+        filas.append([Tarjeta(equipos[i]), "", Tarjeta(equipos[i+1]) if i+1 < len(equipos) else ""])
+    galeria = Table(filas, colWidths=[87*mm,6*mm,87*mm])
+    galeria.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
+        ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),5*mm)]))
+    doc = SimpleDocTemplate(salida, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm,
+                           topMargin=18*mm, bottomMargin=18*mm)
+    def pie(canvas, documento):
+        pie_informe_planta(canvas, documento.page)
+    doc.build([p("EQUIPOS SIN CONEXIONES ROSCADAS", titulo), p(planta),
+        p("Vistas referenciales agrupadas. Cada equipo conserva su identificación y datos operacionales."),
+        Spacer(1,5*mm), galeria], onFirstPage=pie, onLaterPages=pie)
+    return salida.getvalue(), paginas
+
+
+def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=True):
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas as pdfcanvas
     if planta is None:
         registro = equipos[0]["registro"] if equipos else {}
         columna = buscar_columna(list(registro), ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
         planta = str(registro.get(columna, "Planta"))
-    fichas = []
-    for equipo in equipos:
+    bloques, referencias = [], []
+    for indice, equipo in enumerate(equipos):
+        if agrupar_sin_roscas and equipo_sin_roscas_confirmado(equipo):
+            referencias.append((indice, equipo))
+            continue
         clave = equipo["captura_key"]
         pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                           equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
                           imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True)
-        fichas.append(PdfReader(BytesIO(pdf)))
-    paginas_previas = 3
+        bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
+    if referencias:
+        pdf, paginas = generar_galeria_referencial([e for _, e in referencias], imagenes, planta)
+        bloques.append((PdfReader(BytesIO(pdf)), {indice:paginas[e["tag"]] for indice,e in referencias}))
+    paginas_previas = 2
     for intento in range(5):
-        inicios, cursor = [], paginas_previas + 1
-        for ficha in fichas:
-            inicios.append(cursor)
+        inicios, cursor = [None]*len(equipos), paginas_previas + 1
+        for ficha, destinos in bloques:
+            for indice, pagina in destinos.items():
+                inicios[indice] = cursor + pagina
             cursor += len(ficha.pages)
         previo = PdfReader(BytesIO(preliminares_planta(equipos, planta, inicios)))
         if len(previo.pages) == paginas_previas:
@@ -1262,7 +1337,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None):
     writer = PdfWriter()
     for pagina in previo.pages:
         writer.add_page(pagina)
-    for equipo, ficha in zip(equipos, fichas):
+    for ficha, destinos in bloques:
         inicio = len(writer.pages)
         for pagina in ficha.pages:
             # Reemplaza solo el número de página de cada ficha por el del informe completo.
@@ -1276,7 +1351,8 @@ def generar_pdf_planta(equipos, imagenes, planta=None):
             canvas.save()
             pagina.merge_page(PdfReader(BytesIO(sello.getvalue())).pages[0])
             writer.add_page(pagina)
-        writer.add_outline_item(equipo["tag"], inicio)
+        for indice, pagina in destinos.items():
+            writer.add_outline_item(equipos[indice]["tag"], inicio + pagina)
     writer.add_metadata({"/Title": f"Levantamiento de conexiones roscadas y datos operacionales · {planta} · {nombre_planta_informe(planta)}", "/Author": "Juan Navarrete A."})
     salida = BytesIO()
     writer.write(salida)
@@ -1317,6 +1393,8 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         formato = st.selectbox("Archivos a preparar", ["Informe general y PDF individuales (ZIP)",
             "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
+        agrupar_sin_roscas = st.checkbox("Agrupar equipos sin conexiones roscadas en vistas referenciales", value=True,
+                                        key="informe_planta_referencias")
         con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
@@ -1334,7 +1412,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             else:
                 st.session_state.pop("informe_planta_resultado", None)
                 st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
-                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": [], "formato": formato}
+                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": [], "formato": formato, "agrupar_sin_roscas": agrupar_sin_roscas}
                 st.rerun()
         if tarea:
             if st.button("Cancelar preparación", key="cancelar_planta"):
@@ -1371,7 +1449,8 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 imagenes = st.session_state if tarea["con_imagenes"] else {}
                 try:
                     formato = tarea.get("formato", "Solo informe general")
-                    pdf = (generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"])
+                    pdf = (generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"],
+                                               agrupar_sin_roscas=tarea.get("agrupar_sin_roscas", True))
                            if formato != "Solo PDF individuales (ZIP)" else None)
                     zip_pdf = (generar_zip_fichas(tarea["equipos"], imagenes)
                                if formato != "Solo informe general" else None)
