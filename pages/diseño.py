@@ -101,6 +101,15 @@ def tag_registro(data):
                if apilado.get("sameEquipment") else data.get("nameplate", "")).strip()
 
 
+def resolver_tag_guardado(tag, db):
+    """Reutiliza el nombre guardado para actualizar el mismo registro."""
+    solicitado = str(tag).strip()
+    coincidencias = [k for k in db if normalizar_tag(k) == normalizar_tag(solicitado)]
+    if len(coincidencias) > 1:
+        raise ValueError(f"Hay varios registros equivalentes a '{solicitado}'. Corrige los TAG duplicados.")
+    return coincidencias[0] if coincidencias else solicitado
+
+
 def guardar_db(tag, data):
     response = requests.post(WEBAPP_URL, json={
         "tag": tag, "datos": json.dumps(data, ensure_ascii=False)
@@ -222,7 +231,7 @@ if selected != NEW:
     )
 
 if selected == NEW and ss.get("ex_template_source"):
-    st.info(f"Plantilla copiada desde '{ss.ex_template_source}'. Escribe un TAG nuevo y guarda; el equipo original no se modificará.")
+    st.info(f"Plantilla copiada desde '{ss.ex_template_source}'. Escribe el TAG de destino: si ya existe, su diseño se reemplazará; si no existe, se creará un registro nuevo.")
 else:
     st.caption("Edita el TAG y guarda desde el panel del visor. Cambiar el TAG guarda bajo ese nombre; no elimina la fila anterior.")
 viewer_path = Path(__file__).resolve().parent.parent / "visor_3d"
@@ -263,11 +272,7 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
             try:
                 if not tag:
                     raise ValueError("Debes ingresar el TAG del equipo.")
-                if ss.get("ex_template_source"):
-                    existente = next((k for k in ss.ex_db if normalizar_tag(k) == normalizar_tag(tag)), None)
-                    if existente:
-                        raise ValueError(
-                            f"El TAG '{existente}' ya existe. Usa otro TAG para no modificar equipos guardados.")
+                tag = resolver_tag_guardado(tag, ss.ex_db)
                 if data.get("stackedEquipment", {}).get("sameEquipment"):
                     data["stackedEquipment"]["equipmentTag"] = tag
                 else:
