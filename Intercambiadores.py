@@ -211,16 +211,18 @@ def leer_csv(hoja):
 
 
 def vincular_operacionales(filas, tags, columna_denominacion):
-    """Relaciona TAG completos del inventario y rechaza asignaciones ambiguas."""
-    patrones = {normalizar(tag): re.compile(r"(?<![A-Z0-9])" + re.escape(normalizar(tag)) + r"(?![A-Z0-9])")
-                for tag in tags if informado(tag)}
+    """Vincula TAG exactos y hereda el TAG anterior a _ para sus componentes."""
+    tags_inventario = {normalizar(tag) for tag in tags if informado(tag)}
+    tags_busqueda = tags_inventario | {tag.split("_", 1)[0] for tag in tags_inventario}
+    patrones = {tag: re.compile(r"(?<![A-Z0-9_])" + re.escape(tag) + r"(?![A-Z0-9_])")
+                for tag in tags_busqueda}
     candidatos, avisos = {}, []
     for numero, fila in enumerate(filas, start=2):
         texto = normalizar(fila.get(columna_denominacion, ""))
         columna_ubicacion = next((c for c in fila if normalizar(c) in {
             "UBICAC.TECNICA", "UBICAC. TECNICA", "UBICACION TECNICA"}), None)
         ubicacion = normalizar(fila.get(columna_ubicacion, "")) if columna_ubicacion else ""
-        tag_tecnico = re.search(r'([A-Z]+[0-9]+[A-Z]?)$', ubicacion)
+        tag_tecnico = re.search(r'([A-Z]+[0-9]+[A-Z]?(?:_[A-Z0-9]+)*)$', ubicacion)
         if tag_tecnico:
             # La ubicación identifica el equipo; un TAG entre paréntesis puede
             # ser solo una referencia a otro activo, como F970 (C953).
@@ -243,6 +245,10 @@ def vincular_operacionales(filas, tags, columna_denominacion):
             resultado[tag] = registros[0]
         else:
             avisos.append(f"{tag}: aparece en {len(registros)} filas; no se asignaron valores.")
+    for tag in tags_inventario:
+        base = tag.split("_", 1)[0]
+        if tag not in candidatos and base in resultado:
+            resultado[tag] = resultado[base]
     return resultado, avisos
 
 
