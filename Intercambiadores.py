@@ -1068,9 +1068,6 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ]))
         elementos += [aviso_tabla, Spacer(1, 3 * mm)]
-    if config is None and conexiones:
-        elementos += [p("Origen: Hoja 1 · columnas H–AC. —: dato no identificado en la descripción.", small),
-                      Spacer(1, 2 * mm)]
     if conexiones:
         encabezado = ["BOQUILLA / ORIGEN", "LADO", "MEDIDA", "TIPO", "RATING", "TAG CPLG", "CUERPO"]
         datos_roscas = [[p(x, cell_header) for x in encabezado]] + [
