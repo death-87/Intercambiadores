@@ -360,8 +360,8 @@ def validar_diseno(data, _nivel=0):
         inferior, superior = normalizar(data.get("nameplate", "")), normalizar(apilado["data"].get("nameplate", ""))
         if inferior and not superior:
             raise ValueError("el equipo superior necesita su propio TAG")
-        if apilado.get("sameEquipment") and inferior != superior:
-            raise ValueError("los componentes del mismo equipo deben compartir TAG")
+        if "equipmentTag" in apilado and (not isinstance(apilado["equipmentTag"], str) or not apilado["equipmentTag"].strip()):
+            raise ValueError("el TAG único del equipo debe ser texto no vacío")
         if not apilado.get("sameEquipment") and inferior and inferior == superior:
             raise ValueError("los dos equipos deben tener TAG distintos")
     for n in data["nozzles"]:
@@ -1101,7 +1101,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v50"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v51"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1592,7 +1592,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v50"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v51"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1737,7 +1737,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v50"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v51"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
