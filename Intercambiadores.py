@@ -1007,9 +1007,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             fontSize=13, leading=17, textColor=navy)
         mensaje = "REVISAR · DISCREPANCIA EN CONEXIONES ROSCADAS" if conflicto else "EQUIPO SIN CONEXIONES ROSCADAS"
         detalle = ("El comentario o el total cero no coinciden con las conexiones registradas. Revisar antes de dar por verificada la ausencia de roscas."
-            if conflicto else "Ausencia de conexiones roscadas declarada en comentarios de Hoja 1."
+            if conflicto else None
             if sin_roscas_declarado(registro) else "Cantidad registrada de conexiones roscadas: 0.")
-        destacado = Table([[p(mensaje, destacado_style)], [p(detalle, body)]], colWidths=[180 * mm])
+        filas_destacado = [[p(mensaje, destacado_style)]]
+        if detalle:
+            filas_destacado.append([p(detalle, body)])
+        destacado = Table(filas_destacado, colWidths=[180 * mm])
         destacado.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF2CC") if conflicto else pale),
             ("BOX", (0, 0), (-1, -1), 1.5, colors.HexColor("#C58A18") if conflicto else teal),
