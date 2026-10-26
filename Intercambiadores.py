@@ -1166,17 +1166,20 @@ def preliminares_planta(equipos, planta, inicios):
                             fontSize=28, leading=34, textColor=oscuro, alignment=TA_LEFT)
     subtitulo = ParagraphStyle("planta_sub", parent=titulo, fontSize=20, leading=26)
     cuerpo = ParagraphStyle("planta_cuerpo", parent=estilos["Normal"], fontSize=9, leading=13)
-    cabecera = ParagraphStyle("planta_col", parent=cuerpo, fontName="Helvetica-Bold", textColor=colors.white)
+    seccion = ParagraphStyle("planta_seccion", parent=cuerpo, fontName="Helvetica-Bold",
+                             fontSize=11, leading=14, textColor=oscuro, keepWithNext=True)
+    celda = ParagraphStyle("planta_celda", parent=cuerpo, fontSize=7.2, leading=9)
+    cabecera = ParagraphStyle("planta_col", parent=celda, fontName="Helvetica-Bold", textColor=colors.white)
     def texto(valor, estilo=cuerpo):
         return Paragraph(escape(str(valor)), estilo)
     def tabla(datos, anchos):
-        t = Table([[texto(v, cabecera if i == 0 else cuerpo) for v in fila] for i, fila in enumerate(datos)],
+        t = Table([[texto(v, cabecera if i == 0 else celda) for v in fila] for i, fila in enumerate(datos)],
                   colWidths=anchos, repeatRows=1)
         t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), verde),
             ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, claro]),
             ("GRID", (0,0), (-1,-1), .4, colors.HexColor("#CAD8BF")),
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING", (0,0), (-1,-1), 7), ("BOTTOMPADDING", (0,0), (-1,-1), 7)]))
+            ("TOPPADDING", (0,0), (-1,-1), 3), ("BOTTOMPADDING", (0,0), (-1,-1), 3)]))
         return t
     def pie(canvas, documento):
         canvas.saveState()
@@ -1210,21 +1213,18 @@ def preliminares_planta(equipos, planta, inicios):
         texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
         texto(nombre_planta_informe(planta), subtitulo), Spacer(1,18*mm), autor, PageBreak()]
     resumen = resumen_informe_planta(equipos)
-    elementos += [texto("RESUMEN DE LA PLANTA", subtitulo), Spacer(1,7*mm),
+    elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
                ["Total de conexiones roscadas · conteos disponibles", resumen["total"]],
                ["Conexiones con descripción detallada", resumen["detalladas"]],
                ["Equipos sin conteo disponible", resumen["sin_conteo"]]], [140*mm,40*mm]),
-        Spacer(1,9*mm), texto("CONEXIONES POR MEDIDA Y CLASE", subtitulo), Spacer(1,5*mm)]
+        Spacer(1,4*mm), texto("CONEXIONES POR MEDIDA Y CLASE", seccion), Spacer(1,2*mm)]
     if resumen["distribucion"]:
         elementos.append(tabla([["MEDIDA", "CLASE / RATING", "CONEXIONES"]] +
             [list(fila) for fila in resumen["distribucion"]], [65*mm,65*mm,50*mm]))
     else:
         elementos.append(texto("No hay conexiones detalladas para distribuir por medida y clase."))
-    elementos += [Spacer(1,5*mm), texto("El total conserva el criterio de la ficha: Excel válido, con respaldo del modelo o de las descripciones. "
-        "La distribución cuenta conexiones detalladas del modelo; sin modelo, usa H–AC de Hoja 1. "
-        "Los campos desconocidos se agrupan como Sin identificar. Ambos totales pueden diferir si falta detalle o hay discrepancias."),
-        PageBreak(), texto("ÍNDICE DE EQUIPOS", subtitulo), Spacer(1,7*mm),
+    elementos += [Spacer(1,4*mm), texto("ÍNDICE DE EQUIPOS", seccion), Spacer(1,2*mm),
         tabla([["EQUIPO", "CONEXIONES ROSCADAS", "PÁGINA"]] + [[equipo["tag"],
             equipo["cantidad"] if equipo["cantidad"] is not None else "Sin dato", inicios[i]]
             for i, equipo in enumerate(equipos)], [80*mm,65*mm,35*mm])]
@@ -1321,7 +1321,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=True):
     if referencias:
         pdf, paginas = generar_galeria_referencial([e for _, e in referencias], imagenes, planta)
         bloques.append((PdfReader(BytesIO(pdf)), {indice:paginas[e["tag"]] for indice,e in referencias}))
-    paginas_previas = 3
+    paginas_previas = 2
     for intento in range(5):
         inicios, cursor = [None]*len(equipos), paginas_previas + 1
         for ficha, destinos in bloques:
