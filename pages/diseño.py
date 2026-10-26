@@ -95,6 +95,12 @@ def cargar_db():
     return db
 
 
+def tag_registro(data):
+    apilado = data.get("stackedEquipment", {})
+    return str((apilado.get("equipmentTag") or data.get("nameplate", ""))
+               if apilado.get("sameEquipment") else data.get("nameplate", "")).strip()
+
+
 def guardar_db(tag, data):
     response = requests.post(WEBAPP_URL, json={
         "tag": tag, "datos": json.dumps(data, ensure_ascii=False)
@@ -246,14 +252,14 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
         ss.ex_seen[ss.ex_generation] = event_id
         ss.ex_drafts[selected] = deepcopy(data)
         # Los dos accesos al conjunto comparten también el borrador actual.
-        owner_tag = str(data.get("nameplate", "")).strip()
+        owner_tag = tag_registro(data)
         upper_tag = str(data.get("stackedEquipment", {}).get("data", {}).get("nameplate", "")).strip()
         if upper_tag:
-            for alias in (owner_tag, upper_tag):
+            for alias in ((owner_tag,) if data.get("stackedEquipment", {}).get("sameEquipment") else (owner_tag, upper_tag)):
                 if alias in ss.ex_db:
                     ss.ex_drafts[alias] = deepcopy(data)
         if result.get("action") == "save":
-            tag = str(data.get("nameplate", "")).strip()
+            tag = tag_registro(data)
             try:
                 if not tag:
                     raise ValueError("Debes ingresar el TAG del equipo.")
@@ -262,13 +268,16 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                     if existente:
                         raise ValueError(
                             f"El TAG '{existente}' ya existe. Usa otro TAG para no modificar equipos guardados.")
-                data["nameplate"] = tag
+                if data.get("stackedEquipment", {}).get("sameEquipment"):
+                    data["stackedEquipment"]["equipmentTag"] = tag
+                else:
+                    data["nameplate"] = tag
                 with st.spinner("Guardando y verificando en Sheets..."):
                     ss.ex_db = guardar_db(tag, data)
                 ss.ex_drafts[tag] = deepcopy(data)
                 upper_tag = str(data.get("stackedEquipment", {}).get("data", {}).get("nameplate", "")).strip()
-                ss.ex_select_pending = upper_tag if upper_tag and normalizar_tag(selected) == normalizar_tag(upper_tag) else tag
-                if upper_tag:
+                ss.ex_select_pending = upper_tag if not data.get("stackedEquipment", {}).get("sameEquipment") and upper_tag and normalizar_tag(selected) == normalizar_tag(upper_tag) else tag
+                if upper_tag and not data.get("stackedEquipment", {}).get("sameEquipment"):
                     ss.ex_drafts[upper_tag] = deepcopy(data)
                 ss.ex_loaded = None
                 ss.pop("ex_template_source", None)
