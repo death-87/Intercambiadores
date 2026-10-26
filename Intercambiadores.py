@@ -903,13 +903,14 @@ def aviso_diferencia_roscas(registro, config):
             f"Diferencia (modelo − Excel): {total_modelo - total_excel:+d}. Revisar los datos.")
 
 
-def pie_informe_planta(canvas, numero):
+def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.saveState()
     canvas.setStrokeColor(colors.HexColor("#4D9824"))
     canvas.line(15*mm, 14*mm, 195*mm, 14*mm)
     canvas.setFillColor(colors.HexColor("#24451E"))
     canvas.setFont("Helvetica", 7)
-    canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
+    if mostrar_autor:
+        canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
     canvas.drawRightString(195*mm, 10.5*mm, f"Página {numero}")
     canvas.setFont("Helvetica", 6)
     canvas.drawCentredString(105*mm, 6.5*mm,
@@ -1196,15 +1197,19 @@ def preliminares_planta(equipos, planta, inicios):
         return t
     def pie(canvas, documento):
         canvas.saveState()
-        pie_informe_planta(canvas, documento.page)
+        pie_informe_planta(canvas, documento.page, mostrar_autor=documento.page != 1)
         if documento.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
-            canvas.setFillColor(oscuro)
+            canvas.setFillColor(verde)
+            canvas.rect(110*mm, 19*mm, 85*mm, 15*mm, fill=1, stroke=0)
+            canvas.setFillColor(amarillo)
+            canvas.rect(110*mm, 19*mm, 1.5*mm, 15*mm, fill=1, stroke=0)
+            canvas.setFillColor(colors.white)
             canvas.setFont("Helvetica", 8)
-            canvas.drawRightString(195*mm, 27*mm, "ELABORADO POR:")
+            canvas.drawRightString(190*mm, 27*mm, "ELABORADO POR:")
             canvas.setFont("Helvetica-Bold", 10)
-            canvas.drawRightString(195*mm, 22*mm, "Juan Navarrete A.")
+            canvas.drawRightString(190*mm, 22*mm, "Juan Navarrete A.")
         canvas.restoreState()
     logos = []
     for archivo, ancho, alto in (("logoingemar.png", 75*mm, 25*mm), ("logoenap.png", 28*mm, 28*mm)):
