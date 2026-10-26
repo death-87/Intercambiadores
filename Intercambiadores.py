@@ -903,13 +903,14 @@ def aviso_diferencia_roscas(registro, config):
             f"Diferencia (modelo − Excel): {total_modelo - total_excel:+d}. Revisar los datos.")
 
 
-def pie_informe_planta(canvas, numero):
+def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.saveState()
     canvas.setStrokeColor(colors.HexColor("#4D9824"))
     canvas.line(15*mm, 14*mm, 195*mm, 14*mm)
     canvas.setFillColor(colors.HexColor("#24451E"))
     canvas.setFont("Helvetica", 7)
-    canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
+    if mostrar_autor:
+        canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
     canvas.drawRightString(195*mm, 10.5*mm, f"Página {numero}")
     canvas.setFont("Helvetica", 6)
     canvas.drawCentredString(105*mm, 6.5*mm,
@@ -1094,27 +1095,21 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         inferior = conjunto.get("nameplate", "—")
         superior = conjunto["stackedEquipment"]["data"].get("nameplate", "—")
         elementos.append(p(f"Inferior: {inferior} · Superior: {superior}. Boquillas y datos de esta ficha: {tag}.", small))
-    vistas_laterales = estado_roscas == "Sin conexiones roscadas"
-    if vistas_laterales and (imagen_modelo or imagen_posterior):
-        imagen_ns = (Image(BytesIO(imagen_modelo), width=86*mm, height=37.625*mm)
-                     if imagen_modelo else p("Sin vista NS disponible.", small))
-        imagen_fs = (Image(BytesIO(imagen_posterior), width=86*mm, height=37.625*mm)
-                     if imagen_posterior else p("Sin vista FS disponible.", small))
-        vistas = Table([[p("NS (NEAR SIDE)", section_style), "", p("FS (FAR SIDE)", section_style)],
-                        [imagen_ns, "", imagen_fs]], colWidths=[86*mm,8*mm,86*mm])
-        vistas.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
-            ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
-        elementos.append(KeepTogether([Spacer(1,6*mm), Paragraph(titulo_vistas,section_style), vistas]))
-    else:
-        if imagen_modelo:
-            imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
-            elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
-        if imagen_posterior:
-            imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
-            elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
+    solo_venteo_drenaje = bool(conexiones) and all(
+        re.match(r"^(VENTEO|DRENAJE)\b", normalizar(fila.get("LADO", ""))) for fila in conexiones)
+    solo_venteo_drenaje = (solo_venteo_drenaje and estado_roscas != "Revisar discrepancia"
+                          and (cantidad is None or cantidad == len(conexiones)))
+    solo_near_side = estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje
+    if imagen_modelo:
+        imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
+        elementos.append(KeepTogether([Spacer(1, 6 * mm),
+            Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
+    elif solo_near_side and imagen_posterior:
+        elementos.append(p("Vista NS (NEAR SIDE) no disponible.", small))
+    if imagen_posterior and not solo_near_side:
+        imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
+        elementos.append(KeepTogether([Spacer(1, 6 * mm),
+            Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
@@ -1202,15 +1197,19 @@ def preliminares_planta(equipos, planta, inicios):
         return t
     def pie(canvas, documento):
         canvas.saveState()
-        pie_informe_planta(canvas, documento.page)
+        pie_informe_planta(canvas, documento.page, mostrar_autor=documento.page != 1)
         if documento.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
-            canvas.setFillColor(oscuro)
+            canvas.setFillColor(verde)
+            canvas.rect(110*mm, 19*mm, 85*mm, 15*mm, fill=1, stroke=0)
+            canvas.setFillColor(amarillo)
+            canvas.rect(110*mm, 19*mm, 1.5*mm, 15*mm, fill=1, stroke=0)
+            canvas.setFillColor(colors.white)
             canvas.setFont("Helvetica", 8)
-            canvas.drawRightString(195*mm, 27*mm, "ELABORADO POR:")
+            canvas.drawRightString(190*mm, 27*mm, "ELABORADO POR:")
             canvas.setFont("Helvetica-Bold", 10)
-            canvas.drawRightString(195*mm, 22*mm, "Juan Navarrete A.")
+            canvas.drawRightString(190*mm, 22*mm, "Juan Navarrete A.")
         canvas.restoreState()
     logos = []
     for archivo, ancho, alto in (("logoingemar.png", 75*mm, 25*mm), ("logoenap.png", 28*mm, 28*mm)):
@@ -1339,7 +1338,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         formato = st.selectbox("Archivos a preparar", ["Informe general y PDF individuales (ZIP)",
             "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
-        st.caption("Cada equipo tiene su propia ficha. En los equipos sin roscas, las vistas NS y FS se muestran lado a lado.")
+        st.caption("Cada equipo tiene su propia ficha. Sin roscas o solo con venteos/drenajes se incluye únicamente la vista NS, en tamaño grande.")
         con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
