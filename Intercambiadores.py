@@ -1308,19 +1308,24 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=True):
         columna = buscar_columna(list(registro), ("UNIDAD DE PROCESO", "UNIDAD", "AREA"), ("UNIDAD", "AREA"))
         planta = str(registro.get(columna, "Planta"))
     bloques, referencias = [], []
+    def agregar_referencias():
+        if not referencias:
+            return
+        pdf, paginas = generar_galeria_referencial([e for _, e in referencias], imagenes, planta)
+        bloques.append((PdfReader(BytesIO(pdf)), {indice:paginas[e["tag"]] for indice,e in referencias}))
+        referencias.clear()
     for indice, equipo in enumerate(equipos):
         if agrupar_sin_roscas and equipo_sin_roscas_confirmado(equipo):
             referencias.append((indice, equipo))
             continue
+        agregar_referencias()
         clave = equipo["captura_key"]
         pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                           equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
                           imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True)
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
-    if referencias:
-        pdf, paginas = generar_galeria_referencial([e for _, e in referencias], imagenes, planta)
-        bloques.append((PdfReader(BytesIO(pdf)), {indice:paginas[e["tag"]] for indice,e in referencias}))
+    agregar_referencias()
     paginas_previas = 2
     for intento in range(5):
         inicios, cursor = [None]*len(equipos), paginas_previas + 1
@@ -1381,6 +1386,11 @@ def generar_zip_fichas(equipos, imagenes):
     return salida.getvalue()
 
 
+def orden_natural_tag(tag):
+    return tuple((1, int(parte)) if parte.isdigit() else (0, parte.upper())
+                 for parte in re.split(r"(\d+)", str(tag)))
+
+
 def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacionales, estado, incluir_bonete):
     tarea = st.session_state.get("informe_planta_tarea")
     with st.expander("Informe PDF por planta", expanded=bool(tarea or st.session_state.get("informe_planta_resultado"))):
@@ -1393,12 +1403,13 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         formato = st.selectbox("Archivos a preparar", ["Informe general y PDF individuales (ZIP)",
             "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
-        agrupar_sin_roscas = st.checkbox("Agrupar equipos sin conexiones roscadas en vistas referenciales", value=True,
+        agrupar_sin_roscas = st.checkbox("Agrupar equipos consecutivos sin conexiones roscadas en vistas referenciales", value=True,
                                         key="informe_planta_referencias")
         con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
-            for registro in df[df[col_unidad] == planta].sort_values(col_equipo).to_dict("records"):
+            for registro in sorted(df[df[col_unidad] == planta].to_dict("records"),
+                                   key=lambda fila: orden_natural_tag(fila[col_equipo])):
                 tag = str(registro[col_equipo]).strip()
                 if not informado(tag):
                     continue
