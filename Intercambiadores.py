@@ -1240,10 +1240,10 @@ def campos_informe(prefijo):
         fecha_entrega = st.date_input("Fecha de entrega del informe",
             value=datetime.now(ZoneInfo("America/Santiago")).date(), format="DD-MM-YYYY",
             key=prefijo+"_fecha_entrega")
-        firmas = st.checkbox("Agregar hoja de firmas después de la portada", value=True, key=prefijo+"_firmas")
-        solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
+        firmas = st.checkbox("Incluir firmas en la portada", value=True, key=prefijo+"_firmas")
         inspector = st.text_input("Inspector visual", key=prefijo+"_inspector", max_chars=120)
         ingeniero = st.text_input("Ingeniero de operaciones", key=prefijo+"_ingeniero", max_chars=120)
+        solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
         with st.container(border=True):
             st.markdown("**Destino**")
             destino = st.text_input("Destinatario / Área", key=prefijo+"_destino", max_chars=250)
@@ -1257,9 +1257,9 @@ def campos_informe(prefijo):
 
 def hoja_firmas_informe(documento, planta):
     estilos = getSampleStyleSheet()
-    titulo = ParagraphStyle("firmas_titulo", parent=estilos["Heading1"], fontSize=17, leading=22,
+    titulo = ParagraphStyle("firmas_titulo", parent=estilos["Heading1"], fontSize=10, leading=12, spaceBefore=0, spaceAfter=2,
                             textColor=colors.HexColor("#24451E"))
-    cuerpo = ParagraphStyle("firmas_cuerpo", parent=estilos["Normal"], fontSize=9, leading=13)
+    cuerpo = ParagraphStyle("firmas_cuerpo", parent=estilos["Normal"], fontSize=7.5, leading=9.5)
     rol = ParagraphStyle("firmas_rol", parent=cuerpo, fontName="Helvetica-Bold", textColor=colors.white)
     def p(valor, estilo=cuerpo):
         return Paragraph(escape(str(valor or "____________________________")), estilo)
@@ -1274,18 +1274,16 @@ def hoja_firmas_informe(documento, planta):
     for tabla in [identificacion,distribucion]:
         tabla.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CAD8BF")),
             ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F0F6E9")), ("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("TOPPADDING",(0,0),(-1,-1),7), ("BOTTOMPADDING",(0,0),(-1,-1),7)]))
-    firmas = Table([[p("SOLICITANTE",rol),p("INSPECTOR VISUAL",rol),p("INGENIERO DE OPERACIONES",rol)],
-        [p(documento.get("solicitante")),p(documento.get("inspector")),p(documento.get("ingeniero"))],
+            ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+    firmas = Table([[p("INSPECTOR VISUAL",rol),p("INGENIERO DE OPERACIONES",rol),p("SOLICITANTE",rol)],
+        [p(documento.get("inspector")),p(documento.get("ingeniero")),p(documento.get("solicitante"))],
         [p("Firma:"),p("Firma:"),p("Firma:")],
         [p("Fecha: __________________"),p("Fecha: __________________"),p("Fecha: __________________")]],
-        colWidths=[60*mm]*3, minRowHeights=[12*mm,14*mm,35*mm,12*mm])
+        colWidths=[60*mm]*3, minRowHeights=[9*mm,9*mm,14*mm,7*mm])
     firmas.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#4D9824")),
         ("GRID",(0,0),(-1,-1),.5,colors.HexColor("#CAD8BF")), ("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("TOPPADDING",(0,0),(-1,-1),8), ("BOTTOMPADDING",(0,0),(-1,-1),8)]))
-    return [p("HOJA DE FIRMAS Y DISTRIBUCIÓN",titulo), Spacer(1,6*mm),identificacion,
-            Spacer(1,8*mm),p("DESTINO",titulo),Spacer(1,3*mm),distribucion,
-            Spacer(1,10*mm),firmas]
+        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+    return [identificacion, Spacer(1,3*mm),p("DESTINO",titulo),Spacer(1,1*mm),distribucion,firmas]
 
 
 def preliminares_planta(equipos, planta, inicios, documento=None):
@@ -1314,12 +1312,17 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
             ("TOPPADDING", (0,0), (-1,-1), 3), ("BOTTOMPADDING", (0,0), (-1,-1), 3)]))
         return t
-    def pie(canvas, documento):
+    bloque_documento = hoja_firmas_informe(documento,planta) if documento else []
+    def pie(canvas, pagina):
         canvas.saveState()
-        pie_informe_planta(canvas, documento.page, mostrar_autor=documento.page != 1)
-        if documento.page == 1:
+        pie_informe_planta(canvas, pagina.page, mostrar_autor=pagina.page != 1)
+        if pagina.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
+            if (documento or {}).get("firmas"):
+                firmas = bloque_documento[-1]
+                firmas.wrap(180*mm,100*mm)
+                firmas.drawOn(canvas,15*mm,42*mm)
             canvas.setFillColor(verde)
             canvas.rect(110*mm, 19*mm, 85*mm, 15*mm, fill=1, stroke=0)
             canvas.setFillColor(amarillo)
@@ -1331,7 +1334,7 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
             canvas.drawRightString(190*mm, 22*mm, "Juan Navarrete A.")
         canvas.restoreState()
     logos = []
-    for archivo, ancho, alto in (("logoingemar.png", 75*mm, 25*mm), ("logoenap.png", 28*mm, 28*mm)):
+    for archivo, ancho, alto in (("logoingemar.png", 65*mm, 21*mm), ("logoenap.png", 22*mm, 22*mm)):
         if (ROOT / archivo).is_file():
             logo = Image(str(ROOT / archivo)); logo._restrictSize(ancho, alto); logos.append(logo)
         else:
@@ -1339,29 +1342,24 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
     logo_tabla = Table([logos], colWidths=[140*mm,40*mm])
     logo_tabla.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
     titulo_franja = ParagraphStyle("portada_titulo_franja", parent=titulo,
-                                    fontSize=26, leading=32, textColor=colors.white)
-    sub_franja = ParagraphStyle("portada_sub_franja", parent=subtitulo, textColor=colors.white)
-    equipo_franja = ParagraphStyle("portada_equipo_franja", parent=sub_franja, fontSize=18, leading=24)
+                                    fontSize=22, leading=26, textColor=colors.white)
+    sub_franja = ParagraphStyle("portada_sub_franja", parent=subtitulo, fontSize=16, leading=20, textColor=colors.white)
+    equipo_franja = ParagraphStyle("portada_equipo_franja", parent=sub_franja, fontSize=14, leading=18)
     franja_titulo = Table([[texto("LEVANTAMIENTO DE CONEXIONES ROSCADAS", titulo_franja)],
                           [texto("Y DATOS OPERACIONALES", sub_franja)],
                           [texto("INTERCAMBIADORES DE CALOR", equipo_franja)]], colWidths=[180*mm])
     franja_titulo.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),oscuro),
         ("LINEBEFORE",(0,0),(0,-1),3,amarillo),
         ("LEFTPADDING",(0,0),(-1,-1),10*mm), ("RIGHTPADDING",(0,0),(-1,-1),10*mm),
-        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),5),
-        ("TOPPADDING",(0,0),(-1,0),12), ("BOTTOMPADDING",(0,-1),(-1,-1),14)]))
-    elementos = [logo_tabla, Spacer(1,24*mm), texto("INFORME TÉCNICO", cuerpo),
-        Spacer(1,3*mm)]
-    if (documento or {}).get("numero"):
-        elementos += [texto("INFORME N° " + documento["numero"],cuerpo),Spacer(1,2*mm)]
-    for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
-        if (documento or {}).get(campo):
-            elementos += [texto(etiqueta + ": " + documento[campo],cuerpo),Spacer(1,2*mm)]
-    elementos += [franja_titulo, Spacer(1,12*mm),
-        texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
-        texto(nombre_planta_informe(planta), subtitulo), PageBreak()]
-    if (documento or {}).get("firmas"):
-        elementos += hoja_firmas_informe(documento,planta) + [PageBreak()]
+        ("TOPPADDING",(0,0),(-1,-1),2), ("BOTTOMPADDING",(0,0),(-1,-1),2),
+        ("TOPPADDING",(0,0),(-1,0),8), ("BOTTOMPADDING",(0,-1),(-1,-1),9)]))
+    planta_portada = ParagraphStyle("planta_portada_compacta", parent=subtitulo, fontSize=13, leading=16)
+    elementos = [logo_tabla, Spacer(1,12*mm),franja_titulo,Spacer(1,5*mm),
+        texto("PLANTA / UNIDAD DE PROCESO",cuerpo),
+        texto(planta + " · " + nombre_planta_informe(planta),planta_portada),Spacer(1,4*mm)]
+    if bloque_documento:
+        elementos += bloque_documento[:-1]
+    elementos.append(PageBreak())
     resumen = resumen_informe_planta(equipos)
     elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
@@ -1398,7 +1396,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
                           imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True, documento=documento)
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
-    paginas_previas = 3 if (documento or {}).get("firmas") else 2
+    paginas_previas = 2
     for intento in range(5):
         inicios, cursor = [None]*len(equipos), paginas_previas + 1
         for ficha, destinos in bloques:
@@ -1415,7 +1413,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
     for pagina in previo.pages:
         writer.add_page(pagina)
     if (documento or {}).get("firmas"):
-        writer.add_outline_item("Firmas y distribución",1)
+        writer.add_outline_item("Identificación, destino y firmas",0)
     for ficha, destinos in bloques:
         inicio = len(writer.pages)
         for pagina in ficha.pages:
