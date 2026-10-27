@@ -1267,8 +1267,7 @@ def hoja_firmas_informe(documento, planta):
         [p("OT / Orden de Trabajo"),p(documento.get("ot"))],
         [p("Fecha de entrega"),p(documento.get("fecha_entrega"))],
         [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))]], colWidths=[40*mm,140*mm])
-    distribucion = Table([[p("Destinatario / Área"),p(documento.get("destino"))],
-        [p("Original"),p(documento.get("original"))],
+    distribucion = Table([[p("Original"),p(documento.get("original"))],
         [p("Copia 1"),p(documento.get("copia1"))], [p("Copia 2"),p(documento.get("copia2"))]],
         colWidths=[40*mm,140*mm])
     for tabla in [identificacion,distribucion]:
