@@ -28,6 +28,13 @@
     #toggle-equipment-panel:hover { background: #1e293b; border-color: #38bdf8; }
     #toggle-equipment-panel:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
     
+    #component-selector { position:absolute;top:90px;right:10px;z-index:15;width:260px;max-width:calc(100vw - 20px);box-sizing:border-box;max-height:calc(100vh - 110px);overflow:auto;padding:10px;background:rgba(15,23,42,.94);border:1px solid #475569;border-radius:6px;color:#f8fafc; }
+    #component-selector summary { cursor:pointer;font-size:12px;font-weight:bold;color:#38bdf8; }
+    #component-selector .input-group { margin-top:8px; }
+    #component-selector button { padding:5px 9px;background:#0f172a;color:#f8fafc;border:1px solid #475569;border-radius:4px;cursor:pointer; }
+    #nozzle-picker { min-height:120px; }
+    #component-status { font-size:10px;color:#cbd5e1;line-height:1.4;margin-top:8px; }
+    @media(max-width:600px) { #component-selector { top:auto;bottom:10px;max-height:35vh; } }
     .panel-title { font-size: 12px; font-weight: bold; margin-top: 0; margin-bottom: 8px; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 3px; }
     .input-group { margin-bottom: 6px; min-width: 0; }
     .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
@@ -435,10 +442,19 @@
       <option value="+Z">+Z · horizontal lateral</option><option value="-Z">−Z · horizontal lateral</option></select>
     </div>
 
-    <div class="input-group"><label>Seleccionar boquilla por TAG:</label><select id="nozzle-picker"><option value="">Seleccionar…</option></select></div>
     <button id="btn-add-nz">AGREGAR CONEXIÓN</button>
   </div>
 
+  <details id="component-selector" open>
+    <summary>Seleccionar componentes</summary>
+    <div class="input-group" id="component-level-control" hidden><label for="component-level">Nivel del equipo:</label><select id="component-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select></div>
+    <div class="input-group"><label for="component-search">Buscar TAG, conexión NS/FS o cuerpo:</label><input id="component-search" type="text" placeholder="Ejemplo: N1, PI2, channel…"></div>
+    <div class="input-group"><label for="nozzle-picker">Boquillas y conexiones del nivel seleccionado:</label><select id="nozzle-picker" size="6"><option value="">Seleccionar…</option></select></div>
+    <button id="component-edit-equipment" type="button">Editar equipo</button>
+    <button id="component-clear" type="button">Quitar selección</button>
+    <div class="input-group"><label for="component-pick-radius">Tolerancia del mouse: <output id="component-pick-radius-value">12 px</output></label><input id="component-pick-radius" type="range" min="4" max="24" step="2" value="12"><small>Aumenta el área para seleccionar componentes pequeños.</small></div>
+    <div id="component-status" role="status">Selecciona un componente para abrir sus opciones.</div>
+  </details>
   <div id="canvas-container"></div>
   <div id="load-error" role="alert" style="display:none;position:absolute;bottom:12px;right:12px;max-width:440px;padding:12px;background:#7f1d1d;color:white;border-radius:6px;z-index:30;white-space:pre-wrap;font-size:12px"></div>
 
@@ -458,6 +474,7 @@
         for(const button of document.querySelectorAll('#stack-quick-levels button')) button.setAttribute('aria-expanded',String(!panelCollapsed && button.getAttribute('aria-pressed')==='true'));
         document.getElementById('editor-toolbar').hidden=panelReadOnly;
         document.getElementById('editor-toolbar').style.display=panelReadOnly?'none':'flex';
+        document.getElementById('component-selector').hidden=panelReadOnly;
       }
       panelToggle.addEventListener('click', () => {
         panelCollapsed = !panelCollapsed;
@@ -2589,15 +2606,51 @@
 
     const picker = document.getElementById('nozzle-picker');
     function refreshNozzlePicker() {
+      const query=document.getElementById('component-search').value.trim().toLocaleUpperCase();
       picker.replaceChildren(new Option('Seleccionar…', ''));
-      nozzlesList.forEach(n => picker.add(new Option(
-        `${n.userData.tagName || 'Sin TAG'} · ${n.userData.bodyPart}`, n.userData.idName)));
-      picker.value = selectedNozzle?.userData.idName || '';
+      let count=0;
+      nozzlesList.forEach(n=>{
+        const d=n.userData;
+        const branches=[d.hasNS?'NS '+(d.tagNS||''):null,d.hasFS?'FS '+(d.tagFS||''):null,
+          d.subFront?.enabled?d.subFront.tag:null,d.subRear?.enabled?d.subRear.tag:null].filter(Boolean).join(' · ');
+        const label=[d.tagName||'Sin TAG',d.bodyPart,branches].filter(Boolean).join(' · ');
+        if(query&&!label.toLocaleUpperCase().includes(query))return;
+        picker.add(new Option(label,d.idName));count++;
+      });
+      picker.value=selectedNozzle?.userData.idName||'';
+      document.getElementById('component-status').textContent=(selectedNozzle?'Seleccionado: '+(selectedNozzle.userData.tagName||'Sin TAG')+'. ':'')+count+' componentes en la lista.';
     }
-    picker.addEventListener('change', () => {
-      const nozzle = nozzlesList.find(n => n.userData.idName === picker.value);
-      if (nozzle) selectNozzle(nozzle); else deselectNozzle();
+    picker.addEventListener('change',()=>{
+      if(readOnly||saving)return;
+      const nozzle=nozzlesList.find(n=>n.userData.idName===picker.value);
+      if(nozzle)selectNozzle(nozzle);else deselectNozzle();
     });
+    document.getElementById('component-search').addEventListener('input',refreshNozzlePicker);
+    document.getElementById('component-clear').addEventListener('click',()=>{if(!saving)deselectNozzle();});
+    document.getElementById('component-edit-equipment').addEventListener('click',()=>{if(saving)return;deselectNozzle();window.exchangerBridge.setPanelCollapsed(false);});
+    document.getElementById('component-level').addEventListener('change',event=>{if(saving)return;document.getElementById('component-search').value='';selectEditingLevel(event.target.value);});
+    document.getElementById('component-pick-radius').addEventListener('input',event=>{document.getElementById('component-pick-radius-value').value=event.target.value+' px';});
+    function pickNozzleAt(clientX,clientY,rect) {
+      const radius=Number(document.getElementById('component-pick-radius').value)||12;
+      // First try the exact point, then nearby rings ordered by screen distance.
+      for(const distance of [0,...Array.from({length:Math.ceil(radius/3)},(_,i)=>Math.min(radius,(i+1)*3))]) {
+        const candidates=[];
+        const steps=distance===0?1:Math.ceil(Math.PI*2*distance/4);
+        for(let i=0;i<steps;i++) {
+          const angle=i*Math.PI*2/steps;
+          mouse.set(((clientX+Math.cos(angle)*distance-rect.left)/rect.width)*2-1,
+            -((clientY+Math.sin(angle)*distance-rect.top)/rect.height)*2+1);
+          raycaster.setFromCamera(mouse,camera);
+          for(const hit of raycaster.intersectObjects(nozzlesList,true)) {
+            let obj=hit.object,nozzle=null,visible=true;
+            while(obj&&obj!==heatExchanger) {visible=visible&&obj.visible;if(obj.userData.isNozzle)nozzle=obj;obj=obj.parent;}
+            if(visible&&nozzle)candidates.push({nozzle,distance:hit.distance});
+          }
+        }
+        if(candidates.length)return candidates.sort((a,b)=>a.distance-b.distance)[0].nozzle;
+      }
+      return null;
+    }
     let pointerStart = null;
     renderer.domElement.addEventListener('pointerdown', event => {
       if (event.button === 0) pointerStart = {x: event.clientX, y: event.clientY};
@@ -2607,25 +2660,12 @@
       const start = pointerStart;
       pointerStart = null;
       if (readOnly || saving || !start || event.button !== 0 ||
-          Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
+          Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) return;
       const rect = renderer.domElement.getBoundingClientRect();
       heatExchanger.updateMatrixWorld(true);
       camera.updateMatrixWorld(true);
-      // Nearby rays make small nozzles easier to pick without changing geometry.
-      for (const [dx, dy] of [[0,0],[-5,0],[5,0],[0,-5],[0,5],[-4,-4],[4,4]]) {
-        mouse.set(((event.clientX + dx - rect.left) / rect.width) * 2 - 1,
-          -((event.clientY + dy - rect.top) / rect.height) * 2 + 1);
-        raycaster.setFromCamera(mouse, camera);
-        for (const hit of raycaster.intersectObjects(nozzlesList, true)) {
-          let obj = hit.object, nozzle = null, visible = true;
-          while (obj && obj !== heatExchanger) {
-            visible = visible && obj.visible;
-            if (obj.userData.isNozzle) nozzle = obj;
-            obj = obj.parent;
-          }
-          if (visible && nozzle) { selectNozzle(nozzle); return; }
-        }
-      }
+      const picked=pickNozzleAt(event.clientX,event.clientY,rect);
+      if(picked) {selectNozzle(picked);return;}
       if(stackState) {
         mouse.set(((event.clientX-rect.left)/rect.width)*2-1,-((event.clientY-rect.top)/rect.height)*2+1);
         raycaster.setFromCamera(mouse,camera);
@@ -3521,6 +3561,8 @@
       document.getElementById('stack-start-level').disabled = !!stackState || readOnly;
       document.getElementById('stack-import-level').value = editingLevel === 'upper' ? 'lower' : 'upper';
       document.getElementById('stack-level').value = editingLevel;
+      document.getElementById('component-level-control').hidden=!stackState;
+      document.getElementById('component-level').value=editingLevel;
       document.getElementById('stack-same-equipment').checked=!!stackState?.sameEquipment;
       document.getElementById('stack-equipment-tag-control').hidden=!stackState?.sameEquipment;
       document.getElementById('stack-equipment-tag').value=stackState?.equipmentTag||lowerDesign?.nameplate||'';
@@ -3616,7 +3658,7 @@
     function selectEditingLevel(level,toggle=false) {
       if(!stackState||readOnly||saving)return;
       const same=level===editingLevel;
-      if(!same) {collectAssemblyDesign();editingLevel=level;refreshAssemblyView();syncStateToParent();}
+      if(!same) {collectAssemblyDesign();document.getElementById('component-search').value='';editingLevel=level;refreshAssemblyView();syncStateToParent();}
       window.exchangerBridge.setPanelCollapsed(toggle&&same?!window.exchangerBridge.isPanelCollapsed():false);
     }
     document.getElementById('stack-level').addEventListener('change',event=>selectEditingLevel(event.target.value));
