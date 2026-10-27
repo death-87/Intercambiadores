@@ -2,6 +2,7 @@
 from pathlib import Path
 from io import BytesIO, StringIO
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import base64
 import hashlib
 import json
@@ -1003,6 +1004,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         elementos.append(p("INFORME N° " + documento["numero"], small))
         elementos.append(Spacer(1, 3*mm))
 
+    for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
+        if (documento or {}).get(campo):
+            elementos += [p(etiqueta + ": " + documento[campo],small),Spacer(1,2*mm)]
+
     conexiones = registro_roscas(config, registro)
     estado_roscas = estado_conexiones_roscadas(registro, cantidad, config)
     if estado_roscas == "Sin conexiones roscadas" or sin_roscas_declarado(registro) or (cantidad == 0 and conexiones):
@@ -1178,6 +1183,10 @@ def campos_informe(prefijo):
         st.caption("Completa estos datos antes de pulsar Preparar informe de la planta.")
         numero = st.text_input("Número de informe", key=prefijo+"_numero", max_chars=80,
                                placeholder="Ingresa el número asignado al informe")
+        ot = st.text_input("N° de OT (Orden de Trabajo)", key=prefijo+"_ot", max_chars=80)
+        fecha_entrega = st.date_input("Fecha de entrega del informe",
+            value=datetime.now(ZoneInfo("America/Santiago")).date(), format="DD-MM-YYYY",
+            key=prefijo+"_fecha_entrega")
         firmas = st.checkbox("Agregar hoja de firmas después de la portada", value=True, key=prefijo+"_firmas")
         solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
         inspector = st.text_input("Inspector visual", key=prefijo+"_inspector", max_chars=120)
@@ -1186,7 +1195,7 @@ def campos_informe(prefijo):
         original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
         copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
         copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
-    return {"numero":numero.strip(), "firmas":firmas, "solicitante":solicitante.strip(),
+    return {"numero":numero.strip(), "ot":ot.strip(), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
             "inspector":inspector.strip(), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
             "original":original.strip(), "copia1":copia1.strip(), "copia2":copia2.strip()}
 
@@ -1200,6 +1209,8 @@ def hoja_firmas_informe(documento, planta):
     def p(valor, estilo=cuerpo):
         return Paragraph(escape(str(valor or "____________________________")), estilo)
     identificacion = Table([[p("Informe N°"),p(documento.get("numero"))],
+        [p("OT / Orden de Trabajo"),p(documento.get("ot"))],
+        [p("Fecha de entrega"),p(documento.get("fecha_entrega"))],
         [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))],
         [p("Destino"),p(documento.get("destino"))]], colWidths=[40*mm,140*mm])
     distribucion = Table([[p("Original"),p(documento.get("original"))],
@@ -1288,6 +1299,9 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
         Spacer(1,3*mm)]
     if (documento or {}).get("numero"):
         elementos += [texto("INFORME N° " + documento["numero"],cuerpo),Spacer(1,2*mm)]
+    for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
+        if (documento or {}).get(campo):
+            elementos += [texto(etiqueta + ": " + documento[campo],cuerpo),Spacer(1,2*mm)]
     elementos += [franja_titulo, Spacer(1,12*mm),
         texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
         texto(nombre_planta_informe(planta), subtitulo), PageBreak()]
