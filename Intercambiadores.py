@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parent
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
 HOJA_3D = "Diseño3D"
+TAG_CONFIG_INFORMES = "__CONFIG_INFORMES__"
+WEBAPP_INFORMES_URL = "https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec"
 HOJA_OPERACION = "Datos Operacionales"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 # Los primeros 11 índices se conservan para no alterar diseños históricos.
@@ -504,6 +506,8 @@ def cargar_disenos():
     db, errores, vistos = {}, {}, set()
     for _, row in data.iterrows():
         tag, raw = row.iloc[0].strip(), row.iloc[1].strip()
+        if normalizar(tag) == "__CONFIG_INFORMES__":
+            continue
         if not informado(tag):
             continue
         clave = normalizar(tag)
@@ -1177,24 +1181,75 @@ def nombre_planta_informe(codigo):
     return nombres.get(clave, str(codigo))
 
 
+def leer_numeros_informe():
+    datos = leer_csv(HOJA_3D)
+    encontrados = [fila for _, fila in datos.iterrows()
+                   if normalizar(fila.iloc[0]) == TAG_CONFIG_INFORMES]
+    if not encontrados:
+        return {"numero":"", "ot":""}
+    if len(encontrados) != 1:
+        raise ValueError("Hay más de un registro de configuración de informes.")
+    datos = json.loads(encontrados[0].iloc[1]).get("reportSettings", {})
+    return {campo:str(datos.get(campo, "")).strip() for campo in ("numero", "ot")}
+
+
+def guardar_numeros_informe(valores):
+    contenido = {"model":"A", "nameplate":TAG_CONFIG_INFORMES, "nozzles":[],
+                 "reportSettings":{campo:str(valores.get(campo, "")).strip() for campo in ("numero", "ot")}}
+    respuesta = requests.post(WEBAPP_INFORMES_URL,
+        json={"tag":TAG_CONFIG_INFORMES, "datos":json.dumps(contenido, ensure_ascii=False)}, timeout=30)
+    respuesta.raise_for_status()
+    for _ in range(3):
+        if leer_numeros_informe() == contenido["reportSettings"]:
+            return contenido["reportSettings"]
+    raise ValueError("No se pudo verificar el guardado de OT y número de informe.")
+
+
+def persistir_numeros_informe(prefijo):
+    valores = {campo:st.session_state.get(prefijo+"_"+campo, "") for campo in ("numero", "ot")}
+    try:
+        st.session_state["numeros_informe_guardados"] = guardar_numeros_informe(valores)
+        st.session_state.pop("numeros_informe_error", None)
+    except Exception as exc:
+        st.session_state["numeros_informe_error"] = str(exc)
+
+
 def campos_informe(prefijo):
+    if "numeros_informe_guardados" not in st.session_state:
+        try:
+            st.session_state["numeros_informe_guardados"] = leer_numeros_informe()
+        except Exception as exc:
+            st.session_state["numeros_informe_error"] = str(exc)
+            st.session_state["numeros_informe_guardados"] = {"numero":"", "ot":""}
+    for campo in ("numero", "ot"):
+        clave = prefijo+"_"+campo
+        if clave not in st.session_state:
+            st.session_state[clave] = st.session_state["numeros_informe_guardados"].get(campo, "")
     with st.container(border=True):
         st.markdown("**Identificación del informe y firmas**")
         st.caption("Completa estos datos antes de pulsar Preparar informe de la planta.")
         numero = st.text_input("Número de informe", key=prefijo+"_numero", max_chars=80,
-                               placeholder="Ingresa el número asignado al informe")
-        ot = st.text_input("N° de OT (Orden de Trabajo)", key=prefijo+"_ot", max_chars=80)
+                               placeholder="Ingresa el número asignado al informe", on_change=persistir_numeros_informe, args=(prefijo,))
+        ot = st.text_input("N° de OT (Orden de Trabajo)", key=prefijo+"_ot", max_chars=80,
+                           on_change=persistir_numeros_informe, args=(prefijo,))
+        st.caption("OT y número de informe se guardan automáticamente al terminar de editar cada campo.")
+        if st.session_state.get("numeros_informe_error"):
+            st.warning("No se pudo recuperar o confirmar el guardado de los números: " + st.session_state["numeros_informe_error"])
+            st.button("Reintentar guardar OT e informe", key=prefijo+"_reintentar",
+                      on_click=persistir_numeros_informe, args=(prefijo,))
         fecha_entrega = st.date_input("Fecha de entrega del informe",
             value=datetime.now(ZoneInfo("America/Santiago")).date(), format="DD-MM-YYYY",
             key=prefijo+"_fecha_entrega")
-        firmas = st.checkbox("Agregar hoja de firmas después de la portada", value=True, key=prefijo+"_firmas")
-        solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
+        firmas = st.checkbox("Incluir firmas en la portada", value=True, key=prefijo+"_firmas")
         inspector = st.text_input("Inspector visual", key=prefijo+"_inspector", max_chars=120)
         ingeniero = st.text_input("Ingeniero de operaciones", key=prefijo+"_ingeniero", max_chars=120)
-        destino = st.text_input("Destino", key=prefijo+"_destino", max_chars=250)
-        original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
-        copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
-        copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
+        solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
+        with st.container(border=True):
+            st.markdown("**Destino**")
+            destino = st.text_input("Destinatario / Área", key=prefijo+"_destino", max_chars=250)
+            original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
+            copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
+            copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
     return {"numero":numero.strip(), "ot":ot.strip(), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
             "inspector":inspector.strip(), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
             "original":original.strip(), "copia1":copia1.strip(), "copia2":copia2.strip()}
@@ -1202,35 +1257,33 @@ def campos_informe(prefijo):
 
 def hoja_firmas_informe(documento, planta):
     estilos = getSampleStyleSheet()
-    titulo = ParagraphStyle("firmas_titulo", parent=estilos["Heading1"], fontSize=17, leading=22,
+    titulo = ParagraphStyle("firmas_titulo", parent=estilos["Heading1"], fontSize=10, leading=12, spaceBefore=0, spaceAfter=2,
                             textColor=colors.HexColor("#24451E"))
-    cuerpo = ParagraphStyle("firmas_cuerpo", parent=estilos["Normal"], fontSize=9, leading=13)
+    cuerpo = ParagraphStyle("firmas_cuerpo", parent=estilos["Normal"], fontSize=7.5, leading=9.5)
     rol = ParagraphStyle("firmas_rol", parent=cuerpo, fontName="Helvetica-Bold", textColor=colors.white)
     def p(valor, estilo=cuerpo):
         return Paragraph(escape(str(valor or "____________________________")), estilo)
     identificacion = Table([[p("Informe N°"),p(documento.get("numero"))],
         [p("OT / Orden de Trabajo"),p(documento.get("ot"))],
         [p("Fecha de entrega"),p(documento.get("fecha_entrega"))],
-        [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))],
-        [p("Destino"),p(documento.get("destino"))]], colWidths=[40*mm,140*mm])
-    distribucion = Table([[p("Original"),p(documento.get("original"))],
+        [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))]], colWidths=[40*mm,140*mm])
+    distribucion = Table([[p("Destinatario / Área"),p(documento.get("destino"))],
+        [p("Original"),p(documento.get("original"))],
         [p("Copia 1"),p(documento.get("copia1"))], [p("Copia 2"),p(documento.get("copia2"))]],
         colWidths=[40*mm,140*mm])
     for tabla in [identificacion,distribucion]:
         tabla.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CAD8BF")),
             ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F0F6E9")), ("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("TOPPADDING",(0,0),(-1,-1),7), ("BOTTOMPADDING",(0,0),(-1,-1),7)]))
-    firmas = Table([[p("SOLICITANTE",rol),p("INSPECTOR VISUAL",rol),p("INGENIERO DE OPERACIONES",rol)],
-        [p(documento.get("solicitante")),p(documento.get("inspector")),p(documento.get("ingeniero"))],
+            ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+    firmas = Table([[p("INSPECTOR VISUAL",rol),p("INGENIERO DE OPERACIONES",rol),p("SOLICITANTE",rol)],
+        [p(documento.get("inspector")),p(documento.get("ingeniero")),p(documento.get("solicitante"))],
         [p("Firma:"),p("Firma:"),p("Firma:")],
         [p("Fecha: __________________"),p("Fecha: __________________"),p("Fecha: __________________")]],
-        colWidths=[60*mm]*3, minRowHeights=[12*mm,14*mm,35*mm,12*mm])
+        colWidths=[60*mm]*3, minRowHeights=[9*mm,9*mm,14*mm,7*mm])
     firmas.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#4D9824")),
         ("GRID",(0,0),(-1,-1),.5,colors.HexColor("#CAD8BF")), ("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("TOPPADDING",(0,0),(-1,-1),8), ("BOTTOMPADDING",(0,0),(-1,-1),8)]))
-    return [p("HOJA DE FIRMAS Y DISTRIBUCIÓN",titulo), Spacer(1,6*mm),identificacion,
-            Spacer(1,8*mm),p("DISTRIBUCIÓN DEL INFORME",titulo),Spacer(1,3*mm),distribucion,
-            Spacer(1,10*mm),firmas]
+        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+    return [identificacion, Spacer(1,3*mm),p("DESTINO",titulo),Spacer(1,1*mm),distribucion,firmas]
 
 
 def preliminares_planta(equipos, planta, inicios, documento=None):
@@ -1259,12 +1312,17 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
             ("TOPPADDING", (0,0), (-1,-1), 3), ("BOTTOMPADDING", (0,0), (-1,-1), 3)]))
         return t
-    def pie(canvas, documento):
+    bloque_documento = hoja_firmas_informe(documento,planta) if documento else []
+    def pie(canvas, pagina):
         canvas.saveState()
-        pie_informe_planta(canvas, documento.page, mostrar_autor=documento.page != 1)
-        if documento.page == 1:
+        pie_informe_planta(canvas, pagina.page, mostrar_autor=pagina.page != 1)
+        if pagina.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
+            if (documento or {}).get("firmas"):
+                firmas = bloque_documento[-1]
+                firmas.wrap(180*mm,100*mm)
+                firmas.drawOn(canvas,15*mm,42*mm)
             canvas.setFillColor(verde)
             canvas.rect(110*mm, 19*mm, 85*mm, 15*mm, fill=1, stroke=0)
             canvas.setFillColor(amarillo)
@@ -1276,7 +1334,7 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
             canvas.drawRightString(190*mm, 22*mm, "Juan Navarrete A.")
         canvas.restoreState()
     logos = []
-    for archivo, ancho, alto in (("logoingemar.png", 75*mm, 25*mm), ("logoenap.png", 28*mm, 28*mm)):
+    for archivo, ancho, alto in (("logoingemar.png", 65*mm, 21*mm), ("logoenap.png", 22*mm, 22*mm)):
         if (ROOT / archivo).is_file():
             logo = Image(str(ROOT / archivo)); logo._restrictSize(ancho, alto); logos.append(logo)
         else:
@@ -1284,29 +1342,24 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
     logo_tabla = Table([logos], colWidths=[140*mm,40*mm])
     logo_tabla.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
     titulo_franja = ParagraphStyle("portada_titulo_franja", parent=titulo,
-                                    fontSize=26, leading=32, textColor=colors.white)
-    sub_franja = ParagraphStyle("portada_sub_franja", parent=subtitulo, textColor=colors.white)
-    equipo_franja = ParagraphStyle("portada_equipo_franja", parent=sub_franja, fontSize=18, leading=24)
+                                    fontSize=22, leading=26, textColor=colors.white)
+    sub_franja = ParagraphStyle("portada_sub_franja", parent=subtitulo, fontSize=16, leading=20, textColor=colors.white)
+    equipo_franja = ParagraphStyle("portada_equipo_franja", parent=sub_franja, fontSize=14, leading=18)
     franja_titulo = Table([[texto("LEVANTAMIENTO DE CONEXIONES ROSCADAS", titulo_franja)],
                           [texto("Y DATOS OPERACIONALES", sub_franja)],
                           [texto("INTERCAMBIADORES DE CALOR", equipo_franja)]], colWidths=[180*mm])
     franja_titulo.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),oscuro),
         ("LINEBEFORE",(0,0),(0,-1),3,amarillo),
         ("LEFTPADDING",(0,0),(-1,-1),10*mm), ("RIGHTPADDING",(0,0),(-1,-1),10*mm),
-        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),5),
-        ("TOPPADDING",(0,0),(-1,0),12), ("BOTTOMPADDING",(0,-1),(-1,-1),14)]))
-    elementos = [logo_tabla, Spacer(1,24*mm), texto("INFORME TÉCNICO", cuerpo),
-        Spacer(1,3*mm)]
-    if (documento or {}).get("numero"):
-        elementos += [texto("INFORME N° " + documento["numero"],cuerpo),Spacer(1,2*mm)]
-    for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
-        if (documento or {}).get(campo):
-            elementos += [texto(etiqueta + ": " + documento[campo],cuerpo),Spacer(1,2*mm)]
-    elementos += [franja_titulo, Spacer(1,12*mm),
-        texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
-        texto(nombre_planta_informe(planta), subtitulo), PageBreak()]
-    if (documento or {}).get("firmas"):
-        elementos += hoja_firmas_informe(documento,planta) + [PageBreak()]
+        ("TOPPADDING",(0,0),(-1,-1),2), ("BOTTOMPADDING",(0,0),(-1,-1),2),
+        ("TOPPADDING",(0,0),(-1,0),8), ("BOTTOMPADDING",(0,-1),(-1,-1),9)]))
+    planta_portada = ParagraphStyle("planta_portada_compacta", parent=subtitulo, fontSize=13, leading=16)
+    elementos = [logo_tabla, Spacer(1,12*mm),franja_titulo,Spacer(1,5*mm),
+        texto("PLANTA / UNIDAD DE PROCESO",cuerpo),
+        texto(planta + " · " + nombre_planta_informe(planta),planta_portada),Spacer(1,4*mm)]
+    if bloque_documento:
+        elementos += bloque_documento[:-1]
+    elementos.append(PageBreak())
     resumen = resumen_informe_planta(equipos)
     elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
@@ -1343,7 +1396,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
                           imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True, documento=documento)
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
-    paginas_previas = 3 if (documento or {}).get("firmas") else 2
+    paginas_previas = 2
     for intento in range(5):
         inicios, cursor = [None]*len(equipos), paginas_previas + 1
         for ficha, destinos in bloques:
@@ -1360,7 +1413,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
     for pagina in previo.pages:
         writer.add_page(pagina)
     if (documento or {}).get("firmas"):
-        writer.add_outline_item("Firmas y distribución",1)
+        writer.add_outline_item("Identificación, destino y firmas",0)
     for ficha, destinos in bloques:
         inicio = len(writer.pages)
         for pagina in ficha.pages:
