@@ -67,6 +67,8 @@ def cargar_db():
     db = {}
     for _, row in df.iterrows():
         tag, raw = row.iloc[0].strip(), row.iloc[1].strip()
+        if normalizar_tag(tag) == "__CONFIG_INFORMES__":
+            continue
         if not tag or not raw:
             continue
         data = json.loads(raw)

@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parent
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
 HOJA_3D = "Diseño3D"
+TAG_CONFIG_INFORMES = "__CONFIG_INFORMES__"
+WEBAPP_INFORMES_URL = "https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec"
 HOJA_OPERACION = "Datos Operacionales"
 GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 # Los primeros 11 índices se conservan para no alterar diseños históricos.
@@ -504,6 +506,8 @@ def cargar_disenos():
     db, errores, vistos = {}, {}, set()
     for _, row in data.iterrows():
         tag, raw = row.iloc[0].strip(), row.iloc[1].strip()
+        if normalizar(tag) == "__CONFIG_INFORMES__":
+            continue
         if not informado(tag):
             continue
         clave = normalizar(tag)
@@ -1177,13 +1181,62 @@ def nombre_planta_informe(codigo):
     return nombres.get(clave, str(codigo))
 
 
+def leer_numeros_informe():
+    datos = leer_csv(HOJA_3D)
+    encontrados = [fila for _, fila in datos.iterrows()
+                   if normalizar(fila.iloc[0]) == TAG_CONFIG_INFORMES]
+    if not encontrados:
+        return {"numero":"", "ot":""}
+    if len(encontrados) != 1:
+        raise ValueError("Hay más de un registro de configuración de informes.")
+    datos = json.loads(encontrados[0].iloc[1]).get("reportSettings", {})
+    return {campo:str(datos.get(campo, "")).strip() for campo in ("numero", "ot")}
+
+
+def guardar_numeros_informe(valores):
+    contenido = {"model":"A", "nameplate":TAG_CONFIG_INFORMES, "nozzles":[],
+                 "reportSettings":{campo:str(valores.get(campo, "")).strip() for campo in ("numero", "ot")}}
+    respuesta = requests.post(WEBAPP_INFORMES_URL,
+        json={"tag":TAG_CONFIG_INFORMES, "datos":json.dumps(contenido, ensure_ascii=False)}, timeout=30)
+    respuesta.raise_for_status()
+    for _ in range(3):
+        if leer_numeros_informe() == contenido["reportSettings"]:
+            return contenido["reportSettings"]
+    raise ValueError("No se pudo verificar el guardado de OT y número de informe.")
+
+
+def persistir_numeros_informe(prefijo):
+    valores = {campo:st.session_state.get(prefijo+"_"+campo, "") for campo in ("numero", "ot")}
+    try:
+        st.session_state["numeros_informe_guardados"] = guardar_numeros_informe(valores)
+        st.session_state.pop("numeros_informe_error", None)
+    except Exception as exc:
+        st.session_state["numeros_informe_error"] = str(exc)
+
+
 def campos_informe(prefijo):
+    if "numeros_informe_guardados" not in st.session_state:
+        try:
+            st.session_state["numeros_informe_guardados"] = leer_numeros_informe()
+        except Exception as exc:
+            st.session_state["numeros_informe_error"] = str(exc)
+            st.session_state["numeros_informe_guardados"] = {"numero":"", "ot":""}
+    for campo in ("numero", "ot"):
+        clave = prefijo+"_"+campo
+        if clave not in st.session_state:
+            st.session_state[clave] = st.session_state["numeros_informe_guardados"].get(campo, "")
     with st.container(border=True):
         st.markdown("**Identificación del informe y firmas**")
         st.caption("Completa estos datos antes de pulsar Preparar informe de la planta.")
         numero = st.text_input("Número de informe", key=prefijo+"_numero", max_chars=80,
-                               placeholder="Ingresa el número asignado al informe")
-        ot = st.text_input("N° de OT (Orden de Trabajo)", key=prefijo+"_ot", max_chars=80)
+                               placeholder="Ingresa el número asignado al informe", on_change=persistir_numeros_informe, args=(prefijo,))
+        ot = st.text_input("N° de OT (Orden de Trabajo)", key=prefijo+"_ot", max_chars=80,
+                           on_change=persistir_numeros_informe, args=(prefijo,))
+        st.caption("OT y número de informe se guardan automáticamente al terminar de editar cada campo.")
+        if st.session_state.get("numeros_informe_error"):
+            st.warning("No se pudo recuperar o confirmar el guardado de los números: " + st.session_state["numeros_informe_error"])
+            st.button("Reintentar guardar OT e informe", key=prefijo+"_reintentar",
+                      on_click=persistir_numeros_informe, args=(prefijo,))
         fecha_entrega = st.date_input("Fecha de entrega del informe",
             value=datetime.now(ZoneInfo("America/Santiago")).date(), format="DD-MM-YYYY",
             key=prefijo+"_fecha_entrega")
@@ -1191,10 +1244,12 @@ def campos_informe(prefijo):
         solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
         inspector = st.text_input("Inspector visual", key=prefijo+"_inspector", max_chars=120)
         ingeniero = st.text_input("Ingeniero de operaciones", key=prefijo+"_ingeniero", max_chars=120)
-        destino = st.text_input("Destino", key=prefijo+"_destino", max_chars=250)
-        original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
-        copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
-        copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
+        with st.container(border=True):
+            st.markdown("**Destino**")
+            destino = st.text_input("Destinatario / Área", key=prefijo+"_destino", max_chars=250)
+            original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
+            copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
+            copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
     return {"numero":numero.strip(), "ot":ot.strip(), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
             "inspector":inspector.strip(), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
             "original":original.strip(), "copia1":copia1.strip(), "copia2":copia2.strip()}
@@ -1211,9 +1266,9 @@ def hoja_firmas_informe(documento, planta):
     identificacion = Table([[p("Informe N°"),p(documento.get("numero"))],
         [p("OT / Orden de Trabajo"),p(documento.get("ot"))],
         [p("Fecha de entrega"),p(documento.get("fecha_entrega"))],
-        [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))],
-        [p("Destino"),p(documento.get("destino"))]], colWidths=[40*mm,140*mm])
-    distribucion = Table([[p("Original"),p(documento.get("original"))],
+        [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))]], colWidths=[40*mm,140*mm])
+    distribucion = Table([[p("Destinatario / Área"),p(documento.get("destino"))],
+        [p("Original"),p(documento.get("original"))],
         [p("Copia 1"),p(documento.get("copia1"))], [p("Copia 2"),p(documento.get("copia2"))]],
         colWidths=[40*mm,140*mm])
     for tabla in [identificacion,distribucion]:
@@ -1229,7 +1284,7 @@ def hoja_firmas_informe(documento, planta):
         ("GRID",(0,0),(-1,-1),.5,colors.HexColor("#CAD8BF")), ("VALIGN",(0,0),(-1,-1),"TOP"),
         ("TOPPADDING",(0,0),(-1,-1),8), ("BOTTOMPADDING",(0,0),(-1,-1),8)]))
     return [p("HOJA DE FIRMAS Y DISTRIBUCIÓN",titulo), Spacer(1,6*mm),identificacion,
-            Spacer(1,8*mm),p("DISTRIBUCIÓN DEL INFORME",titulo),Spacer(1,3*mm),distribucion,
+            Spacer(1,8*mm),p("DESTINO",titulo),Spacer(1,3*mm),distribucion,
             Spacer(1,10*mm),firmas]
 
 
