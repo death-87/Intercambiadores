@@ -2,6 +2,7 @@
 from pathlib import Path
 from io import BytesIO, StringIO
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import base64
 import hashlib
 import json
@@ -919,7 +920,7 @@ def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.restoreState()
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -999,6 +1000,13 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
     ]))
     elementos += [cabecera, Spacer(1, 7 * mm)]
+    if (documento or {}).get("numero"):
+        elementos.append(p("INFORME N° " + documento["numero"], small))
+        elementos.append(Spacer(1, 3*mm))
+
+    for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
+        if (documento or {}).get(campo):
+            elementos += [p(etiqueta + ": " + documento[campo],small),Spacer(1,2*mm)]
 
     conexiones = registro_roscas(config, registro)
     estado_roscas = estado_conexiones_roscadas(registro, cantidad, config)
@@ -1169,7 +1177,63 @@ def nombre_planta_informe(codigo):
     return nombres.get(clave, str(codigo))
 
 
-def preliminares_planta(equipos, planta, inicios):
+def campos_informe(prefijo):
+    with st.container(border=True):
+        st.markdown("**Identificación del informe y firmas**")
+        st.caption("Completa estos datos antes de pulsar Preparar informe de la planta.")
+        numero = st.text_input("Número de informe", key=prefijo+"_numero", max_chars=80,
+                               placeholder="Ingresa el número asignado al informe")
+        ot = st.text_input("N° de OT (Orden de Trabajo)", key=prefijo+"_ot", max_chars=80)
+        fecha_entrega = st.date_input("Fecha de entrega del informe",
+            value=datetime.now(ZoneInfo("America/Santiago")).date(), format="DD-MM-YYYY",
+            key=prefijo+"_fecha_entrega")
+        firmas = st.checkbox("Agregar hoja de firmas después de la portada", value=True, key=prefijo+"_firmas")
+        solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
+        inspector = st.text_input("Inspector visual", key=prefijo+"_inspector", max_chars=120)
+        ingeniero = st.text_input("Ingeniero de operaciones", key=prefijo+"_ingeniero", max_chars=120)
+        destino = st.text_input("Destino", key=prefijo+"_destino", max_chars=250)
+        original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
+        copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
+        copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
+    return {"numero":numero.strip(), "ot":ot.strip(), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
+            "inspector":inspector.strip(), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
+            "original":original.strip(), "copia1":copia1.strip(), "copia2":copia2.strip()}
+
+
+def hoja_firmas_informe(documento, planta):
+    estilos = getSampleStyleSheet()
+    titulo = ParagraphStyle("firmas_titulo", parent=estilos["Heading1"], fontSize=17, leading=22,
+                            textColor=colors.HexColor("#24451E"))
+    cuerpo = ParagraphStyle("firmas_cuerpo", parent=estilos["Normal"], fontSize=9, leading=13)
+    rol = ParagraphStyle("firmas_rol", parent=cuerpo, fontName="Helvetica-Bold", textColor=colors.white)
+    def p(valor, estilo=cuerpo):
+        return Paragraph(escape(str(valor or "____________________________")), estilo)
+    identificacion = Table([[p("Informe N°"),p(documento.get("numero"))],
+        [p("OT / Orden de Trabajo"),p(documento.get("ot"))],
+        [p("Fecha de entrega"),p(documento.get("fecha_entrega"))],
+        [p("Planta / Unidad"),p(planta)], [p("Solicitante"),p(documento.get("solicitante"))],
+        [p("Destino"),p(documento.get("destino"))]], colWidths=[40*mm,140*mm])
+    distribucion = Table([[p("Original"),p(documento.get("original"))],
+        [p("Copia 1"),p(documento.get("copia1"))], [p("Copia 2"),p(documento.get("copia2"))]],
+        colWidths=[40*mm,140*mm])
+    for tabla in [identificacion,distribucion]:
+        tabla.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CAD8BF")),
+            ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F0F6E9")), ("VALIGN",(0,0),(-1,-1),"TOP"),
+            ("TOPPADDING",(0,0),(-1,-1),7), ("BOTTOMPADDING",(0,0),(-1,-1),7)]))
+    firmas = Table([[p("SOLICITANTE",rol),p("INSPECTOR VISUAL",rol),p("INGENIERO DE OPERACIONES",rol)],
+        [p(documento.get("solicitante")),p(documento.get("inspector")),p(documento.get("ingeniero"))],
+        [p("Firma:"),p("Firma:"),p("Firma:")],
+        [p("Fecha: __________________"),p("Fecha: __________________"),p("Fecha: __________________")]],
+        colWidths=[60*mm]*3, minRowHeights=[12*mm,14*mm,35*mm,12*mm])
+    firmas.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#4D9824")),
+        ("GRID",(0,0),(-1,-1),.5,colors.HexColor("#CAD8BF")), ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("TOPPADDING",(0,0),(-1,-1),8), ("BOTTOMPADDING",(0,0),(-1,-1),8)]))
+    return [p("HOJA DE FIRMAS Y DISTRIBUCIÓN",titulo), Spacer(1,6*mm),identificacion,
+            Spacer(1,8*mm),p("DISTRIBUCIÓN DEL INFORME",titulo),Spacer(1,3*mm),distribucion,
+            Spacer(1,10*mm),firmas]
+
+
+def preliminares_planta(equipos, planta, inicios, documento=None):
     from reportlab.platypus import PageBreak
     salida = BytesIO()
     doc = SimpleDocTemplate(salida, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm,
@@ -1232,9 +1296,17 @@ def preliminares_planta(equipos, planta, inicios):
         ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),5),
         ("TOPPADDING",(0,0),(-1,0),12), ("BOTTOMPADDING",(0,-1),(-1,-1),14)]))
     elementos = [logo_tabla, Spacer(1,24*mm), texto("INFORME TÉCNICO", cuerpo),
-        Spacer(1,5*mm), franja_titulo, Spacer(1,12*mm),
+        Spacer(1,3*mm)]
+    if (documento or {}).get("numero"):
+        elementos += [texto("INFORME N° " + documento["numero"],cuerpo),Spacer(1,2*mm)]
+    for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
+        if (documento or {}).get(campo):
+            elementos += [texto(etiqueta + ": " + documento[campo],cuerpo),Spacer(1,2*mm)]
+    elementos += [franja_titulo, Spacer(1,12*mm),
         texto("PLANTA / UNIDAD DE PROCESO", cuerpo), texto(planta, subtitulo),
         texto(nombre_planta_informe(planta), subtitulo), PageBreak()]
+    if (documento or {}).get("firmas"):
+        elementos += hoja_firmas_informe(documento,planta) + [PageBreak()]
     resumen = resumen_informe_planta(equipos)
     elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
@@ -1255,7 +1327,7 @@ def preliminares_planta(equipos, planta, inicios):
     return salida.getvalue()
 
 
-def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False):
+def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False, documento=None):
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas as pdfcanvas
     if planta is None:
@@ -1269,16 +1341,16 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False)
         pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                           equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
-                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True)
+                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True, documento=documento)
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
-    paginas_previas = 2
+    paginas_previas = 3 if (documento or {}).get("firmas") else 2
     for intento in range(5):
         inicios, cursor = [None]*len(equipos), paginas_previas + 1
         for ficha, destinos in bloques:
             for indice, pagina in destinos.items():
                 inicios[indice] = cursor + pagina
             cursor += len(ficha.pages)
-        previo = PdfReader(BytesIO(preliminares_planta(equipos, planta, inicios)))
+        previo = PdfReader(BytesIO(preliminares_planta(equipos, planta, inicios, documento=documento)))
         if len(previo.pages) == paginas_previas:
             break
         paginas_previas = len(previo.pages)
@@ -1287,6 +1359,8 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False)
     writer = PdfWriter()
     for pagina in previo.pages:
         writer.add_page(pagina)
+    if (documento or {}).get("firmas"):
+        writer.add_outline_item("Firmas y distribución",1)
     for ficha, destinos in bloques:
         inicio = len(writer.pages)
         for pagina in ficha.pages:
@@ -1303,6 +1377,8 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False)
             writer.add_page(pagina)
         for indice, pagina in destinos.items():
             writer.add_outline_item(equipos[indice]["tag"], inicio + pagina)
+    if (documento or {}).get("numero"):
+        writer.add_metadata({"/Subject":"Informe N° " + documento["numero"]})
     writer.add_metadata({"/Title": f"Levantamiento de conexiones roscadas y datos operacionales · {planta} · {nombre_planta_informe(planta)}", "/Author": "Juan Navarrete A."})
     salida = BytesIO()
     writer.write(salida)
@@ -1310,7 +1386,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False)
     return salida.getvalue()
 
 
-def generar_zip_fichas(equipos, imagenes):
+def generar_zip_fichas(equipos, imagenes, documento=None):
     salida = BytesIO()
     usados = set()
     with zipfile.ZipFile(salida, "w", compression=zipfile.ZIP_DEFLATED) as archivo:
@@ -1319,7 +1395,7 @@ def generar_zip_fichas(equipos, imagenes):
             pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                 equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                 imagen_modelo=imagenes.get("captura_pdf_" + clave),
-                imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave))
+                imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), documento=documento)
             nombre = re.sub(r"[^\w.-]+", "_", equipo["tag"]).strip(".") or "Equipo"
             base = f"Ficha_{nombre}"
             nombre_archivo, indice = base + ".pdf", 2
@@ -1349,6 +1425,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
         st.caption("Cada equipo tiene su propia ficha. Sin roscas o solo con venteos/drenajes se incluye únicamente la vista NS, en tamaño grande.")
+        documento = campos_informe("informe_planta_documento")
         con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
@@ -1367,7 +1444,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             else:
                 st.session_state.pop("informe_planta_resultado", None)
                 st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
-                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": [], "formato": formato}
+                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": [], "formato": formato, "documento": documento}
                 st.rerun()
         if tarea:
             if st.button("Cancelar preparación", key="cancelar_planta"):
@@ -1404,9 +1481,9 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 imagenes = st.session_state if tarea["con_imagenes"] else {}
                 try:
                     formato = tarea.get("formato", "Solo informe general")
-                    pdf = (generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"])
+                    pdf = (generar_pdf_planta(tarea["equipos"], imagenes, planta=tarea["planta"], documento=tarea.get("documento"))
                            if formato != "Solo PDF individuales (ZIP)" else None)
-                    zip_pdf = (generar_zip_fichas(tarea["equipos"], imagenes)
+                    zip_pdf = (generar_zip_fichas(tarea["equipos"], imagenes, documento=tarea.get("documento"))
                                if formato != "Solo informe general" else None)
                 except Exception as exc:
                     st.error(f"No se pudo generar el informe de planta: {exc}. Revisa que requirements.txt esté actualizado.")
@@ -1414,15 +1491,17 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 sin_imagen = [e["tag"] for e in tarea["equipos"] if tarea["con_imagenes"] and
                     (e["config"] is None or e["captura_key"] in tarea["omitidas"])]
                 st.session_state["informe_planta_resultado"] = {"planta": tarea["planta"], "pdf": pdf, "zip": zip_pdf,
-                    "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen}
+                    "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen, "numero":tarea.get("documento",{}).get("numero","")}
                 st.session_state.pop("informe_planta_tarea", None)
                 st.rerun()
         resultado = st.session_state.get("informe_planta_resultado")
         if resultado:
             st.success(f"Informe de {resultado['planta']} listo: {resultado['equipos']} equipos.")
+            if resultado.get("numero"):
+                st.caption("Informe N° " + resultado["numero"])
             if resultado["sin_imagen"]:
                 st.caption("Equipos incluidos sin vistas 3D: " + ", ".join(resultado["sin_imagen"]))
-            nombre = re.sub(r'[^\w.-]+', '_', resultado["planta"])
+            nombre = re.sub(r'[^\w.-]+', '_', "_".join(filter(None,[resultado.get("numero"),resultado["planta"]])))
             if resultado.get("pdf"):
                 st.download_button("Descargar informe de planta · PDF", data=resultado["pdf"],
                     file_name=f"Informe_{nombre}.pdf", mime="application/pdf", key="descargar_planta")
