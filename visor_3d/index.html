@@ -2126,6 +2126,8 @@
           direction=new THREE.Vector3(Math.cos(phi),0,Math.sin(phi));
           nozzle.position.set(p.lowerX,-p.shellRadius-(Number(x)||0),0).addScaledVector(direction,p.lowerRadius);
         }
+        nozzle.position.y += Number(nozzle.userData.offsetY) || 0;
+        nozzle.position.z += Number(nozzle.userData.offsetZ) || 0;
         nozzle.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);
         applyNozzleDirection(nozzle,angle);return;
       }
