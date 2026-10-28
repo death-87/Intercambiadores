@@ -147,6 +147,7 @@
       <label>Largo del cuerpo inferior en X (m):</label><input id="dual-u-length" type="number" min="0.20" max="20" step="0.05" value="4">
       <label>Diámetro / ancho del cuerpo inferior (mm):</label><input id="dual-u-diameter" type="number" min="25.4" max="5000" step="1" value="500">
       <label>Profundidad redondeada en Y (m):</label><input id="dual-u-depth" type="number" min="0.05" max="3" step="0.05" value="0.50">
+      <label>Ancho axial de los soportes en U (m):</label><input id="dual-u-support-width" type="number" min="0.05" max="1" step="0.01" value="0.20">
       <small>El ancho se limita por debajo del diámetro del shell. El cuerpo se centra en X y los soportes de piso quedan en sus extremos.</small>
     </div>
     <label for="dual-lower-diameter">Medida nominal (NPS):</label><select id="dual-lower-diameter"></select>
@@ -1666,7 +1667,7 @@
       return {half,r,rounded:currentModel==='I',
         uLength:Math.min(currentDimensions.shellLength-.1,currentDimensions.dualULength??currentDimensions.shellLength*.8),
         uRadius:Math.min(currentDimensions.shellDiameter*.95,(currentDimensions.dualUDiameterMM??currentDimensions.shellDiameter*700)/1000)/2,
-        uDepth:currentDimensions.dualUDepth??.5,
+        uDepth:currentDimensions.dualUDepth??.5,uSupportWidth:currentDimensions.dualUSupportWidth??.20,
         length:currentDimensions.channelLength,frontSide:currentNameplateSide==='rear'?-1:1,shellRadius:currentDimensions.shellDiameter/2,
         lowerRadius:pipeOutsideDiameter(currentDimensions.dualLowerDiameterIndex??15)/2,
         lowerLength:currentDimensions.dualLowerLength??.8,
@@ -1683,6 +1684,7 @@
       currentDimensions.dualULength=dimensions.dualULength??Math.max(.2,currentDimensions.shellLength*.8);
       currentDimensions.dualUDiameterMM=dimensions.dualUDiameterMM??currentDimensions.shellDiameter*700;
       currentDimensions.dualUDepth=dimensions.dualUDepth??.5;
+      currentDimensions.dualUSupportWidth=dimensions.dualUSupportWidth??.20;
       for(const end of ['Left','Right']) currentDimensions['dual'+end+'Davits']=dimensions['dual'+end+'Davits']!==false;
       for(const end of ['Left','Right']) currentDimensions['dual'+end+'CoverCount']=[0,1,2].includes(dimensions['dual'+end+'CoverCount'])?dimensions['dual'+end+'CoverCount']:2;
       currentDimensions.dualArcBolts=dimensions.dualArcBolts??11;
@@ -1699,7 +1701,7 @@
     function updateDualChannelControls() {
       const p=dualChannelLayout();
       document.getElementById('dual-u-controls').hidden=!p.rounded;
-      for(const [id,value] of [['dual-u-length',p.uLength],['dual-u-diameter',p.uRadius*2000],['dual-u-depth',p.uDepth]])document.getElementById(id).value=value;
+      for(const [id,value] of [['dual-u-length',p.uLength],['dual-u-diameter',p.uRadius*2000],['dual-u-depth',p.uDepth],['dual-u-support-width',p.uSupportWidth]])document.getElementById(id).value=value;
       document.getElementById('dual-u-length').max=currentDimensions.shellLength-.1;
       document.getElementById('dual-u-diameter').max=currentDimensions.shellDiameter*950;
       for(const id of ['dual-lower-diameter','dual-lower-length','dual-lower-x']) {
@@ -1821,14 +1823,24 @@
               const bridge=mesh(new THREE.BoxGeometry(Math.abs(x-pivotX)+.024,p.r*.09,p.r*.12),shellMat,'Enlace exterior de oreja',assembly);
               bridge.position.set((x+pivotX)/2,cy,z);
             }
-            const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
-            pin.position.copy(pivot);
+            if(!p.rounded) {
+              const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
+              pin.position.copy(pivot);
+            }
             for(const offset of [-.08,.08]) {
               const sleeve=mesh(new THREE.CylinderGeometry(p.r*.085,p.r*.085,p.r*.075,32),flangeMatBase,offset*level>0?'Articulación de tapa':'Articulación de cuerpo',assembly);
               sleeve.position.set(pivotX,y+offset*p.r,z);
             }
-            const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador pescante',assembly);
-            head.position.set(pivotX,y+p.r*.142,z);
+            if(!p.rounded) {
+              const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador pescante',assembly);
+              head.position.set(pivotX,y+p.r*.142,z);
+            }
+          }
+          if(p.rounded) {
+            const z=sideSign*(p.r*1.22+Math.max(.06,p.r*.20)),x=face+sign*.02875;
+            const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*1.66,32),studMat,'Pasador largo continuo superior-inferior',assembly);
+            pin.position.set(x,0,z);pin.userData.connectsBothSupports=true;
+            const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador largo',assembly);head.position.set(x,p.r*.8425,z);
           }
         }
         for(const cover of p.covers.filter(c=>c.key.startsWith(end))) {
@@ -1858,16 +1870,25 @@
           const weld=mesh(new THREE.CylinderGeometry(.005,.005,p.uLength,8),flangeMatBase,'Cordón longitudinal al shell');
           weld.rotation.z=Math.PI/2;weld.position.set(0,top,side*p.uRadius);
         }
-        const floor=bottom-.35,postWidth=Math.max(.06,p.shellRadius*.12),height=p.shellRadius*.35-floor;
+        const floor=bottom-.35,supportTop=p.shellRadius*.18,span=p.shellRadius*2+.30;
         for(const end of [-1,1]) {
           const support=new THREE.Group();support.name='Soporte de piso '+(end<0?'−X':'+X');dualChannelGroup.add(support);
-          const x=end*(p.uLength/2-.06),span=p.shellRadius*2+.30;
-          for(const side of [-1,1]) {
-            const z=side*(p.shellRadius+.12);
-            const post=mesh(new THREE.BoxGeometry(postWidth,height,postWidth),flangeMatBase,'Columna de soporte',support);post.position.set(x,floor+height/2,z);
-            const foot=mesh(new THREE.BoxGeometry(postWidth*3,.025,postWidth*3),flangeMatBase,'Placa de apoyo al piso',support);foot.position.set(x,floor,z);
+          const width=p.uSupportWidth,x=end*(p.uLength/2+width/2);
+          const section=new THREE.Shape(),angle=Math.asin(supportTop/p.shellRadius);
+          section.moveTo(-span/2,floor);section.lineTo(span/2,floor);section.lineTo(span/2,supportTop);
+          // Plancha maciza con asiento circular ajustado al shell, sin vanos.
+          for(let i=0;i<=96;i++) {
+            const a=angle-(Math.PI+2*angle)*i/96;
+            section.lineTo(p.shellRadius*Math.cos(a),p.shellRadius*Math.sin(a));
           }
-          const cross=mesh(new THREE.BoxGeometry(postWidth,.10,span),flangeMatBase,'Travesaño inferior',support);cross.position.set(x,bottom-.05,0);
+          section.lineTo(-span/2,supportTop);section.closePath();
+          const plate=mesh(new THREE.ExtrudeGeometry(section,{depth:width,bevelEnabled:false}),flangeMatBase,'Plancha cerrada de soporte en U',support);
+          plate.rotation.y=Math.PI/2;plate.position.x=x-width/2;plate.userData={axialWidth:width,shellRadius:p.shellRadius};
+          const foot=mesh(new THREE.BoxGeometry(width+.20,.03,span+.15),flangeMatBase,'Placa de apoyo al piso',support);foot.position.set(x,floor-.015,0);
+          const points=[];
+          for(let i=0;i<=96;i++) {const a=angle-(Math.PI+2*angle)*i/96;points.push(new THREE.Vector3(end*(p.uLength/2),p.shellRadius*Math.sin(a),p.shellRadius*Math.cos(a)));}
+          const path=new THREE.CatmullRomCurve3(points);
+          mesh(new THREE.TubeGeometry(path,96,.005,8,false),shellMat,'Soldadura perimetral soporte-shell',support);
         }
         return;
       }
@@ -3623,7 +3644,7 @@
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
       applyModel(currentModel,true);syncStateToParent();
     });
-    for(const [id,field,min,max] of [['dual-u-length','dualULength',.2,20],['dual-u-diameter','dualUDiameterMM',25.4,5000],['dual-u-depth','dualUDepth',.05,3],['dual-arc-bolts','dualArcBolts',1,120],['dual-seam-bolts','dualSeamBolts',1,120],['dual-lower-length','dualLowerLength',.1,3],['dual-lower-x','dualLowerX',-3.5,3.5]]) {
+    for(const [id,field,min,max] of [['dual-u-length','dualULength',.2,20],['dual-u-diameter','dualUDiameterMM',25.4,5000],['dual-u-depth','dualUDepth',.05,3],['dual-u-support-width','dualUSupportWidth',.05,1],['dual-arc-bolts','dualArcBolts',1,120],['dual-seam-bolts','dualSeamBolts',1,120],['dual-lower-length','dualLowerLength',.1,3],['dual-lower-x','dualLowerX',-3.5,3.5]]) {
       document.getElementById(id).addEventListener('change',event=>{
         const value=Number(event.target.value);if(readOnly||!Number.isFinite(value)||value<min||value>max||(field.endsWith('Bolts')&&!Number.isInteger(value)))return;
         currentDimensions[field]=value;applyModel(currentModel,true);syncStateToParent();
