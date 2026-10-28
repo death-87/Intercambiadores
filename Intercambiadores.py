@@ -287,7 +287,7 @@ def cargar_datos():
 def validar_diseno(data, _nivel=0):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
-    if data.get("model", "A") not in ("A", "B", "C", "D", "E", "F", "H"):
+    if data.get("model", "A") not in ("A", "B", "C", "D", "E", "F", "G", "H"):
         raise ValueError("modelo desconocido")
     dimensions = data.get("dimensions", {})
     if not isinstance(dimensions, dict):
@@ -299,6 +299,7 @@ def validar_diseno(data, _nivel=0):
         "bonnetDiameter": (0.2, 2.0), "hairpinGap": (0.05, 2.0),
         "hairpinTubeDiameter": (0.02, 1.4), "hairpinBonnetDepth": (0.05, 5.0), "hairpinBonnetStraightLength": (0, 5.0),
         "hairpinUpperDiameter": (0.0334, 2.0), "hairpinLowerDiameter": (0.0334, 2.0),
+        "dualLowerLength": (0.1, 3), "dualLowerX": (-3.5, 3.5),
         "hairpinInnerUpperDiameter": (0.02, 1.4), "hairpinInnerLowerDiameter": (0.02, 1.4),
     }
     for field, value in dimensions.items():
@@ -309,6 +310,23 @@ def validar_diseno(data, _nivel=0):
         low, high = limits[field]
         if not low <= value <= high:
             raise ValueError(f"{field} fuera de rango")
+    dual_index = dimensions.get("dualLowerDiameterIndex", 15)
+    if type(dual_index) is not int or not 0 <= dual_index < len(DIAMETROS) or DIAMETROS_PULGADAS[dual_index] < 1:
+        raise ValueError("medida del cuerpo inferior inválida")
+    for campo, defecto in (("dualArcBolts",11),("dualSeamBolts",13)):
+        valor = dimensions.get(campo,defecto)
+        if type(valor) is not int or not 1 <= valor <= 120:
+            raise ValueError("cantidad de pernos por media tapa inválida")
+    for campo in ["dual"+k+"Bolts" for k in ("LeftNS","LeftFS","RightNS","RightFS")]:
+        valor = dimensions.get(campo,8)
+        if type(valor) is not int or not 4 <= valor <= 120:
+            raise ValueError("cantidad de pernos de tapa inválida")
+    for clave in ("LeftNS","LeftFS","RightNS","RightFS"):
+        diametro = dimensions.get("dual"+clave+"DiameterMM",200)
+        if type(diametro) not in (int,float) or not math.isfinite(diametro) or not 25.4 <= diametro <= 1500:
+            raise ValueError("diámetro de subtapa fuera de rango")
+        if not isinstance(dimensions.get("dual"+clave+"Enabled",True),bool):
+            raise ValueError("opción de subtapa inválida")
     if dimensions.get("hairpinHeadStyle", "flatIntegral") not in {"flatIntegral", "ellipticalIntegral", "flatBolted", "ellipticalBolted"}:
         raise ValueError("tipo de cabezal de horquilla inválido")
     if dimensions.get("hairpinHeadContour", "oval") not in {"oval", "circular"}:
@@ -409,7 +427,7 @@ def validar_diseno(data, _nivel=0):
         pernos_brida = n.get("flangeBoltCount", 0)
         if type(pernos_brida) is not int or not (pernos_brida == 0 or 4 <= pernos_brida <= 120):
             raise ValueError("cantidad de pernos de boquilla inválida")
-        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft", "shellLower", "tubeUpper", "tubeLower"}:
+        if n.get("bodyPart") not in {"shell", "transition", "channel", "bonnet", "bonnetLeft", "shellLower", "tubeUpper", "tubeLower", "channelRight", "lowerChamber"}:
             raise ValueError("cuerpo de boquilla inválido")
         if n.get("connectionType", "flanged") not in {"flanged", "threaded", "sw"}:
             raise ValueError("tipo de conexión inválido")
@@ -551,6 +569,7 @@ def nombre_cuerpo(valor, modelo=None):
         return "SHELL"
     return {
         "shell": "SHELL", "transition": "TRANSICIÓN", "channel": "CHANNEL",
+        "channelRight":"CHANNEL", "lowerChamber":"CUERPO INFERIOR",
         "bonnet": "BONETE", "bonnetLeft": "BONETE",
     }.get(valor, str(valor or "").upper())
 
@@ -782,6 +801,8 @@ def filas_roscas(config):
                 posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
                             "front": "NS", "rear": "FS", "axialPlus": "AXIAL +X",
                             "axialMinus": "AXIAL −X"}.get(n.get("pos"), "—")
+                if n.get("bodyPart") == "lowerChamber":
+                    posicion = {"superior":"LATERAL +X", "inferior":"LATERAL −X", "axialPlus":"FONDO INFERIOR", "axialMinus":"UNIÓN AL SHELL"}.get(n.get("pos"),posicion)
                 agregar(n.get("tagName"), posicion, DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
             continue
         for lado in ("NS", "FS"):
@@ -1127,7 +1148,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v51"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v52"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1756,7 +1777,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v51"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v52"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1901,7 +1922,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v51"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v52"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
