@@ -299,7 +299,7 @@ def validar_diseno(data, _nivel=0):
         "bonnetDiameter": (0.2, 2.0), "hairpinGap": (0.05, 2.0),
         "hairpinTubeDiameter": (0.02, 1.4), "hairpinBonnetDepth": (0.05, 5.0), "hairpinBonnetStraightLength": (0, 5.0),
         "hairpinUpperDiameter": (0.0334, 2.0), "hairpinLowerDiameter": (0.0334, 2.0),
-        "dualULength": (0.2, 20), "dualUDiameterMM": (25.4, 5000), "dualUDepth": (0.05, 3),
+        "dualUSupportWidth": (0.05, 1), "dualULength": (0.2, 20), "dualUDiameterMM": (25.4, 5000), "dualUDepth": (0.05, 3),
         "dualLowerLength": (0.1, 3), "dualLowerX": (-3.5, 3.5),
         "hairpinInnerUpperDiameter": (0.02, 1.4), "hairpinInnerLowerDiameter": (0.02, 1.4),
     }
@@ -1163,7 +1163,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v63"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v64"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1802,7 +1802,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v63"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v64"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -1950,7 +1950,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v63"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v64"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
