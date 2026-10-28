@@ -4146,8 +4146,25 @@
         layoutReportLabels();
         reportRenderer.render(scene, reportCamera);
         const rearImage = reportRenderer.domElement.toDataURL('image/png');
+        const extraViews={};
+        if(currentModel==='G') for(const [viewSide,key] of [[side,'angle_image'],[-side,'rear_angle_image']]) {
+          const distance=size.length()+20;
+          reportCamera.position.set(center.x-viewSide*distance*Math.SQRT1_2,center.y,
+            center.z+viewSide*distance*Math.SQRT1_2);
+          reportCamera.lookAt(center);reportCamera.updateMatrixWorld(true);
+          let extent=.5;
+          for(const x of [bounds.min.x,bounds.max.x]) for(const y of [bounds.min.y,bounds.max.y]) for(const z of [bounds.min.z,bounds.max.z]) {
+            const corner=new THREE.Vector3(x,y,z).applyMatrix4(reportCamera.matrixWorldInverse);
+            extent=Math.max(extent,Math.abs(corner.y),Math.abs(corner.x)/aspect);
+          }
+          extent*=1.08;
+          reportCamera.left=-extent*aspect;reportCamera.right=extent*aspect;
+          reportCamera.top=extent;reportCamera.bottom=-extent;reportCamera.updateProjectionMatrix();
+          lightReportSide(viewSide,viewSide!==side);showLabelsForSide(viewSide);layoutReportLabels();
+          reportRenderer.render(scene,reportCamera);extraViews[key]=reportRenderer.domElement.toDataURL('image/png');
+        }
         send('streamlit:setComponentValue', {dataType: 'json', value: {
-          action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage
+          action: 'report_capture', capture_key: captureKey, image, rear_image: rearImage, ...extraViews
         }});
       } finally {
         for (const saved of companionLabels) {
