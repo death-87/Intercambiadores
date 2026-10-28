@@ -313,6 +313,9 @@ def validar_diseno(data, _nivel=0):
     dual_index = dimensions.get("dualLowerDiameterIndex", 15)
     if type(dual_index) is not int or not 0 <= dual_index < len(DIAMETROS) or DIAMETROS_PULGADAS[dual_index] < 1:
         raise ValueError("medida del cuerpo inferior inválida")
+    for campo in ("dualLeftCoverCount", "dualRightCoverCount"):
+        if type(dimensions.get(campo, 2)) is not int or dimensions.get(campo, 2) not in (0, 1, 2):
+            raise ValueError(f"{campo} debe ser 0, 1 o 2")
     for campo, defecto in (("dualArcBolts",11),("dualSeamBolts",13)):
         valor = dimensions.get(campo,defecto)
         if type(valor) is not int or not 1 <= valor <= 120:
@@ -1148,7 +1151,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v53"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v54"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1777,7 +1780,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v53"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v54"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1922,7 +1925,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v53"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v54"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
