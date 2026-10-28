@@ -1779,12 +1779,20 @@
             part.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());
           }
           for(const level of [-1,1]) {
-            const y=level*p.r*.68,z=sideSign*p.r*1.04,pivotX=face+sign*.045;
+            // Ambos brazos salen normales al plano YZ de la brida/tapa:
+            // únicamente cambia X; las orejas se alternan sobre un pasador Y.
+            const y=level*p.r*.68,z=sideSign*p.r*.85;
+            const projection=Math.max(.12,p.r*.48),pivotX=face+sign*(.075+projection);
             const pivot=new THREE.Vector3(pivotX,y,z);
-            const root=new THREE.Vector3(face-sign*Math.min(.22,p.length*.65),y,sideSign*p.r*.72);
-            const leaf=new THREE.Vector3(face+sign*.06,y+level*p.r*.10,sideSign*p.r*.85);
-            arm(root,pivot,p.r*.105,p.r*.105,'Brazo pescante soldado al cuerpo');
-            arm(leaf,new THREE.Vector3(pivotX,y+level*p.r*.10,z),p.r*.09,p.r*.09,'Oreja pescante soldada a tapa');
+            const bodyY=y-level*p.r*.08,lidY=y+level*p.r*.08;
+            const root=new THREE.Vector3(face+sign*.018,bodyY,z);
+            const leaf=new THREE.Vector3(face+sign*.072,lidY,z);
+            arm(root,new THREE.Vector3(pivotX,bodyY,z),p.r*.075,p.r*.12,'Brazo pescante soldado al cuerpo');
+            arm(leaf,new THREE.Vector3(pivotX,lidY,z),p.r*.075,p.r*.12,'Oreja pescante soldada a tapa');
+            for(const [anchor,name] of [[root,'Base soldada a brida fija'],[leaf,'Base soldada a tapa']]) {
+              const pad=mesh(new THREE.BoxGeometry(.012,p.r*.16,p.r*.20),shellMat,name,assembly);
+              pad.position.copy(anchor);
+            }
             const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
             pin.position.copy(pivot);
             for(const offset of [-.08,.08]) {
