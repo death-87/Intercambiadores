@@ -1790,7 +1790,7 @@
           for(const level of [-1,1]) {
             // Cada brazo nace en el canto de su propia brida y sale en Z.
             // La unión axial entre orejas queda fuera de ambas circunferencias.
-            const y=level*p.r*.68,projection=Math.max(.12,p.r*.48);
+            const y=level*p.r*.68,projection=Math.max(.06,p.r*.20);
             const z=sideSign*(p.r*1.22+projection),bodyX=face,lidX=face+sign*.0575;
             const pivotX=(bodyX+lidX)/2,pivot=new THREE.Vector3(pivotX,y,z);
             const bodyY=y-level*p.r*.08,lidY=y+level*p.r*.08;
