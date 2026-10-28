@@ -951,7 +951,7 @@ def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.restoreState()
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -1138,7 +1138,8 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         re.match(r"^(VENTEO|DRENAJE)\b", normalizar(fila.get("LADO", ""))) for fila in conexiones)
     solo_venteo_drenaje = (solo_venteo_drenaje and estado_roscas != "Revisar discrepancia"
                           and (cantidad is None or cantidad == len(conexiones)))
-    solo_near_side = estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje
+    cuatro_vistas = (config or {}).get("model") == "G"
+    solo_near_side = not cuatro_vistas and (estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje)
     if imagen_modelo:
         imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
@@ -1149,19 +1150,29 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
         elementos.append(KeepTogether([Spacer(1, 6 * mm),
             Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
+    if cuatro_vistas:
+        for etiqueta, contenido in (("NS (NEAR SIDE) · 45°", imagen_angular),
+                                    ("FS (FAR SIDE) · 45°", imagen_angular_posterior)):
+            if contenido:
+                elementos.append(KeepTogether([Spacer(1, 6 * mm),
+                    Paragraph(titulo_vistas + " · " + etiqueta, section_style),
+                    Image(BytesIO(contenido), width=180 * mm, height=78.75 * mm)]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v60"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v61"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
     if not isinstance(captura, dict) or captura.get("action") != "report_capture" or captura.get("capture_key") != clave:
         raise ValueError("La captura no corresponde al equipo solicitado.")
     imagenes = {}
-    for campo, prefijo in (("image", "captura_pdf_"), ("rear_image", "captura_posterior_pdf_")):
+    for campo, prefijo in (("image", "captura_pdf_"), ("rear_image", "captura_posterior_pdf_"),
+                           ("angle_image", "captura_angular_pdf_"), ("rear_angle_image", "captura_angular_posterior_pdf_")):
+        if campo in {"angle_image", "rear_angle_image"} and campo not in captura:
+            continue
         imagen = captura.get(campo, "")
         if not (isinstance(imagen, str) and imagen.startswith("data:image/png;base64,") and len(imagen) < 8_000_000):
             raise ValueError("Captura no válida")
@@ -1420,7 +1431,10 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
         pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                           equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                           imagen_modelo=imagenes.get("captura_pdf_" + clave),
-                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), informe_planta=True, documento=documento)
+                          imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
+                          imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
+                          imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave),
+                          informe_planta=True, documento=documento)
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
     paginas_previas = 2
     for intento in range(5):
@@ -1474,7 +1488,9 @@ def generar_zip_fichas(equipos, imagenes, documento=None):
             pdf = generar_pdf(equipo["registro"], equipo["tag"], equipo["config"], equipo["estado"],
                 equipo["cantidad"], equipo["origen"], registro_operacional=equipo["operacion"],
                 imagen_modelo=imagenes.get("captura_pdf_" + clave),
-                imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave), documento=documento)
+                imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
+                imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
+                imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave), documento=documento)
             nombre = re.sub(r"[^\w.-]+", "_", equipo["tag"]).strip(".") or "Equipo"
             base = f"Ficha_{nombre}"
             nombre_archivo, indice = base + ".pdf", 2
@@ -1505,7 +1521,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
         st.caption("Cada equipo tiene su propia ficha. Sin roscas o solo con venteos/drenajes se incluye únicamente la vista NS, en tamaño grande.")
         documento = campos_informe("informe_planta_documento")
-        con_imagenes = st.checkbox("Incluir vistas NS y FS de los modelos 3D", value=True, key="informe_planta_imagenes")
+        con_imagenes = st.checkbox("Incluir vistas de los modelos 3D (NS, FS y 45° para tapas partidas)", value=True, key="informe_planta_imagenes")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
             for registro in sorted(df[df[col_unidad] == planta].to_dict("records"),
@@ -1532,7 +1548,9 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
             pendientes = [e for e in tarea["equipos"] if tarea["con_imagenes"] and e["config"] is not None
                 and e["captura_key"] not in tarea["omitidas"]
                 and ("captura_pdf_" + e["captura_key"] not in st.session_state or
-                     "captura_posterior_pdf_" + e["captura_key"] not in st.session_state)]
+                     "captura_posterior_pdf_" + e["captura_key"] not in st.session_state or
+                     (e["config"].get("model") == "G" and any(prefijo + e["captura_key"] not in st.session_state
+                         for prefijo in ("captura_angular_pdf_", "captura_angular_posterior_pdf_"))))]
             total_modelos = sum(e["config"] is not None for e in tarea["equipos"])
             if pendientes:
                 equipo = pendientes[0]
@@ -1783,9 +1801,11 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v60"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v61"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
+        imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
+        imagen_angular_posterior = st.session_state.get("captura_angular_posterior_pdf_" + captura_key)
 
         st.divider()
         unidad = str(registro[col_unidad]) if col_unidad else "Unidad no registrada"
@@ -1889,7 +1909,8 @@ def main():
             try:
                 pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen,
                                   registro_operacional=operacionales.get(normalizar(tag)),
-                                  imagen_modelo=imagen_modelo, imagen_posterior=imagen_posterior)
+                                  imagen_modelo=imagen_modelo, imagen_posterior=imagen_posterior,
+                                  imagen_angular=imagen_angular, imagen_angular_posterior=imagen_angular_posterior)
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
@@ -1928,24 +1949,14 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v60"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v61"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
                     and captura.get("capture_key") == digest
                     and "captura_pdf_" + digest not in st.session_state):
                 try:
-                    imagenes = {}
-                    for campo, prefijo in (("image", "captura_pdf_"), ("rear_image", "captura_posterior_pdf_")):
-                        imagen = captura.get(campo, "")
-                        if not (isinstance(imagen, str) and imagen.startswith("data:image/png;base64,")
-                                and len(imagen) < 8_000_000):
-                            raise ValueError("Captura no válida")
-                        contenido = base64.b64decode(imagen.split(",", 1)[1], validate=True)
-                        if not contenido.startswith(b"\x89PNG\r\n\x1a\n"):
-                            raise ValueError("PNG no válido")
-                        imagenes[prefijo + digest] = contenido
-                    st.session_state.update(imagenes)
+                    st.session_state.update(decodificar_capturas(captura, digest))
                     st.rerun()
                 except ValueError:
                     st.warning("No se pudieron preparar las vistas del modelo para el PDF.")
