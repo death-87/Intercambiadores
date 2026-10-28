@@ -4059,6 +4059,7 @@
             ancestorsVisible: ancestors.every(parent => parent.visible), suffix,
             position: obj.position.clone(), scale: obj.scale.clone(),
             line: leader.geometry.attributes.position.array.slice(),
+            leaderColor: leader.material.color.clone(), leaderOpacity: leader.material.opacity,
             leaderVisible: leader.visible});
         }
       });
@@ -4127,6 +4128,11 @@
           saved.leader.visible = false;
         }
         reportRoot.traverse(obj => obj.setReportStyle?.(true));
+        for (const saved of labels) {
+          const material=saved.sprite.userData.labelLeader.material;
+          material.color.setHex(0x707070);
+          material.opacity=0.9;
+        }
         reportRenderer.setPixelRatio(2);
         reportRenderer.setSize(width, height);
         reportRenderer.setClearColor(0xffffff, 1);
@@ -4184,6 +4190,8 @@
           saved.sprite.visible = saved.visible;
           const leader = saved.sprite.userData.labelLeader;
           leader.visible = saved.leaderVisible;
+          leader.material.color.copy(saved.leaderColor);
+          leader.material.opacity = saved.leaderOpacity;
           leader.geometry.attributes.position.array.set(saved.line);
           leader.geometry.attributes.position.needsUpdate = true;
           leader.geometry.computeBoundingSphere();
