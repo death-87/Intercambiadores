@@ -114,6 +114,7 @@
     <small>Dos mitades por extremo, con corte vertical. Las subtapas se configuran por separado. Diámetro y largo del channel se aplican a ambos extremos.</small>
     <label>Pernos por media tapa · arco circular:</label><input id="dual-arc-bolts" type="number" min="1" max="120" step="1" value="11">
     <label>Pernos por media tapa · borde vertical:</label><input id="dual-seam-bolts" type="number" min="1" max="120" step="1" value="13">
+    <label><input id="dual-left-davits" type="checkbox" checked> Pescantes articulados · Channel · extremo −X</label>
     <label>Channel · extremo −X: disposición de subtapas</label><select id="dual-left-cover-count"><option value="0">Sin subtapas</option><option value="1">Una subtapa centrada</option><option value="2" selected>Por mitades · hasta dos subtapas por semicircunferencia</option></select>
     <label><input id="dual-left-ns-enabled" type="checkbox" checked> Subtapa extremo −X · NS</label>
     <label for="dual-left-ns-diameter">Diámetro exterior subtapa (mm):</label><input id="dual-left-ns-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
@@ -127,6 +128,7 @@
     <label><input id="dual-left-fs-2-enabled" type="checkbox"> Segunda subtapa · FS</label>
     <label>Diámetro segunda subtapa (mm):</label><input id="dual-left-fs-2-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
     <label>Pernos segunda subtapa:</label><input id="dual-left-fs-2-bolts" type="number" min="4" max="120" step="1" value="8">
+    <label><input id="dual-right-davits" type="checkbox" checked> Pescantes articulados · Channel extremo · +X</label>
     <label>Channel extremo · +X: disposición de subtapas</label><select id="dual-right-cover-count"><option value="0">Sin subtapas</option><option value="1">Una subtapa centrada</option><option value="2" selected>Por mitades · hasta dos subtapas por semicircunferencia</option></select>
     <label><input id="dual-right-ns-enabled" type="checkbox" checked> Subtapa extremo +X · NS</label>
     <label for="dual-right-ns-diameter">Diámetro exterior subtapa (mm):</label><input id="dual-right-ns-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
@@ -1660,6 +1662,7 @@
         lowerLength:currentDimensions.dualLowerLength??.8,
         lowerX:Math.max(-half+.05,Math.min(half-.05,currentDimensions.dualLowerX??0)),
         arcBolts:currentDimensions.dualArcBolts??11,seamBolts:currentDimensions.dualSeamBolts??13,
+        davits:{Left:currentDimensions.dualLeftDavits!==false,Right:currentDimensions.dualRightDavits!==false},
         coverCounts:{Left:currentDimensions.dualLeftCoverCount??2,Right:currentDimensions.dualRightCoverCount??2},
         covers:['LeftNS','LeftFS','RightNS','RightFS','LeftNS2','LeftFS2','RightNS2','RightFS2'].map(key=>({key,
           enabled:key.endsWith('2')?currentDimensions['dual'+key+'Enabled']===true:currentDimensions['dual'+key+'Enabled']!==false,
@@ -1667,6 +1670,7 @@
           bolts:currentDimensions['dual'+key+'Bolts']??8}))};
     }
     function loadDualChannelDimensions(dimensions) {
+      for(const end of ['Left','Right']) currentDimensions['dual'+end+'Davits']=dimensions['dual'+end+'Davits']!==false;
       for(const end of ['Left','Right']) currentDimensions['dual'+end+'CoverCount']=[0,1,2].includes(dimensions['dual'+end+'CoverCount'])?dimensions['dual'+end+'CoverCount']:2;
       currentDimensions.dualArcBolts=dimensions.dualArcBolts??11;
       currentDimensions.dualSeamBolts=dimensions.dualSeamBolts??13;
@@ -1688,7 +1692,10 @@
       const select=document.getElementById('dual-lower-diameter');
       select.replaceChildren(...FLANGED_DIAMETER_INDEXES.filter(i=>DIAMETER_INCHES[i]>=1).map(i=>new Option(DIAMETERS[i],String(i))));
       select.value=currentDimensions.dualLowerDiameterIndex??15;
-      for(const end of ['Left','Right']) document.getElementById('dual-'+end.toLowerCase()+'-cover-count').value=p.coverCounts[end];
+      for(const end of ['Left','Right']) {
+        document.getElementById('dual-'+end.toLowerCase()+'-cover-count').value=p.coverCounts[end];
+        document.getElementById('dual-'+end.toLowerCase()+'-davits').checked=p.davits[end];
+      }
       for(const cover of p.covers) {
         const id='dual-'+(cover.key.startsWith('Left')?'left':'right')+'-'+(cover.key.includes('NS')?'ns':'fs')+(cover.key.endsWith('2')?'-2':'');
         const end=cover.key.startsWith('Left')?'Left':'Right',single=p.coverCounts[end]===1;
@@ -1759,6 +1766,33 @@
           for(let i=0;i<p.seamBolts;i++) {
             const y=p.seamBolts===1?0:-p.r*.94+(2*p.r*.94)*i/(p.seamBolts-1);
             boltAt(face+sign*.04,y,sideSign*p.r*.10,fasteners);
+          }
+        }
+        if(p.davits[end]) for(const side of ['NS','FS']) {
+          const sideSign=side==='NS'?p.frontSide:-p.frontSide;
+          const assembly=new THREE.Group();assembly.name='Pescantes '+end+' '+side;
+          assembly.userData={end,side,attachment:'cuerpo y tapa',supportCount:2};dualChannelGroup.add(assembly);
+          function arm(from,to,width,depth,name) {
+            const delta=to.clone().sub(from);
+            const part=mesh(new THREE.BoxGeometry(width,delta.length(),depth),shellMat,name,assembly);
+            part.position.copy(from).add(to).multiplyScalar(.5);
+            part.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());
+          }
+          for(const level of [-1,1]) {
+            const y=level*p.r*.68,z=sideSign*p.r*1.04,pivotX=face+sign*.045;
+            const pivot=new THREE.Vector3(pivotX,y,z);
+            const root=new THREE.Vector3(face-sign*Math.min(.22,p.length*.65),y,sideSign*p.r*.72);
+            const leaf=new THREE.Vector3(face+sign*.06,y+level*p.r*.10,sideSign*p.r*.85);
+            arm(root,pivot,p.r*.105,p.r*.105,'Brazo pescante soldado al cuerpo');
+            arm(leaf,new THREE.Vector3(pivotX,y+level*p.r*.10,z),p.r*.09,p.r*.09,'Oreja pescante soldada a tapa');
+            const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
+            pin.position.copy(pivot);
+            for(const offset of [-.08,.08]) {
+              const sleeve=mesh(new THREE.CylinderGeometry(p.r*.085,p.r*.085,p.r*.075,32),flangeMatBase,offset*level>0?'Articulación de tapa':'Articulación de cuerpo',assembly);
+              sleeve.position.set(pivotX,y+offset*p.r,z);
+            }
+            const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador pescante',assembly);
+            head.position.set(pivotX,y+p.r*.142,z);
           }
         }
         for(const cover of p.covers.filter(c=>c.key.startsWith(end))) {
@@ -3531,6 +3565,10 @@
         });
       }
     }
+    for(const end of ['Left','Right']) document.getElementById('dual-'+end.toLowerCase()+'-davits').addEventListener('change',event=>{
+      if(readOnly)return;currentDimensions['dual'+end+'Davits']=event.target.checked;
+      applyModel(currentModel,true);syncStateToParent();
+    });
     for(const end of ['Left','Right']) document.getElementById('dual-'+end.toLowerCase()+'-cover-count').addEventListener('change',event=>{
       if(readOnly)return;currentDimensions['dual'+end+'CoverCount']=Number(event.target.value);
       applyModel(currentModel,true);syncStateToParent();
