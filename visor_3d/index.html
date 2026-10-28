@@ -1771,27 +1771,34 @@
         if(p.davits[end]) for(const side of ['NS','FS']) {
           const sideSign=side==='NS'?p.frontSide:-p.frontSide;
           const assembly=new THREE.Group();assembly.name='Pescantes '+end+' '+side;
-          assembly.userData={end,side,attachment:'cuerpo y tapa',supportCount:2};dualChannelGroup.add(assembly);
-          function arm(from,to,width,depth,name) {
-            const delta=to.clone().sub(from);
-            const part=mesh(new THREE.BoxGeometry(width,delta.length(),depth),shellMat,name,assembly);
-            part.position.copy(from).add(to).multiplyScalar(.5);
-            part.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());
+          assembly.userData={end,side,attachment:'canto de brida fija y canto de tapa',supportCount:2};dualChannelGroup.add(assembly);
+          function edgeArm(radius,centerY,centerX,thickness,tipZ,name) {
+            // Perfil recortado contra el canto circular: no invade la cara.
+            const halfHeight=p.r*.045,shape=new THREE.Shape();
+            const boundary=y=>sideSign*Math.sqrt(Math.max(0,radius*radius-y*y));
+            shape.moveTo(boundary(centerY-halfHeight),centerY-halfHeight);
+            shape.lineTo(tipZ,centerY-halfHeight);shape.lineTo(tipZ,centerY+halfHeight);
+            for(let i=0;i<=24;i++) {
+              const y=centerY+halfHeight-2*halfHeight*i/24;
+              shape.lineTo(boundary(y),y);
+            }
+            shape.closePath();
+            const part=mesh(new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false}),shellMat,name,assembly);
+            part.rotation.y=-Math.PI/2;part.position.x=centerX+thickness/2;
+            part.userData={edgeRadius:radius,attachmentX:centerX};return part;
           }
           for(const level of [-1,1]) {
-            // Brazos paralelos a Z, hacia afuera de cada media tapa.
-            // Las orejas se alternan en Y sobre el mismo pasador vertical.
-            const y=level*p.r*.68,rootZ=sideSign*p.r*.85;
-            const projection=Math.max(.12,p.r*.48),z=rootZ+sideSign*projection;
-            const pivotX=face+sign*.045,pivot=new THREE.Vector3(pivotX,y,z);
+            // Cada brazo nace en el canto de su propia brida y sale en Z.
+            // La unión axial entre orejas queda fuera de ambas circunferencias.
+            const y=level*p.r*.68,projection=Math.max(.12,p.r*.48);
+            const z=sideSign*(p.r*1.22+projection),bodyX=face,lidX=face+sign*.0575;
+            const pivotX=(bodyX+lidX)/2,pivot=new THREE.Vector3(pivotX,y,z);
             const bodyY=y-level*p.r*.08,lidY=y+level*p.r*.08;
-            const root=new THREE.Vector3(pivotX,bodyY,rootZ);
-            const leaf=new THREE.Vector3(pivotX,lidY,rootZ);
-            arm(root,new THREE.Vector3(pivotX,bodyY,z),p.r*.12,p.r*.075,'Brazo pescante soldado al cuerpo');
-            arm(leaf,new THREE.Vector3(pivotX,lidY,z),p.r*.12,p.r*.075,'Oreja pescante soldada a tapa');
-            for(const [anchor,name] of [[root,'Base soldada a brida fija'],[leaf,'Base soldada a tapa']]) {
-              const pad=mesh(new THREE.BoxGeometry(.08,p.r*.16,p.r*.20),shellMat,name,assembly);
-              pad.position.copy(anchor);
+            edgeArm(p.r*1.22,bodyY,bodyX,.024,z,'Brazo pescante soldado al cuerpo');
+            edgeArm(p.r*1.18+.002,lidY,lidX,.024,z,'Oreja pescante soldada a tapa');
+            for(const [x,cy] of [[bodyX,bodyY],[lidX,lidY]]) {
+              const bridge=mesh(new THREE.BoxGeometry(Math.abs(x-pivotX)+.024,p.r*.09,p.r*.12),shellMat,'Enlace exterior de oreja',assembly);
+              bridge.position.set((x+pivotX)/2,cy,z);
             }
             const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
             pin.position.copy(pivot);
