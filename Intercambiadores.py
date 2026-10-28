@@ -320,11 +320,11 @@ def validar_diseno(data, _nivel=0):
         valor = dimensions.get(campo,defecto)
         if type(valor) is not int or not 1 <= valor <= 120:
             raise ValueError("cantidad de pernos por media tapa inválida")
-    for campo in ["dual"+k+"Bolts" for k in ("LeftNS","LeftFS","RightNS","RightFS")]:
+    for campo in ["dual"+k+"Bolts" for k in ("LeftNS","LeftFS","RightNS","RightFS","LeftNS2","LeftFS2","RightNS2","RightFS2")]:
         valor = dimensions.get(campo,8)
         if type(valor) is not int or not 4 <= valor <= 120:
             raise ValueError("cantidad de pernos de tapa inválida")
-    for clave in ("LeftNS","LeftFS","RightNS","RightFS"):
+    for clave in ("LeftNS","LeftFS","RightNS","RightFS","LeftNS2","LeftFS2","RightNS2","RightFS2"):
         diametro = dimensions.get("dual"+clave+"DiameterMM",200)
         if type(diametro) not in (int,float) or not math.isfinite(diametro) or not 25.4 <= diametro <= 1500:
             raise ValueError("diámetro de subtapa fuera de rango")
@@ -1151,7 +1151,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v54"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v55"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1780,7 +1780,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v54"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v55"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
 
@@ -1925,7 +1925,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v54"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v55"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"

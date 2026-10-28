@@ -114,20 +114,32 @@
     <small>Dos mitades por extremo, con corte vertical. Las subtapas se configuran por separado. Diámetro y largo del channel se aplican a ambos extremos.</small>
     <label>Pernos por media tapa · arco circular:</label><input id="dual-arc-bolts" type="number" min="1" max="120" step="1" value="11">
     <label>Pernos por media tapa · borde vertical:</label><input id="dual-seam-bolts" type="number" min="1" max="120" step="1" value="13">
-    <label>Channel · extremo −X: cantidad de subtapas</label><select id="dual-left-cover-count"><option value="0">Sin subtapas</option><option value="1">Una subtapa centrada</option><option value="2" selected>Dos subtapas · una por semicircunferencia</option></select>
+    <label>Channel · extremo −X: disposición de subtapas</label><select id="dual-left-cover-count"><option value="0">Sin subtapas</option><option value="1">Una subtapa centrada</option><option value="2" selected>Por mitades · hasta dos subtapas por semicircunferencia</option></select>
     <label><input id="dual-left-ns-enabled" type="checkbox" checked> Subtapa extremo −X · NS</label>
     <label for="dual-left-ns-diameter">Diámetro exterior subtapa (mm):</label><input id="dual-left-ns-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
     <label for="dual-left-ns-bolts">Pernos subtapa:</label><input id="dual-left-ns-bolts" type="number" min="4" max="120" step="1" value="8">
+    <label><input id="dual-left-ns-2-enabled" type="checkbox"> Segunda subtapa · NS</label>
+    <label>Diámetro segunda subtapa (mm):</label><input id="dual-left-ns-2-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
+    <label>Pernos segunda subtapa:</label><input id="dual-left-ns-2-bolts" type="number" min="4" max="120" step="1" value="8">
     <label><input id="dual-left-fs-enabled" type="checkbox" checked> Subtapa extremo −X · FS</label>
     <label for="dual-left-fs-diameter">Diámetro exterior subtapa (mm):</label><input id="dual-left-fs-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
     <label for="dual-left-fs-bolts">Pernos subtapa:</label><input id="dual-left-fs-bolts" type="number" min="4" max="120" step="1" value="8">
-    <label>Channel extremo · +X: cantidad de subtapas</label><select id="dual-right-cover-count"><option value="0">Sin subtapas</option><option value="1">Una subtapa centrada</option><option value="2" selected>Dos subtapas · una por semicircunferencia</option></select>
+    <label><input id="dual-left-fs-2-enabled" type="checkbox"> Segunda subtapa · FS</label>
+    <label>Diámetro segunda subtapa (mm):</label><input id="dual-left-fs-2-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
+    <label>Pernos segunda subtapa:</label><input id="dual-left-fs-2-bolts" type="number" min="4" max="120" step="1" value="8">
+    <label>Channel extremo · +X: disposición de subtapas</label><select id="dual-right-cover-count"><option value="0">Sin subtapas</option><option value="1">Una subtapa centrada</option><option value="2" selected>Por mitades · hasta dos subtapas por semicircunferencia</option></select>
     <label><input id="dual-right-ns-enabled" type="checkbox" checked> Subtapa extremo +X · NS</label>
     <label for="dual-right-ns-diameter">Diámetro exterior subtapa (mm):</label><input id="dual-right-ns-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
     <label for="dual-right-ns-bolts">Pernos subtapa:</label><input id="dual-right-ns-bolts" type="number" min="4" max="120" step="1" value="8">
+    <label><input id="dual-right-ns-2-enabled" type="checkbox"> Segunda subtapa · NS</label>
+    <label>Diámetro segunda subtapa (mm):</label><input id="dual-right-ns-2-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
+    <label>Pernos segunda subtapa:</label><input id="dual-right-ns-2-bolts" type="number" min="4" max="120" step="1" value="8">
     <label><input id="dual-right-fs-enabled" type="checkbox" checked> Subtapa extremo +X · FS</label>
     <label for="dual-right-fs-diameter">Diámetro exterior subtapa (mm):</label><input id="dual-right-fs-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
     <label for="dual-right-fs-bolts">Pernos subtapa:</label><input id="dual-right-fs-bolts" type="number" min="4" max="120" step="1" value="8">
+    <label><input id="dual-right-fs-2-enabled" type="checkbox"> Segunda subtapa · FS</label>
+    <label>Diámetro segunda subtapa (mm):</label><input id="dual-right-fs-2-diameter" type="number" min="25.4" max="1500" step="0.1" value="200">
+    <label>Pernos segunda subtapa:</label><input id="dual-right-fs-2-bolts" type="number" min="4" max="120" step="1" value="8">
     <div class="panel-title">CUERPO INFERIOR CERRADO</div>
     <label for="dual-lower-diameter">Medida nominal (NPS):</label><select id="dual-lower-diameter"></select>
     <label for="dual-lower-length">Largo bajo el shell (m):</label><input id="dual-lower-length" type="number" min="0.10" max="3" step="0.05" value="0.80">
@@ -1649,8 +1661,8 @@
         lowerX:Math.max(-half+.05,Math.min(half-.05,currentDimensions.dualLowerX??0)),
         arcBolts:currentDimensions.dualArcBolts??11,seamBolts:currentDimensions.dualSeamBolts??13,
         coverCounts:{Left:currentDimensions.dualLeftCoverCount??2,Right:currentDimensions.dualRightCoverCount??2},
-        covers:['LeftNS','LeftFS','RightNS','RightFS'].map(key=>({key,
-          enabled:currentDimensions['dual'+key+'Enabled']!==false,
+        covers:['LeftNS','LeftFS','RightNS','RightFS','LeftNS2','LeftFS2','RightNS2','RightFS2'].map(key=>({key,
+          enabled:key.endsWith('2')?currentDimensions['dual'+key+'Enabled']===true:currentDimensions['dual'+key+'Enabled']!==false,
           diameter:(currentDimensions['dual'+key+'DiameterMM']??200)/1000,
           bolts:currentDimensions['dual'+key+'Bolts']??8}))};
     }
@@ -1661,8 +1673,8 @@
       currentDimensions.dualLowerDiameterIndex=FLANGED_DIAMETER_INDEXES.includes(dimensions.dualLowerDiameterIndex)&&DIAMETER_INCHES[dimensions.dualLowerDiameterIndex]>=1?dimensions.dualLowerDiameterIndex:15;
       currentDimensions.dualLowerLength=dimensions.dualLowerLength??.8;
       currentDimensions.dualLowerX=dimensions.dualLowerX??0;
-      for(const key of ['LeftNS','LeftFS','RightNS','RightFS']) {
-        currentDimensions['dual'+key+'Enabled']=dimensions['dual'+key+'Enabled']!==false;
+      for(const key of ['LeftNS','LeftFS','RightNS','RightFS','LeftNS2','LeftFS2','RightNS2','RightFS2']) {
+        currentDimensions['dual'+key+'Enabled']=key.endsWith('2')?dimensions['dual'+key+'Enabled']===true:dimensions['dual'+key+'Enabled']!==false;
         currentDimensions['dual'+key+'DiameterMM']=dimensions['dual'+key+'DiameterMM']??200;
         currentDimensions['dual'+key+'Bolts']=dimensions['dual'+key+'Bolts']??8;
       }
@@ -1678,13 +1690,13 @@
       select.value=currentDimensions.dualLowerDiameterIndex??15;
       for(const end of ['Left','Right']) document.getElementById('dual-'+end.toLowerCase()+'-cover-count').value=p.coverCounts[end];
       for(const cover of p.covers) {
-        const id='dual-'+(cover.key.startsWith('Left')?'left':'right')+'-'+(cover.key.endsWith('NS')?'ns':'fs');
+        const id='dual-'+(cover.key.startsWith('Left')?'left':'right')+'-'+(cover.key.includes('NS')?'ns':'fs')+(cover.key.endsWith('2')?'-2':'');
         const end=cover.key.startsWith('Left')?'Left':'Right',single=p.coverCounts[end]===1;
         for(const suffix of ['enabled','diameter','bolts']) {
           const input=document.getElementById(id+'-'+suffix);
-          input.disabled=p.coverCounts[end]===0||(single&&cover.key.endsWith('FS'));
+          input.disabled=p.coverCounts[end]===0||(single&&(cover.key.includes('FS')||cover.key.endsWith('2')));
         }
-        document.getElementById(id+'-enabled').parentElement.lastChild.textContent=single&&cover.key.endsWith('NS')?' Subtapa centrada · '+(end==='Left'?'Channel':'Channel extremo'):' Subtapa extremo '+(end==='Left'?'−X':' +X')+' · '+(cover.key.endsWith('NS')?'NS':'FS');
+        if(!cover.key.endsWith('2')) document.getElementById(id+'-enabled').parentElement.lastChild.textContent=single&&cover.key.endsWith('NS')?' Subtapa centrada · '+(end==='Left'?'Channel':'Channel extremo'):' Subtapa extremo '+(end==='Left'?'−X':' +X')+' · '+(cover.key.endsWith('NS')?'NS':'FS');
         document.getElementById(id+'-enabled').checked=cover.enabled;
         document.getElementById(id+'-diameter').value=cover.diameter*1000;
         document.getElementById(id+'-bolts').value=cover.bolts;
@@ -1748,10 +1760,16 @@
             const y=p.seamBolts===1?0:-p.r*.94+(2*p.r*.94)*i/(p.seamBolts-1);
             boltAt(face+sign*.04,y,sideSign*p.r*.10,fasteners);
           }
-          // On the cover plane, the seam is vertical (Y), splitting the two Z halves.
-          const cover=p.covers.find(c=>c.key===end+side);if(!cover.enabled||p.coverCounts[end]===0||(p.coverCounts[end]===1&&side==='FS'))continue;
-          const parent=new THREE.Group();parent.name='Subtapa '+end+' '+(p.coverCounts[end]===1?'Centro':side);parent.userData={diameter:cover.diameter,boltCount:cover.bolts};dualChannelGroup.add(parent);
-          const centerZ=p.coverCounts[end]===1?0:-halfSign*p.r*.52,base=face+sign*.075,smallR=cover.diameter/2;
+        }
+        for(const cover of p.covers.filter(c=>c.key.startsWith(end))) {
+          const extra=cover.key.endsWith('2'),side=cover.key.includes('NS')?'NS':'FS';
+          if(!cover.enabled||p.coverCounts[end]===0||(p.coverCounts[end]===1&&(side==='FS'||extra)))continue;
+          const paired=p.coverCounts[end]===2&&p.covers.some(c=>c.key===end+side+'2'&&c.enabled);
+          const sideSign=side==='NS'?p.frontSide:-p.frontSide;
+          const parent=new THREE.Group();parent.name='Subtapa '+end+' '+(p.coverCounts[end]===1?'Centro':side+(extra?' 2':''));
+          parent.userData={diameter:cover.diameter,boltCount:cover.bolts};dualChannelGroup.add(parent);
+          parent.position.y=paired?(extra?-1:1)*p.r*.4:0;
+          const centerZ=p.coverCounts[end]===1?0:sideSign*p.r*.52,base=face+sign*.075,smallR=cover.diameter/2;
           const neck=cylinderX(smallR,.045,base+sign*.0225,'Cuello subtapa',parent);neck.position.z=centerZ;
           const lid=cylinderX(smallR*1.18,.025,base+sign*.055,'Subtapa apernada',parent,flangeMatBase);lid.position.z=centerZ;
           boltsX(cover.bolts,smallR*1.04,base+sign*.055,centerZ,parent,'Pernos subtapa',sign);
@@ -3503,8 +3521,8 @@
     document.getElementById('dual-lower-diameter').addEventListener('change',event=>{
       if(readOnly)return;currentDimensions.dualLowerDiameterIndex=Number(event.target.value);applyModel(currentModel,true);syncStateToParent();
     });
-    for(const key of ['LeftNS','LeftFS','RightNS','RightFS']) {
-      const id='dual-'+(key.startsWith('Left')?'left':'right')+'-'+(key.endsWith('NS')?'ns':'fs');
+    for(const key of ['LeftNS','LeftFS','RightNS','RightFS','LeftNS2','LeftFS2','RightNS2','RightFS2']) {
+      const id='dual-'+(key.startsWith('Left')?'left':'right')+'-'+(key.includes('NS')?'ns':'fs')+(key.endsWith('2')?'-2':'');
       for(const [suffix,field] of [['enabled','Enabled'],['diameter','DiameterMM'],['bolts','Bolts']]) {
         document.getElementById(id+'-'+suffix).addEventListener('change',event=>{
           if(readOnly)return;const value=field==='Enabled'?event.target.checked:Number(event.target.value);
