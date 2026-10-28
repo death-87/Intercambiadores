@@ -316,11 +316,12 @@
     </div>
       
       <div class="input-group">
-        <label>Posición X:</label>
+        <label id="edit-position-label">Posición X:</label>
         <input type="number" id="edit-nz-x" step="0.01">
-        <small>Metros. En modo axial, distancia desde la tapa.</small>
+        <small id="edit-position-help">Metros. En modo axial, distancia desde la tapa.</small>
       </div>
       <div class="input-group">
+        <label>Desplazamiento X (m):</label><input type="number" id="edit-offset-x" step="0.01" value="0">
         <label>Desplazamiento Y (m):</label><input type="number" id="edit-offset-y" step="0.01" value="0">
         <label>Desplazamiento Z (m):</label><input type="number" id="edit-offset-z" step="0.01" value="0">
       </div>
@@ -847,7 +848,7 @@
           pos: nz.userData.pos || "superior",
           angleDeg: Number.isFinite(nz.userData.angleDeg) ? nz.userData.angleDeg : 0,
           valX: nz.userData.valX !== undefined ? nz.userData.valX : 0,
-          offsetY: nz.userData.offsetY || 0, offsetZ: nz.userData.offsetZ || 0,
+          offsetX: nz.userData.offsetX || 0, offsetY: nz.userData.offsetY || 0, offsetZ: nz.userData.offsetZ || 0,
           sideMount: nz.userData.sideMount, sideAxis: nz.userData.sideAxis,
           headMount: !!nz.userData.headMount, headAngle: nz.userData.headAngle ?? 45,
           flangeShape:nz.userData.flangeShape||'auto',flangeBoltCount:nz.userData.flangeBoltCount||0,
@@ -1912,6 +1913,10 @@
     }
     function updateBodyPositionLabels(prefix) {
       const lower=currentModel==='G'&&document.getElementById(prefix+'-nz-body').value==='lowerChamber';
+      if(prefix==='edit') {
+        document.getElementById('edit-position-label').textContent=lower?'Distancia sobre el cuerpo inferior (m):':'Posición X:';
+        document.getElementById('edit-position-help').textContent=lower?'Distancia hacia abajo desde el shell. En modo axial, distancia desde el fondo o la unión. Para mover en los ejes del equipo, usa Desplazamiento X, Y o Z.':'Metros. En modo axial, distancia desde la tapa.';
+      }
       const labels=lower?{superior:'Lateral +X',inferior:'Lateral −X',front:'NS · lateral +Z',rear:'FS · lateral −Z',axialPlus:'Fondo inferior',axialMinus:'Unión al shell'}:
         {superior:'Superior',inferior:'Inferior',front:'NS',rear:'FS',axialPlus:'Axial +X',axialMinus:'Axial −X'};
       for(const option of document.getElementById(prefix+'-nz-pos').options) if(labels[option.value])option.textContent=labels[option.value];
@@ -2115,6 +2120,10 @@
       return {position, normal};
     }
     function placeNozzle(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
+      placeNozzleOnBody(nozzle, x, pos, bodyPart, angleDeg);
+      if (!nozzle.userData.headMount) nozzle.position.x += Number(nozzle.userData.offsetX) || 0;
+    }
+    function placeNozzleOnBody(nozzle, x, pos, bodyPart, angleDeg = nozzle.userData.angleDeg) {
       if(currentModel==='G'&&bodyPart==='lowerChamber') {
         const p=dualChannelLayout(),angle=normalizedPerimeterAngle(angleDeg,pos),phi=THREE.MathUtils.degToRad(angle);
         let direction;
@@ -2445,7 +2454,7 @@
 
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -2479,7 +2488,7 @@
         diaIndex: dIndex, pipeDiaIndex:pipeIndex, baseDiaIndex: normalizeBaseDiameter(baseDiaIndex, dIndex, type), connectionType: type, rating: normalizedRating, service: service,
         flangeType: 'WN', face: face === 'FF' ? 'FF' : 'RF', bodyPart: bodyPart,
         pos: isAxial(pos) ? pos : closestPerimeterPosition(normalizedAngle), angleDeg: normalizedAngle,
-        offsetY: Number(offsetY) || 0, offsetZ: Number(offsetZ) || 0,
+        offsetX: Number(offsetX) || 0, offsetY: Number(offsetY) || 0, offsetZ: Number(offsetZ) || 0,
         flangeShape:['auto','round','square'].includes(flangeShape)?flangeShape:'auto',flangeBoltCount:Number(flangeBoltCount)||0,
         headMount: !!headMount, headAngle: Math.max(0, Math.min(90, Number(headAngle) || 0)),
         valX: posX, valY: NOZZLE_Y, neckLength: visualNeckLength,
@@ -2774,7 +2783,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX
           );
           nozzlesList.push(newNz);
         });
@@ -2921,13 +2930,14 @@
       document.getElementById('edit-head-angle').value = data.headAngle ?? 45;
       document.getElementById('edit-head-angle-value').value = (data.headAngle ?? 45) + '°';
       document.getElementById('edit-head-mount').disabled = !['bonnet','bonnetLeft'].includes(data.bodyPart);
+      document.getElementById('edit-offset-x').value = data.offsetX || 0;
       document.getElementById('edit-offset-y').value = data.offsetY || 0;
       document.getElementById('edit-offset-z').value = data.offsetZ || 0;
       
       document.getElementById('edit-nz-pos').value = data.pos;
       const editAngle = document.getElementById('edit-nz-angle');
       editAngle.disabled = isAxial(data.pos) && !data.headMount;
-      for (const id of ['edit-nz-x','edit-offset-y','edit-offset-z','edit-nz-pos']) document.getElementById(id).disabled = !!data.headMount;
+      for (const id of ['edit-nz-x','edit-offset-x','edit-offset-y','edit-offset-z','edit-nz-pos']) document.getElementById(id).disabled = !!data.headMount;
       document.getElementById('edit-head-angle').disabled = !data.headMount;
       editAngle.value = Math.round(normalizedPerimeterAngle(data.angleDeg, data.pos));
       updatePerimeterAngleOutput('edit-nz-angle-value', editAngle.value);
@@ -3099,7 +3109,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -3175,16 +3185,18 @@
       const angleDeg = normalizedPerimeterAngle(editAngle.value, editPos.value);
       const pos = isAxial(editPos.value) ? editPos.value : closestPerimeterPosition(angleDeg);
       const vx = Number(editX.value);
+      const ox = Number(document.getElementById('edit-offset-x').value);
       const oy = Number(document.getElementById('edit-offset-y').value);
       const oz = Number(document.getElementById('edit-offset-z').value);
-      if (![vx, oy, oz].every(Number.isFinite)) return;
+      if (![vx, ox, oy, oz].every(Number.isFinite)) return;
       selectedNozzle.userData.headMount = document.getElementById('edit-head-mount').checked;
       selectedNozzle.userData.headAngle = Number(document.getElementById('edit-head-angle').value);
       document.getElementById('edit-head-angle-value').value = selectedNozzle.userData.headAngle + '°';
+      selectedNozzle.userData.offsetX = ox;
       selectedNozzle.userData.offsetY = oy;
       selectedNozzle.userData.offsetZ = oz;
       editAngle.disabled = isAxial(pos) && !selectedNozzle.userData.headMount;
-      for (const id of ['edit-nz-x','edit-offset-y','edit-offset-z','edit-nz-pos']) document.getElementById(id).disabled = selectedNozzle.userData.headMount;
+      for (const id of ['edit-nz-x','edit-offset-x','edit-offset-y','edit-offset-z','edit-nz-pos']) document.getElementById(id).disabled = selectedNozzle.userData.headMount;
       document.getElementById('edit-head-angle').disabled = !selectedNozzle.userData.headMount;
       selectedNozzle.userData.pos = pos;
       selectedNozzle.userData.angleDeg = angleDeg;
@@ -3206,6 +3218,7 @@
     });
     editAngle.addEventListener('input', updateTransform);
     editX.addEventListener('input', updateTransform);
+    document.getElementById('edit-offset-x').addEventListener('input', updateTransform);
     document.getElementById('edit-offset-y').addEventListener('input', updateTransform);
     document.getElementById('edit-offset-z').addEventListener('input', updateTransform);
 
