@@ -604,8 +604,8 @@
     let currentModel = 'A';
     // Los primeros 11 índices conservan exactamente la tabla histórica.
     const DIAMETERS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"',
-      '6"', '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"', '50"'];
-    const DIAMETER_INCHES = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5, 14, 16, 18, 20, 24, 50];
+      '6"', '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"', '42"'];
+    const DIAMETER_INCHES = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 2.5, 14, 16, 18, 20, 24, 42];
     // ASME B16.5, diámetro exterior R de la cara elevada por NPS (pulgadas).
     // El orden conserva los índices históricos de DIAMETERS.
     const RAISED_FACE_DIAMETER_INCHES = [1.375, 1.688, 2.000, 2.875, 3.625,
@@ -654,16 +654,16 @@
 
     // ASME B36.10M: diámetro exterior del tubo en mm, independiente del
     // Schedule y de la clase de la brida. Orden histórico de DIAMETERS.
-    // Último índice: diámetro de dibujo 50″ especial, fuera del catálogo estándar.
+    // Último índice: diámetro de dibujo 42″ especial, fuera del catálogo estándar.
     const PIPE_OUTSIDE_DIAMETER_MM = [21.3, 26.7, 33.4, 48.3, 60.3, 88.9,
-      114.3, 168.3, 219.1, 273.0, 323.8, 73.0, 355.6, 406.4, 457.2, 508.0, 609.6, 1270.0];
+      114.3, 168.3, 219.1, 273.0, 323.8, 73.0, 355.6, 406.4, 457.2, 508.0, 609.6, 1066.8];
     function pipeOutsideDiameter(diaIndex) {
       return PIPE_OUTSIDE_DIAMETER_MM[Number(diaIndex)] / 1000;
     }
 
     function flangeDimensions(diaIndex, rating) {
       // Conexión especial de equipo: proporciones de dibujo, sin tabla ASME.
-      if(Number(diaIndex)===17) return {D:1.47,B:.05,A:1.35,OD:1.27,H:.15,K:1.39,L:.026,bolts:32,R:1.35,custom:true};
+      if(Number(diaIndex)===17) return {D:1.2668,B:.05,A:1.1468,OD:1.0668,H:.15,K:1.1868,L:.026,bolts:32,R:1.1468,custom:true};
       const row = (FLANGE_DIMENSIONS[rating] || FLANGE_DIMENSIONS['150#'])[diaIndex];
       const [D, B, A, legacyPipeOD, H, K, L, bolts] = row;
       return {D:D*INCH, B:B*INCH, A:A*INCH, OD:pipeOutsideDiameter(diaIndex), H:H*INCH,
@@ -786,7 +786,7 @@
       if(dim.custom) {
         const prefix=elementId.startsWith('edit')?'edit':'new';
         document.getElementById(prefix+'-flange-square-size').disabled=readOnly||document.getElementById(prefix+'-flange-shape').value!=='square';
-        element.textContent='50″ · conexión especial de equipo · forma de brida esquemática, sin dimensiones normalizadas. Cantidad de pernos editable (0 = 32).';
+        element.textContent='42″ · conexión especial de equipo · forma de brida esquemática, sin dimensiones normalizadas. Cantidad de pernos editable (0 = 32).';
         element.style.display='block';return;
       }
       const mm = value => Math.round(value * 1000);
@@ -812,7 +812,7 @@
       select.replaceChildren(...allowed.map(index => {
         const option = document.createElement('option');
         option.value = String(index);
-        option.textContent = index===17?'50" · especial':DIAMETERS[index];
+        option.textContent = index===17?'42" · especial':DIAMETERS[index];
         return option;
       }));
       const desired = allowed.includes(Number(selectedIndex)) ? Number(selectedIndex)
