@@ -125,6 +125,7 @@
   <div id="dual-channel-controls" class="input-group" hidden>
     <div class="panel-title">CHANNEL DOBLE · TAPAS PARTIDAS</div>
     <small>Dos mitades por extremo, con corte vertical. Las subtapas se configuran por separado. Diámetro y largo del channel se aplican a ambos extremos.</small>
+    <label>Pernos unión channel–shell (por extremo):</label><input id="dual-joint-bolts" type="number" min="4" max="120" step="1" value="24">
     <label>Pernos por media tapa · arco circular:</label><input id="dual-arc-bolts" type="number" min="1" max="120" step="1" value="11">
     <label>Pernos por media tapa · borde vertical:</label><input id="dual-seam-bolts" type="number" min="1" max="120" step="1" value="13">
     <label><input id="dual-left-davits" type="checkbox" checked> Pescantes articulados · Channel · extremo −X</label>
@@ -1754,7 +1755,9 @@
     dualChannelGroup.name='Channel doble con tapas partidas y cuerpo inferior';heatExchanger.add(dualChannelGroup);dualChannelGroup.visible=false;
     function dualChannelLayout() {
       const half=currentDimensions.shellLength/2,r=currentDimensions.channelDiameter/2;
-      return {half,r,rounded:currentModel==='I',
+      const shellRadius=currentDimensions.shellDiameter/2;
+      const transitionLength=Math.abs(shellRadius-r)>1e-6?Math.min(.35,Math.max(.10,Math.abs(shellRadius-r)*.8)):0;
+      return {half:half+transitionLength,shellHalf:half,transitionLength,r,jointBolts:currentDimensions.dualJointBolts??24,rounded:currentModel==='I',
         uLength:Math.min(currentDimensions.shellLength-.1,currentDimensions.dualULength??currentDimensions.shellLength*.8),
         uRadius:Math.min(currentDimensions.shellDiameter*.95,(currentDimensions.dualUDiameterMM??currentDimensions.shellDiameter*700)/1000)/2,
         uDepth:currentDimensions.dualUDepth??.5,uSupportWidth:currentDimensions.dualUSupportWidth??.20,
@@ -1771,6 +1774,7 @@
           bolts:currentDimensions['dual'+key+'Bolts']??8}))};
     }
     function loadDualChannelDimensions(dimensions) {
+      currentDimensions.dualJointBolts=dimensions.dualJointBolts??24;
       currentDimensions.dualULength=dimensions.dualULength??Math.max(.2,currentDimensions.shellLength*.8);
       currentDimensions.dualUDiameterMM=dimensions.dualUDiameterMM??currentDimensions.shellDiameter*700;
       currentDimensions.dualUDepth=dimensions.dualUDepth??.5;
@@ -1798,10 +1802,11 @@
         document.getElementById(id).hidden=p.rounded;
         document.querySelector('label[for="'+id+'"]').hidden=p.rounded;
       }
+      document.getElementById('dual-joint-bolts').value=p.jointBolts;
       document.getElementById('dual-arc-bolts').value=p.arcBolts;
       document.getElementById('dual-seam-bolts').value=p.seamBolts;
       document.getElementById('dual-lower-length').value=p.lowerLength;
-      const x=document.getElementById('dual-lower-x');x.min=-p.half+.05;x.max=p.half-.05;x.value=p.lowerX;
+      const x=document.getElementById('dual-lower-x');x.min=-p.shellHalf+.05;x.max=p.shellHalf-.05;x.value=p.lowerX;
       const select=document.getElementById('dual-lower-diameter');
       select.replaceChildren(...FLANGED_DIAMETER_INDEXES.filter(i=>DIAMETER_INCHES[i]>=1).map(i=>new Option(DIAMETERS[i],String(i))));
       select.value=currentDimensions.dualLowerDiameterIndex??15;
@@ -1835,12 +1840,12 @@
         const part=mesh(new THREE.CylinderGeometry(radius,radius,length,64),material,name,parent);
         part.rotation.z=Math.PI/2;part.position.x=x;return part;
       }
-      function boltAt(x,y,z,parent) {
+      function boltAt(x,y,z,parent,length=.085) {
         const br=Math.min(.009,p.r*.025);
-        const bolt=cylinderX(br,.085,x,'Espárrago',parent,studMat);bolt.position.y=y;bolt.position.z=z;
+        const bolt=cylinderX(br,length,x,'Espárrago',parent,studMat);bolt.position.y=y;bolt.position.z=z;
         for(const sign of [-1,1]) {
           const nut=mesh(new THREE.CylinderGeometry(br*1.78,br*1.78,.014,6),nutMat,'Tuerca',parent);
-          nut.rotation.z=Math.PI/2;nut.position.set(x+sign*.04,y,z);
+          nut.rotation.z=Math.PI/2;nut.position.set(x+sign*(length/2-.0025),y,z);
         }
       }
       function boltsX(count,pitch,x,centerZ,parent,name,sign) {
@@ -1856,6 +1861,25 @@
       for(const sign of [-1,1]) {
         const end=sign<0?'Left':'Right',face=sign*(p.half+p.length);
         cylinderX(p.r,p.length,sign*(p.half+p.length/2),'Channel '+(sign<0?'−X':'+X'));
+        if(p.transitionLength) {
+          const transition=mesh(new THREE.CylinderGeometry(p.r,p.shellRadius,p.transitionLength,64,1,true),shellMat,'Transición corta shell-channel '+end);
+          transition.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(sign,0,0));
+          transition.position.x=sign*(p.shellHalf+p.transitionLength/2);
+          transition.userData={shellRadius:p.shellRadius,channelRadius:p.r,length:p.transitionLength};
+        }
+        const joint=new THREE.Group();joint.name='Unión apernada shell-channel '+end;
+        joint.userData={boltCount:p.jointBolts};dualChannelGroup.add(joint);
+        const jointX=sign*p.half,jointShape=new THREE.Shape();jointShape.absarc(0,0,p.r*1.22,0,Math.PI*2,false);
+        const jointBore=new THREE.Path();jointBore.absarc(0,0,p.r*.96,0,Math.PI*2,true);jointShape.holes.push(jointBore);
+        for(const offset of [-1,1]) {
+          const ring=mesh(new THREE.ExtrudeGeometry(jointShape,{depth:.04,bevelEnabled:false,curveSegments:64}),flangeMatBase,offset<0?'Brida del shell / transición':'Brida interior del channel',joint);
+          ring.rotation.y=Math.PI/2;ring.position.x=jointX+sign*offset*.024-.02;
+        }
+        for(let i=0;i<p.jointBolts;i++) {
+          const a=(i+.5)*Math.PI*2/p.jointBolts;
+          boltAt(jointX,Math.cos(a)*p.r*1.10,Math.sin(a)*p.r*1.10,joint,.14);
+        }
+
         const ring=new THREE.Shape();ring.absarc(0,0,p.r*1.22,0,Math.PI*2,false);
         const bore=new THREE.Path();bore.absarc(0,0,p.r*.96,0,Math.PI*2,true);ring.holes.push(bore);
         const flange=mesh(new THREE.ExtrudeGeometry(ring,{depth:.045,bevelEnabled:false,curveSegments:64}),flangeMatBase,'Brida de tapa partida');
@@ -2484,8 +2508,8 @@
       for(const id of ['bonnet-diameter','bonnet-length'])document.getElementById(id).parentElement.hidden=['G','I'].includes(currentModel);
       document.getElementById('channel-diameter').disabled = currentModel === 'H';
       if (currentModel === 'H') buildHairpin();
-      flangeRight.visible = currentModel !== 'C' && currentModel !== 'D';
-      flangeLeft.visible = currentModel !== 'D' && currentModel !== 'E';
+      flangeRight.visible = !['C','D','G','I'].includes(currentModel);
+      flangeLeft.visible = !['D','E','G','I'].includes(currentModel);
       shellFlangeRings.forEach(ring => {
         ring.visible = currentModel !== 'D' &&
           !(currentModel === 'C' && ring.userData.modelASide > 0) &&
@@ -3757,7 +3781,7 @@
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
       applyModel(currentModel,true);syncStateToParent();
     });
-    for(const [id,field,min,max] of [['dual-u-length','dualULength',.2,20],['dual-u-diameter','dualUDiameterMM',25.4,5000],['dual-u-depth','dualUDepth',.05,3],['dual-u-support-width','dualUSupportWidth',.05,1],['dual-arc-bolts','dualArcBolts',1,120],['dual-seam-bolts','dualSeamBolts',1,120],['dual-lower-length','dualLowerLength',.1,3],['dual-lower-x','dualLowerX',-3.5,3.5]]) {
+    for(const [id,field,min,max] of [['dual-joint-bolts','dualJointBolts',4,120],['dual-u-length','dualULength',.2,20],['dual-u-diameter','dualUDiameterMM',25.4,5000],['dual-u-depth','dualUDepth',.05,3],['dual-u-support-width','dualUSupportWidth',.05,1],['dual-arc-bolts','dualArcBolts',1,120],['dual-seam-bolts','dualSeamBolts',1,120],['dual-lower-length','dualLowerLength',.1,3],['dual-lower-x','dualLowerX',-3.5,3.5]]) {
       document.getElementById(id).addEventListener('change',event=>{
         const value=Number(event.target.value);if(readOnly||!Number.isFinite(value)||value<min||value>max||(field.endsWith('Bolts')&&!Number.isInteger(value)))return;
         currentDimensions[field]=value;applyModel(currentModel,true);syncStateToParent();
