@@ -88,6 +88,10 @@
     <div class="panel-title">DATOS EQUIPO</div>
 <div class="input-group"><label for="nameplate-input">TAG del equipo seleccionado:</label><input id="nameplate-input" type="text"></div>
 <div class="input-group"><label for="nameplate-side">Ubicación del nameplate:</label><select id="nameplate-side"><option value="front">Cara +Z · será Frente / NS</option><option value="rear">Cara −Z · será Frente / NS</option></select></div>
+<div class="input-group">
+  <label for="nameplate-x">Posición X del nameplate (m):</label><input id="nameplate-x" type="number" min="-20" max="20" step="0.05" value="0">
+  <label for="nameplate-scale">Tamaño proporcional del nameplate (%):</label><input id="nameplate-scale" type="number" min="10" max="500" step="5" value="100">
+</div>
 <small style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px">La cara del nameplate siempre define Frente y lado cercano (NS). La cara opuesta es Posterior / FS.</small>
 <div id="stack-controls" style="margin:8px 0;padding:7px;border:1px solid #475569;border-radius:5px">
   <label>Posición de este equipo al crear el conjunto:</label><select id="stack-start-level"><option value="lower">Inferior</option><option value="upper">Superior</option></select>
@@ -2040,6 +2044,8 @@
         hairpinSpoolLowerBolts:Number.isInteger(dimensions.hairpinSpoolLowerBolts)&&dimensions.hairpinSpoolLowerBolts>=4&&dimensions.hairpinSpoolLowerBolts<=120?dimensions.hairpinSpoolLowerBolts:0,
         hairpinBoltCount:Number.isInteger(dimensions.hairpinBoltCount)&&dimensions.hairpinBoltCount>=4&&dimensions.hairpinBoltCount<=120?dimensions.hairpinBoltCount:24,
         hairpinHeadStyle:dimensions.hairpinHeadStyle==='flatBolted'?'flatBolted':'ellipticalBolted'};
+      currentDimensions.nameplateX=Number.isFinite(dimensions.nameplateX)?dimensions.nameplateX:0;
+      currentDimensions.nameplateScale=Number.isFinite(dimensions.nameplateScale)?Math.max(.1,Math.min(5,dimensions.nameplateScale)):1;
       const legacyModelA = model !== 'B' && dimensions.modelALengthsEnabled !== true;
       for (const [field, [inputId]] of Object.entries(dimensionControls)) {
         if (legacyModelA && field.endsWith('Length')) continue;
@@ -3899,7 +3905,11 @@
     const nameplate = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.34, 0.018), plateMat);
     function updateNameplatePlacement() {
       const side = currentNameplateSide === 'rear' ? -1 : 1;
-      nameplate.position.set(0, currentModel==='H'?hairpinLayout().separation/2:0, side * ((currentModel==='H'?hairpinLayout().upperRadius:currentDimensions.shellDiameter/2) + 0.012));
+      const x=currentDimensions.nameplateX??0,scale=currentDimensions.nameplateScale??1;
+      nameplate.scale.setScalar(scale);
+      nameplate.position.set(x, currentModel==='H'?hairpinLayout().separation/2:0, side * ((currentModel==='H'?hairpinLayout().upperRadius:currentDimensions.shellDiameter/2) + .009*scale+.003));
+      document.getElementById('nameplate-x').value=x;
+      document.getElementById('nameplate-scale').value=Math.round(scale*100);
       nameplate.rotation.set(0, side < 0 ? Math.PI : 0, 0);
     }
     updateNameplatePlacement();
@@ -3932,6 +3942,13 @@
       updateNameplateText(currentNameplate);
       syncStateToParent();
     });
+    for(const [id,field,min,max,factor] of [['nameplate-x','nameplateX',-20,20,1],['nameplate-scale','nameplateScale',10,500,.01]]) {
+      document.getElementById(id).addEventListener('input',event=>{
+        if(readOnly)return;const value=Number(event.target.value);
+        if(!Number.isFinite(value)||value<min||value>max)return;
+        currentDimensions[field]=value*factor;updateNameplatePlacement();syncStateToParent();
+      });
+    }
     document.getElementById('nameplate-side').addEventListener('change', event => {
       currentNameplateSide = event.target.value === 'rear' ? 'rear' : 'front';
       syncPositionAnglesToNameplate();
