@@ -3051,11 +3051,17 @@
     let selectedNozzle = null;
 
     const picker = document.getElementById('nozzle-picker');
+    function compareNozzleTags(a,b) {
+      const tag=n=>String(n.userData.tagName||'').trim().toLocaleUpperCase();
+      const group=value=>!value?3:/^T(?:\s*\d|$)/.test(value)?0:/^S(?:\s*\d|$)/.test(value)?1:2;
+      const first=tag(a),second=tag(b);
+      return group(first)-group(second)||first.localeCompare(second,'es',{numeric:true,sensitivity:'base'});
+    }
     function refreshNozzlePicker() {
       const query=document.getElementById('component-search').value.trim().toLocaleUpperCase();
       picker.replaceChildren(new Option('Seleccionar…', ''));
       let count=0;
-      nozzlesList.forEach(n=>{
+      [...nozzlesList].sort(compareNozzleTags).forEach(n=>{
         const d=n.userData;
         const branches=[d.hasNS?'NS '+(d.tagNS||''):null,d.hasFS?'FS '+(d.tagFS||''):null,
           d.subFront?.enabled?d.subFront.tag:null,d.subRear?.enabled?d.subRear.tag:null].filter(Boolean).join(' · ');
