@@ -255,6 +255,7 @@ editor_data["_editorSelection"] = {
 }
 result = viewer(initial_data=editor_data, ack=ss.ex_ack, stack_models=ss.ex_db,
                 selected_tag=editor_data["_editorSelection"]["tag"], selection_token=ss.ex_generation,
+                draft_key=selected,
                 key="viewer_" + ss.ex_generation, default=None)
 if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_generation):
     event_id = result.get("event_id")
