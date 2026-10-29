@@ -74,6 +74,15 @@
   <div id="editor-toolbar" style="position:absolute;top:10px;left:10px;z-index:20;display:flex;flex-direction:column;gap:6px">
     <button id="toggle-equipment-panel" type="button" aria-controls="ui-container" aria-expanded="true" hidden>Ocultar datos equipo</button>
     <div id="stack-quick-levels" hidden><button id="edit-lower-level" type="button" aria-expanded="true">Inferior</button> <button id="edit-upper-level" type="button" aria-expanded="false">Superior</button></div>
+    <div id="draft-tools" hidden style="max-width:248px;padding:6px;background:#172231;border:1px solid #475569;border-radius:4px;font-size:11px;color:#f8fafc">
+      <span id="draft-status">Respaldo local listo.</span>
+      <div id="draft-recovery" hidden style="margin-top:5px">
+        <button id="draft-restore" type="button">Recuperar avance</button>
+        <button id="draft-download" type="button">Descargar respaldo</button>
+        <button id="draft-discard" type="button">Descartar borrador</button>
+      </div>
+    <button id="draft-reload" type="button" hidden>Reabrir visor y recuperar avance</button>
+    </div>
   </div>
   <div id="ui-container">
     <div class="panel-title">DATOS EQUIPO</div>
@@ -898,9 +907,65 @@
         gap: stackState.gap, offsetX: stackState.offsetX, sameEquipment:!!stackState.sameEquipment, equipmentTag:stackState.equipmentTag||lowerDesign.nameplate, data: stackState.data
       }};
     }
+    function layoutEditorPanels() {
+      const toolbar=document.getElementById('editor-toolbar'),panel=document.getElementById('ui-container');
+      const top=Math.max(52,toolbar.getBoundingClientRect().bottom+8);
+      panel.style.top=top+'px';panel.style.maxHeight=Math.max(100,window.innerHeight-top-32)+'px';
+    }
+    new ResizeObserver(layoutEditorPanels).observe(document.getElementById('editor-toolbar'));
+    let draftStorageKey=null,draftSelectedTag='',draftPending=null,changeTimer=null,queuedChange=null;
+    function cleanDraft(data) {const copy={...data};delete copy._editorSelection;return copy;}
+    function persistLocalDraft(data) {
+      if(readOnly||!draftStorageKey)return;
+      if(draftPending)return;
+      try {
+        localStorage.setItem(draftStorageKey,JSON.stringify({version:1,updatedAt:Date.now(),data:cleanDraft(data)}));
+        document.getElementById('draft-status').textContent='Avance respaldado en este navegador · pendiente de guardar en Sheets.';
+      } catch(error) {
+        document.getElementById('draft-status').textContent='No se pudo crear el respaldo local. Descarga el JSON o guarda en Sheets.';
+      }
+    }
+    function setupDraftRecovery(args) {
+      document.getElementById('draft-tools').hidden=readOnly||Boolean(args.demo);
+      if(readOnly||args.demo){draftStorageKey=null;return;}
+      draftSelectedTag=args.selected_tag||'';
+      const identity=String(args.draft_key||args.selected_tag||args.initial_data?.nameplate||'NUEVO').trim().toUpperCase();
+      draftStorageKey='ingemars.editor.draft.v1:'+encodeURIComponent(identity);
+      draftPending=null;document.getElementById('draft-recovery').hidden=true;
+      try {
+        const saved=JSON.parse(localStorage.getItem(draftStorageKey)||'null');
+        if(saved?.version===1&&saved.data&&Array.isArray(saved.data.nozzles)&&JSON.stringify(cleanDraft(saved.data))!==JSON.stringify(cleanDraft(args.initial_data||{}))) {
+          draftPending=saved;
+          document.getElementById('draft-status').textContent='Hay un avance recuperable de '+new Date(saved.updatedAt).toLocaleString('es-CL')+'. Recupera o descarta antes de editar.';
+          document.getElementById('draft-recovery').hidden=false;
+        }
+      } catch(error) {document.getElementById('draft-status').textContent='Respaldo local no disponible en este navegador.';}
+    }
+    function flushEditorChange() {
+      clearTimeout(changeTimer);changeTimer=null;
+      if(queuedChange){const event=queuedChange;queuedChange=null;send('streamlit:setComponentValue',{dataType:'json',value:event});}
+    }
+    document.getElementById('draft-restore').addEventListener('click',()=>{
+      if(!draftPending)return;
+      const data=draftPending.data;
+      loading=true;try {loadAssemblyDesign(data,draftSelectedTag);}finally{loading=false;}
+      draftPending=null;document.getElementById('draft-recovery').hidden=true;syncStateToParent();
+    });
+    document.getElementById('draft-discard').addEventListener('click',()=>{
+      try{localStorage.removeItem(draftStorageKey);}catch(error){}
+      draftPending=null;document.getElementById('draft-recovery').hidden=true;
+      persistLocalDraft(collectAssemblyDesign());
+    });
+    document.getElementById('draft-download').addEventListener('click',()=>{
+      const data=draftPending?.data||collectAssemblyDesign(),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;link.download='Respaldo_'+(data.nameplate||'equipo')+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });
+    window.addEventListener('pagehide',flushEditorChange);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)flushEditorChange();});
     function syncStateToParent(action = "change") {
       if (loading || !initialized || readOnly || rebuildingStack) return;
       const exportData = collectAssemblyDesign();
+      persistLocalDraft(exportData);
       if(currentModel==='H') buildHairpin();
       if(['G','I'].includes(currentModel)) buildDualChannel();
       positionStackedEquipment();
@@ -909,10 +974,13 @@
         document.getElementById('stack-tag-upper').value = stackState.data.nameplate || '';
       }
       const eventId = sessionId + ':' + (++revision);
-      if (action === 'save') pendingSave = eventId;
-      send('streamlit:setComponentValue', {dataType: 'json', value: {
-        event_id: eventId, action, data: exportData
-      }});
+      const event={event_id:eventId,action,data:exportData};
+      if (action === 'save') {
+        clearTimeout(changeTimer);queuedChange=null;pendingSave=eventId;
+        send('streamlit:setComponentValue',{dataType:'json',value:event});
+      } else {
+        queuedChange=event;clearTimeout(changeTimer);changeTimer=setTimeout(flushEditorChange,600);
+      }
     }
 
     let nozzlesList = [];
@@ -946,12 +1014,21 @@
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setClearColor(0x172231, 1);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
+    renderer.domElement.addEventListener('webglcontextlost',event=>{
+      event.preventDefault();
+      if(!readOnly) {
+        document.getElementById('draft-tools').hidden=false;
+        document.getElementById('draft-status').textContent='Se interrumpió el visor 3D. Reábrelo para recuperar el respaldo local.';
+        document.getElementById('draft-reload').hidden=false;
+      }
+    });
+    document.getElementById('draft-reload').addEventListener('click',()=>window.location.reload());
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -2916,7 +2993,7 @@
       document.getElementById("nameplate-input").value = currentNameplate;
       updateNameplateText(currentNameplate);
       
-      nozzlesList.forEach(nz => heatExchanger.remove(nz));
+      nozzlesList.forEach(nz => {heatExchanger.remove(nz);disposeDetachedNozzle(nz);});
       nozzlesList = [];
       customNozzleCount = 0;
 
@@ -3262,6 +3339,19 @@
       syncStateToParent();
     });
 
+    function disposeDetachedNozzle(root) {
+      const live=new Set();
+      scene.traverse(node=>{
+        if(node.geometry)live.add(node.geometry);
+        for(const material of (Array.isArray(node.material)?node.material:[node.material]))if(material){live.add(material);if(material.map)live.add(material.map);}
+      });
+      const released=new Set();
+      function release(resource){if(resource&&!live.has(resource)&&!released.has(resource)){released.add(resource);resource.dispose();}}
+      root.traverse(node=>{
+        release(node.geometry);
+        for(const material of (Array.isArray(node.material)?node.material:[node.material]))if(material){release(material.map);release(material);}
+      });
+    }
     function rebuildSelectedNozzle(overrides = {}) {
       if (!selectedNozzle) return null;
       const old = selectedNozzle;
@@ -3280,6 +3370,7 @@
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
       heatExchanger.remove(old);
+      disposeDetachedNozzle(old);
       selectedNozzle = null;
       selectNozzle(replacement);
       syncStateToParent();
@@ -3493,6 +3584,7 @@
     document.getElementById('btn-delete-nz').addEventListener('click', () => {
       if(!selectedNozzle) return;
       heatExchanger.remove(selectedNozzle);
+      disposeDetachedNozzle(selectedNozzle);
       nozzlesList = nozzlesList.filter(nz => nz !== selectedNozzle);
       deselectNozzle();
       syncStateToParent();
@@ -3974,7 +4066,7 @@
         button.setAttribute('aria-expanded',String(editingLevel===level&&!window.exchangerBridge.isPanelCollapsed()));
       }
       document.getElementById('stack-quick-levels').hidden=!stackState||readOnly;
-      document.getElementById('ui-container').style.top=stackState?'92px':'52px';
+      layoutEditorPanels();
       document.getElementById('ui-container').style.maxHeight=stackState?'calc(100vh - 124px)':'calc(100vh - 84px)';
       document.getElementById('stack-tag-lower').value = lowerDesign?.nameplate || '';
       document.getElementById('stack-tag-upper').value = stackState?.data.nameplate || '';
@@ -4298,6 +4390,8 @@
       if (!initialized || (selectionToken && selectionToken !== loadedSelectionToken)) {
         loading = true;
         loadAssemblyDesign(args.initial_data, args.selected_tag);
+        clearTimeout(changeTimer);queuedChange=null;
+        setupDraftRecovery(args);
         loadedSelectionToken = selectionToken;
         loading = false;
         initialized = true;
@@ -4316,6 +4410,11 @@
         editFsSize.disabled = !editFsCheck.checked;
         editFsTag.disabled = !editFsCheck.checked;
         document.getElementById('save-status').textContent = args.ack.message;
+        if(args.ack.message?.startsWith('✅')&&draftStorageKey) {
+          try{localStorage.removeItem(draftStorageKey);}catch(error){}
+          draftPending=null;document.getElementById('draft-recovery').hidden=true;
+          document.getElementById('draft-status').textContent='Guardado y verificado en Sheets.';
+        }
       }
       if (readOnly && args.capture_key && !reportCaptureSent) {
         reportCaptureSent = true;
