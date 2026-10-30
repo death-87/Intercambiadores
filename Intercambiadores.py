@@ -977,7 +977,7 @@ def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.restoreState()
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None, todas_vistas_45=False):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -1164,7 +1164,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         re.match(r"^(VENTEO|DRENAJE)\b", normalizar(fila.get("LADO", ""))) for fila in conexiones)
     solo_venteo_drenaje = (solo_venteo_drenaje and estado_roscas != "Revisar discrepancia"
                           and (cantidad is None or cantidad == len(conexiones)))
-    cuatro_vistas = (config or {}).get("model") in {"G", "I"}
+    cuatro_vistas = todas_vistas_45 or (config or {}).get("model") in {"G", "I"}
     solo_near_side = not cuatro_vistas and (estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje)
     if (config or {}).get("model") == "J":
         vistas=[]
@@ -1172,8 +1172,14 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             if contenido:
                 vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, section_style),
                                Image(BytesIO(contenido), width=84*mm, height=140*mm)])
-        if vistas:
-            tabla_vistas=Table([vistas], colWidths=[90*mm]*len(vistas))
+        if cuatro_vistas:
+            for etiqueta, contenido in (("NS (NEAR SIDE) · 45°", imagen_angular), ("FS (FAR SIDE) · 45°", imagen_angular_posterior)):
+                if contenido:
+                    vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, section_style),
+                                   Image(BytesIO(contenido), width=84*mm, height=140*mm)])
+        for inicio in range(0,len(vistas),2):
+            fila=vistas[inicio:inicio+2]
+            tabla_vistas=Table([fila], colWidths=[90*mm]*len(fila))
             tabla_vistas.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
             elementos.append(KeepTogether([Spacer(1,6*mm),tabla_vistas]))
     else:
@@ -1187,7 +1193,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
             elementos.append(KeepTogether([Spacer(1, 6 * mm),
                 Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
-    if cuatro_vistas:
+    if cuatro_vistas and (config or {}).get("model") != "J":
         for etiqueta, contenido in (("NS (NEAR SIDE) · 45°", imagen_angular),
                                     ("FS (FAR SIDE) · 45°", imagen_angular_posterior)):
             if contenido:
@@ -1198,8 +1204,11 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     return salida.getvalue()
 
 
-def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v69"], sort_keys=True).encode()).hexdigest()[:20]
+def clave_captura(tag, config, todas_vistas_45=False):
+    datos = [normalizar(tag), config, "report-v70"]
+    if todas_vistas_45:
+        datos.append("todas_45")
+    return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1471,7 +1480,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
                           imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
                           imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
                           imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave),
-                          informe_planta=True, documento=documento)
+                          informe_planta=True, documento=documento, todas_vistas_45=equipo.get("vistas_45",False))
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
     paginas_previas = 2
     for intento in range(5):
@@ -1527,7 +1536,8 @@ def generar_zip_fichas(equipos, imagenes, documento=None):
                 imagen_modelo=imagenes.get("captura_pdf_" + clave),
                 imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
                 imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
-                imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave), documento=documento)
+                imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave), documento=documento,
+                todas_vistas_45=equipo.get("vistas_45",False))
             nombre = re.sub(r"[^\w.-]+", "_", equipo["tag"]).strip(".") or "Equipo"
             base = f"Ficha_{nombre}"
             nombre_archivo, indice = base + ".pdf", 2
@@ -1556,9 +1566,13 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         formato = st.selectbox("Archivos a preparar", ["Informe general y PDF individuales (ZIP)",
             "Solo PDF individuales (ZIP)", "Solo informe general"], key="informe_planta_formato")
         st.caption("El ZIP contiene una ficha PDF independiente por equipo, igual que al exportarlos de a uno.")
-        st.caption("Cada equipo tiene su propia ficha. Sin roscas o solo con venteos/drenajes se incluye únicamente la vista NS, en tamaño grande.")
+        st.caption("Cada equipo tiene su propia ficha. En modo Normal, sin roscas o solo con venteos/drenajes se incluye únicamente NS, excepto los modelos de tapas partidas.")
         documento = campos_informe("informe_planta_documento")
-        con_imagenes = st.checkbox("Incluir vistas de los modelos 3D (NS, FS y 45° para tapas partidas)", value=True, key="informe_planta_imagenes")
+        con_imagenes = st.checkbox("Incluir vistas de los modelos 3D", value=True, key="informe_planta_imagenes")
+        modo_vistas = st.radio("Vistas al exportar", ["Normal · configuración actual", "NS, FS y vistas a 45° para todos"],
+                              key="informe_planta_modo_vistas", disabled=not con_imagenes)
+        todas_45 = modo_vistas == "NS, FS y vistas a 45° para todos"
+        st.caption("Normal conserva las cuatro vistas de los modelos de tapas partidas. La segunda opción agrega NS y FS a 45° a todos los equipos con modelo 3D, tanto en el ZIP como en el informe general.")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
             for registro in sorted(df[df[col_unidad] == planta].to_dict("records"),
@@ -1570,13 +1584,14 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
                 equipos.append({"registro": registro, "tag": tag, "config": config,
                     "estado": estado(tag), "cantidad": cantidad, "origen": origen,
-                    "operacion": operacionales.get(normalizar(tag)), "captura_key": clave_captura(tag, config)})
+                    "operacion": operacionales.get(normalizar(tag)), "vistas_45": todas_45,
+                    "captura_key": clave_captura(tag, config, todas_45)})
             if not equipos:
                 st.warning("No hay equipos válidos en esta planta.")
             else:
                 st.session_state.pop("informe_planta_resultado", None)
                 st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
-                    "equipos": equipos, "con_imagenes": con_imagenes, "omitidas": [], "formato": formato, "documento": documento}
+                    "equipos": equipos, "con_imagenes": con_imagenes, "vistas_45": todas_45, "omitidas": [], "formato": formato, "documento": documento}
                 st.rerun()
         if tarea:
             if st.button("Cancelar preparación", key="cancelar_planta"):
@@ -1586,7 +1601,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 and e["captura_key"] not in tarea["omitidas"]
                 and ("captura_pdf_" + e["captura_key"] not in st.session_state or
                      "captura_posterior_pdf_" + e["captura_key"] not in st.session_state or
-                     (e["config"].get("model") in {"G", "I"} and any(prefijo + e["captura_key"] not in st.session_state
+                     ((e.get("vistas_45",False) or e["config"].get("model") in {"G", "I"}) and any(prefijo + e["captura_key"] not in st.session_state
                          for prefijo in ("captura_angular_pdf_", "captura_angular_posterior_pdf_"))))]
             total_modelos = sum(e["config"] is not None for e in tarea["equipos"])
             if pendientes:
@@ -1599,7 +1614,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                     tarea["omitidas"].append(clave)
                     st.rerun()
                 captura = declarar_visor()(initial_data=equipo["config"], readonly=True, ack=None,
-                    height=260, capture_key=clave, report_mode=True,
+                    height=260, capture_key=clave, report_mode=True, capture_all_angles=equipo.get("vistas_45",False),
                     key="informe_planta_" + tarea["id"] + clave, default=None)
                 if isinstance(captura, dict) and captura.get("capture_key") == clave:
                     if captura.get("action") == "report_capture":
@@ -1625,12 +1640,15 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 sin_imagen = [e["tag"] for e in tarea["equipos"] if tarea["con_imagenes"] and
                     (e["config"] is None or e["captura_key"] in tarea["omitidas"])]
                 st.session_state["informe_planta_resultado"] = {"planta": tarea["planta"], "pdf": pdf, "zip": zip_pdf,
-                    "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen, "numero":tarea.get("documento",{}).get("numero","")}
+                    "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen,
+                    "modo_vistas": ("NS, FS y 45° para todos" if tarea.get("vistas_45") else "Normal · configuración actual") if tarea["con_imagenes"] else "Sin imágenes", "numero":tarea.get("documento",{}).get("numero","")}
                 st.session_state.pop("informe_planta_tarea", None)
                 st.rerun()
         resultado = st.session_state.get("informe_planta_resultado")
         if resultado:
             st.success(f"Informe de {resultado['planta']} listo: {resultado['equipos']} equipos.")
+            if resultado.get("modo_vistas"):
+                st.caption("Vistas del archivo preparado: " + resultado["modo_vistas"])
             if resultado.get("numero"):
                 st.caption("Informe N° " + resultado["numero"])
             if resultado["sin_imagen"]:
@@ -1838,7 +1856,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v69"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v70"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -1986,7 +2004,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v69"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v70"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
