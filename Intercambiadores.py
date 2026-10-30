@@ -568,7 +568,25 @@ def cargar_disenos():
     return db, errores
 
 
+def cuerpo_tecnico_boquilla(boquilla, config):
+    cuerpo = boquilla.get("bodyPart")
+    if config.get("model") != "J" or cuerpo not in {"bonnet", "bonnetLeft"}:
+        return cuerpo
+    if boquilla.get("headMount"):
+        return cuerpo  # El montaje sobre la curva no aplica desplazamientos libres.
+    dimensiones = config.get("dimensions", {})
+    posicion = float(boquilla.get("valX") or 0)
+    if boquilla.get("pos") in {"axialPlus", "axialMinus"}:
+        signo = -1 if cuerpo == "bonnetLeft" else 1
+        posicion += signo * (float(dimensiones.get("shellLength", 4.275)) / 2
+                            + float(dimensiones.get("bonnetLength", .8)) / 2)
+    posicion += float(boquilla.get("offsetX") or 0)
+    return "bonnet" if posicion > 0 else "bonnetLeft" if posicion < 0 else cuerpo
+
+
 def nombre_cuerpo(valor, modelo=None):
+    if modelo == "J" and valor in {"bonnet", "bonnetLeft"}:
+        return "BONETE SUPERIOR" if valor == "bonnet" else "BONETE INFERIOR"
     if modelo == "H":
         return {"shell":"TUBO SUPERIOR", "shellLower":"TUBO INFERIOR",
             "tubeUpper":"TUBO SUPERIOR", "tubeLower":"TUBO INFERIOR",
@@ -587,6 +605,7 @@ def nombre_cuerpo(valor, modelo=None):
 def filas_boquillas(config):
     filas = []
     for n in config.get("nozzles", []):
+        n = {**n, "bodyPart": cuerpo_tecnico_boquilla(n, config)}
         legacy_ns = "sizeNS" not in n
         legacy_fs = "sizeFS" not in n
         medida_ns = (n.get("tagNS") if legacy_ns else n.get("sizeNS")) or "Sin medida"
@@ -802,6 +821,7 @@ def filas_roscas(config):
                       "TIPO": "NPT", "RATING": rating or "3000#",
                       "TAG CPLG": tag or "—", "CUERPO": nombre_cuerpo(cuerpo, config.get("model", "A"))})
     for n in config.get("nozzles", []):
+        n = {**n, "bodyPart": cuerpo_tecnico_boquilla(n, config)}
         if n.get("connectionType", "flanged") == "threaded":
             servicio = {"vent": "VENTEO", "drain": "DRENAJE"}.get(n.get("service"))
             if servicio:
