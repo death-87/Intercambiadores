@@ -287,7 +287,7 @@ def cargar_datos():
 def validar_diseno(data, _nivel=0):
     if not isinstance(data, dict) or not isinstance(data.get("nozzles"), list):
         raise ValueError("se esperaba un objeto con una lista nozzles")
-    if data.get("model", "A") not in ("A", "B", "C", "D", "E", "F", "G", "H", "I"):
+    if data.get("model", "A") not in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J"):
         raise ValueError("modelo desconocido")
     dimensions = data.get("dimensions", {})
     if not isinstance(dimensions, dict):
@@ -811,6 +811,8 @@ def filas_roscas(config):
                 posicion = {"superior": "SUPERIOR", "inferior": "INFERIOR",
                             "front": "NS", "rear": "FS", "axialPlus": "AXIAL +X",
                             "axialMinus": "AXIAL −X"}.get(n.get("pos"), "—")
+                if config.get("model") == "J":
+                    posicion = {"superior":"LATERAL −X", "inferior":"LATERAL +X", "axialPlus":"SUPERIOR", "axialMinus":"INFERIOR"}.get(n.get("pos"),posicion)
                 if n.get("bodyPart") == "lowerChamber" and config.get("model") != "I":
                     posicion = {"superior":"LATERAL +X", "inferior":"LATERAL −X", "axialPlus":"FONDO INFERIOR", "axialMinus":"UNIÓN AL SHELL"}.get(n.get("pos"),posicion)
                 agregar(n.get("tagName"), posicion, DIAMETROS[n["diaIndex"]], n.get("rating"), "", n.get("bodyPart"))
@@ -1144,16 +1146,27 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
                           and (cantidad is None or cantidad == len(conexiones)))
     cuatro_vistas = (config or {}).get("model") in {"G", "I"}
     solo_near_side = not cuatro_vistas and (estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje)
-    if imagen_modelo:
-        imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
-        elementos.append(KeepTogether([Spacer(1, 6 * mm),
-            Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
-    elif solo_near_side and imagen_posterior:
-        elementos.append(p("Vista NS (NEAR SIDE) no disponible.", small))
-    if imagen_posterior and not solo_near_side:
-        imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
-        elementos.append(KeepTogether([Spacer(1, 6 * mm),
-            Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
+    if (config or {}).get("model") == "J":
+        vistas=[]
+        for etiqueta, contenido in (("NS (NEAR SIDE)", imagen_modelo), ("FS (FAR SIDE)", imagen_posterior if not solo_near_side else None)):
+            if contenido:
+                vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, section_style),
+                               Image(BytesIO(contenido), width=84*mm, height=140*mm)])
+        if vistas:
+            tabla_vistas=Table([vistas], colWidths=[90*mm]*len(vistas))
+            tabla_vistas.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
+            elementos.append(KeepTogether([Spacer(1,6*mm),tabla_vistas]))
+    else:
+        if imagen_modelo:
+            imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
+            elementos.append(KeepTogether([Spacer(1, 6 * mm),
+                Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
+        elif solo_near_side and imagen_posterior:
+            elementos.append(p("Vista NS (NEAR SIDE) no disponible.", small))
+        if imagen_posterior and not solo_near_side:
+            imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
+            elementos.append(KeepTogether([Spacer(1, 6 * mm),
+                Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
     if cuatro_vistas:
         for etiqueta, contenido in (("NS (NEAR SIDE) · 45°", imagen_angular),
                                     ("FS (FAR SIDE) · 45°", imagen_angular_posterior)):
@@ -1166,7 +1179,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config):
-    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v68"], sort_keys=True).encode()).hexdigest()[:20]
+    return hashlib.sha256(json.dumps([normalizar(tag), config, "report-v69"], sort_keys=True).encode()).hexdigest()[:20]
 
 
 def decodificar_capturas(captura, clave):
@@ -1805,7 +1818,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v68"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v69"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -1953,7 +1966,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v68"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v69"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
