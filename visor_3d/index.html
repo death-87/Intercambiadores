@@ -4274,7 +4274,7 @@
       refreshAssemblyView(); syncStateToParent();
     });
     let reportCaptureSent = false;
-    function captureReportView(captureKey) {
+    function captureReportView(captureKey, allAngles=false) {
       const vertical=currentModel==='J';
       const width=vertical?900:1600,height=vertical?1500:700,aspect=width/height;
       assemblyGroup.updateMatrixWorld(true);
@@ -4408,7 +4408,7 @@
         reportRenderer.render(scene, reportCamera);
         const rearImage = reportRenderer.domElement.toDataURL('image/png');
         const extraViews={};
-        if(['G','I'].includes(currentModel)) for(const [viewSide,key] of [[side,'angle_image'],[-side,'rear_angle_image']]) {
+        if(allAngles||['G','I'].includes(currentModel)) for(const [viewSide,key] of [[side,'angle_image'],[-side,'rear_angle_image']]) {
           const distance=size.length()+20;
           reportCamera.position.set(center.x-viewSide*distance*Math.SQRT1_2,center.y,
             center.z+viewSide*distance*Math.SQRT1_2);
@@ -4498,7 +4498,7 @@
       if (readOnly && args.capture_key && !reportCaptureSent) {
         reportCaptureSent = true;
         requestAnimationFrame(() => {
-          try { captureReportView(args.capture_key); }
+          try { captureReportView(args.capture_key,args.capture_all_angles===true); }
           catch (error) {
             console.warn('No se pudo capturar la vista para el PDF', error);
             if (args.report_mode) send('streamlit:setComponentValue', {dataType: 'json', value: {
