@@ -977,7 +977,7 @@ def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.restoreState()
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None, todas_vistas_45=False):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None, todas_vistas_45=False, solo_vistas_45=False):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -1164,7 +1164,9 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         re.match(r"^(VENTEO|DRENAJE)\b", normalizar(fila.get("LADO", ""))) for fila in conexiones)
     solo_venteo_drenaje = (solo_venteo_drenaje and estado_roscas != "Revisar discrepancia"
                           and (cantidad is None or cantidad == len(conexiones)))
-    cuatro_vistas = todas_vistas_45 or (config or {}).get("model") in {"G", "I"}
+    cuatro_vistas = solo_vistas_45 or todas_vistas_45 or (config or {}).get("model") in {"G", "I"}
+    if solo_vistas_45:
+        imagen_modelo = imagen_posterior = None
     solo_near_side = not cuatro_vistas and (estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje)
     if (config or {}).get("model") == "J":
         vistas=[]
@@ -1480,7 +1482,8 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
                           imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
                           imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
                           imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave),
-                          informe_planta=True, documento=documento, todas_vistas_45=equipo.get("vistas_45",False))
+                          informe_planta=True, documento=documento, todas_vistas_45=equipo.get("vistas_45",False),
+                          solo_vistas_45=equipo.get("solo_45",False))
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
     paginas_previas = 2
     for intento in range(5):
@@ -1537,7 +1540,8 @@ def generar_zip_fichas(equipos, imagenes, documento=None):
                 imagen_posterior=imagenes.get("captura_posterior_pdf_" + clave),
                 imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
                 imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave), documento=documento,
-                todas_vistas_45=equipo.get("vistas_45",False))
+                todas_vistas_45=equipo.get("vistas_45",False),
+                solo_vistas_45=equipo.get("solo_45",False))
             nombre = re.sub(r"[^\w.-]+", "_", equipo["tag"]).strip(".") or "Equipo"
             base = f"Ficha_{nombre}"
             nombre_archivo, indice = base + ".pdf", 2
@@ -1569,10 +1573,11 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
         st.caption("Cada equipo tiene su propia ficha. En modo Normal, sin roscas o solo con venteos/drenajes se incluye únicamente NS, excepto los modelos de tapas partidas.")
         documento = campos_informe("informe_planta_documento")
         con_imagenes = st.checkbox("Incluir vistas de los modelos 3D", value=True, key="informe_planta_imagenes")
-        modo_vistas = st.radio("Vistas al exportar", ["Normal · configuración actual", "NS, FS y vistas a 45° para todos"],
+        modo_vistas = st.radio("Vistas al exportar", ["Normal · configuración actual", "NS, FS y vistas a 45° para todos", "Solo vistas a 45°"],
                               key="informe_planta_modo_vistas", disabled=not con_imagenes)
-        todas_45 = modo_vistas == "NS, FS y vistas a 45° para todos"
-        st.caption("Normal conserva las cuatro vistas de los modelos de tapas partidas. La segunda opción agrega NS y FS a 45° a todos los equipos con modelo 3D, tanto en el ZIP como en el informe general.")
+        solo_45 = modo_vistas == "Solo vistas a 45°"
+        todas_45 = solo_45 or modo_vistas == "NS, FS y vistas a 45° para todos"
+        st.caption("Normal conserva las cuatro vistas de los modelos de tapas partidas. La segunda opción agrega NS y FS a 45° a todos los equipos con modelo 3D. Solo vistas a 45° incluye únicamente esas dos vistas. Aplica al ZIP y al informe general.")
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
             for registro in sorted(df[df[col_unidad] == planta].to_dict("records"),
@@ -1584,14 +1589,14 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
                 equipos.append({"registro": registro, "tag": tag, "config": config,
                     "estado": estado(tag), "cantidad": cantidad, "origen": origen,
-                    "operacion": operacionales.get(normalizar(tag)), "vistas_45": todas_45,
+                    "operacion": operacionales.get(normalizar(tag)), "vistas_45": todas_45, "solo_45": solo_45,
                     "captura_key": clave_captura(tag, config, todas_45)})
             if not equipos:
                 st.warning("No hay equipos válidos en esta planta.")
             else:
                 st.session_state.pop("informe_planta_resultado", None)
                 st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
-                    "equipos": equipos, "con_imagenes": con_imagenes, "vistas_45": todas_45, "omitidas": [], "formato": formato, "documento": documento}
+                    "equipos": equipos, "con_imagenes": con_imagenes, "vistas_45": todas_45, "solo_45": solo_45, "omitidas": [], "formato": formato, "documento": documento}
                 st.rerun()
         if tarea:
             if st.button("Cancelar preparación", key="cancelar_planta"):
@@ -1641,7 +1646,7 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                     (e["config"] is None or e["captura_key"] in tarea["omitidas"])]
                 st.session_state["informe_planta_resultado"] = {"planta": tarea["planta"], "pdf": pdf, "zip": zip_pdf,
                     "equipos": len(tarea["equipos"]), "sin_imagen": sin_imagen,
-                    "modo_vistas": ("NS, FS y 45° para todos" if tarea.get("vistas_45") else "Normal · configuración actual") if tarea["con_imagenes"] else "Sin imágenes", "numero":tarea.get("documento",{}).get("numero","")}
+                    "modo_vistas": ("Solo vistas a 45°" if tarea.get("solo_45") else "NS, FS y 45° para todos" if tarea.get("vistas_45") else "Normal · configuración actual") if tarea["con_imagenes"] else "Sin imágenes", "numero":tarea.get("documento",{}).get("numero","")}
                 st.session_state.pop("informe_planta_tarea", None)
                 st.rerun()
         resultado = st.session_state.get("informe_planta_resultado")
