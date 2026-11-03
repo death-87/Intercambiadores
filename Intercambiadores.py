@@ -961,7 +961,7 @@ def aviso_diferencia_roscas(registro, config):
             f"Diferencia (modelo − Excel): {total_modelo - total_excel:+d}. Revisar los datos.")
 
 
-def pie_informe_planta(canvas, numero, mostrar_autor=True):
+def pie_informe_planta(canvas, numero, mostrar_autor=True, revision=0):
     canvas.saveState()
     canvas.setStrokeColor(colors.HexColor("#4D9824"))
     canvas.line(15*mm, 14*mm, 195*mm, 14*mm)
@@ -969,6 +969,7 @@ def pie_informe_planta(canvas, numero, mostrar_autor=True):
     canvas.setFont("Helvetica", 7)
     if mostrar_autor:
         canvas.drawString(15*mm, 10.5*mm, "Elaborado por: Juan Navarrete A.")
+    canvas.drawCentredString(150*mm, 10.5*mm, f"REVISIÓN: {revision}")
     canvas.drawRightString(195*mm, 10.5*mm, f"Página {numero}")
     canvas.setFont("Helvetica", 6)
     canvas.drawCentredString(105*mm, 6.5*mm,
@@ -1006,9 +1007,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     def p(valor, estilo=cell):
         return Paragraph(escape(str(valor)), estilo)
 
+    revision_pdf = str((documento or {}).get("revision", 0))
     def pie(canvas, documento):
         if informe_planta:
-            pie_informe_planta(canvas, pagina_inicial + documento.page)
+            pie_informe_planta(canvas, pagina_inicial + documento.page, revision=revision_pdf)
             return
         canvas.saveState()
         canvas.setStrokeColor(line)
@@ -1018,6 +1020,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         canvas.drawString(15 * mm, 7.5 * mm, "INGEMARS · CONTROL DE INTERCAMBIADORES · REGISTRO TÉCNICO")
         canvas.drawRightString(195 * mm, 7.5 * mm, f"Página {pagina_inicial + documento.page}")
         canvas.drawString(15 * mm, 3.5 * mm, "Elaborado por: Juan Navarrete A.")
+        canvas.drawRightString(195 * mm, 3.5 * mm, "REVISIÓN: " + revision_pdf)
         canvas.restoreState()
 
     columnas = list(registro.index) if hasattr(registro, "index") else list(registro.keys())
@@ -1323,6 +1326,7 @@ def campos_informe(prefijo):
             st.warning("No se pudo recuperar o confirmar el guardado de los números: " + st.session_state["numeros_informe_error"])
             st.button("Reintentar guardar OT e informe", key=prefijo+"_reintentar",
                       on_click=persistir_numeros_informe, args=(prefijo,))
+        revision = st.number_input("Revisión del informe", min_value=0, value=0, step=1, key=prefijo+"_revision")
         fecha_entrega = st.date_input("Fecha de entrega del informe",
             value=datetime.now(ZoneInfo("America/Santiago")).date(), format="DD-MM-YYYY",
             key=prefijo+"_fecha_entrega")
@@ -1336,7 +1340,7 @@ def campos_informe(prefijo):
             original = st.text_input("Original", value="Enap S.A. - DCEET", key=prefijo+"_original", max_chars=200)
             copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
             copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
-    return {"numero":numero.strip(), "ot":ot.strip(), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
+    return {"numero":numero.strip(), "ot":ot.strip(), "revision":str(revision), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
             "inspector":inspector.strip(), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
             "original":original.strip(), "copia1":copia1.strip(), "copia2":copia2.strip()}
 
@@ -1400,7 +1404,7 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
     bloque_documento = hoja_firmas_informe(documento,planta) if documento else []
     def pie(canvas, pagina):
         canvas.saveState()
-        pie_informe_planta(canvas, pagina.page, mostrar_autor=pagina.page != 1)
+        pie_informe_planta(canvas, pagina.page, mostrar_autor=pagina.page != 1, revision=(documento or {}).get("revision", 0))
         if pagina.page == 1:
             canvas.setFillColor(amarillo)
             canvas.rect(15*mm, 243*mm, 180*mm, 1.2*mm, fill=1, stroke=0)
@@ -1966,11 +1970,14 @@ def main():
                 url = "https://drive.google.com/drive/u/0/search?q=" + urllib.parse.quote(str(termino), safe="")
                 st.link_button(f"Buscar {termino} en Drive", url, use_container_width=True)
                 st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
+            revision_ficha = st.number_input("Revisión de la ficha PDF", min_value=0,
+                value=int(st.session_state.get("informe_planta_documento_revision", 0)), step=1, key="revision_ficha_pdf")
             try:
                 pdf = generar_pdf(registro, tag, config, estado(tag), cantidad, origen,
                                   registro_operacional=operacionales.get(normalizar(tag)),
                                   imagen_modelo=imagen_modelo, imagen_posterior=imagen_posterior,
-                                  imagen_angular=imagen_angular, imagen_angular_posterior=imagen_angular_posterior)
+                                  imagen_angular=imagen_angular, imagen_angular_posterior=imagen_angular_posterior,
+                                  documento={"revision":str(revision_ficha)})
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
