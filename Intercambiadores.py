@@ -1271,6 +1271,8 @@ def nombre_planta_informe(codigo):
         "A0URA2": "Sulfur Recovery Unit 2",
         "A0DIPE": "Di-Isopropyl Ether",
         "A0HDG": "Hydrodesulfurization of Gasoline",
+        "SWS": "Sour Water Stripper",
+        "A0SWS": "Sour Water Stripper",
     }
     return nombres.get(clave, str(codigo))
 
