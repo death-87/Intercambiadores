@@ -23,6 +23,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, KeepTogether
 from visor_3d import declarar_visor
 
@@ -1307,6 +1308,22 @@ def persistir_numeros_informe(prefijo):
         st.session_state["numeros_informe_error"] = str(exc)
 
 
+def validar_imagen_firma(datos):
+    if not isinstance(datos, bytes) or not datos or len(datos) > 5_000_000:
+        raise ValueError("La firma debe ser una imagen PNG o JPG de hasta 5 MB.")
+    if not (datos.startswith(b"\x89PNG\r\n\x1a\n") or datos.startswith(b"\xff\xd8")):
+        raise ValueError("Usa una imagen PNG o JPG para la firma.")
+    try:
+        imagen = ImageReader(BytesIO(datos))
+        ancho, alto = imagen.getSize()
+        if ancho <= 0 or alto <= 0 or ancho * alto > 20_000_000:
+            raise ValueError("La imagen de firma es demasiado grande.")
+        imagen.getRGBData()
+    except Exception as exc:
+        raise ValueError("No se pudo leer la imagen de firma. Usa un PNG o JPG válido.") from exc
+    return datos
+
+
 def campos_informe(prefijo):
     if "numeros_informe_guardados" not in st.session_state:
         try:
@@ -1336,6 +1353,21 @@ def campos_informe(prefijo):
             key=prefijo+"_fecha_entrega")
         firmas = st.checkbox("Incluir firmas en la portada", value=True, key=prefijo+"_firmas")
         inspector = st.text_input("Inspector visual", key=prefijo+"_inspector", max_chars=120)
+        firma_imagen = None
+        archivo_firma = st.file_uploader("Firma de Juan Navarrete / inspector visual", type=["png", "jpg", "jpeg"],
+                                         key=prefijo+"_firma_imagen", disabled=not firmas)
+        st.caption("La firma se coloca en la portada del informe general, en el espacio del inspector visual. Se recomienda PNG con fondo transparente.")
+        if archivo_firma is not None:
+            try:
+                firma_imagen = validar_imagen_firma(archivo_firma.getvalue())
+                st.image(firma_imagen, width=220)
+            except ValueError as exc:
+                st.error(str(exc))
+        firma_ancho = st.number_input("Ancho de la firma (mm)", min_value=20, max_value=85, value=60, step=1,
+                                      key=prefijo+"_firma_ancho", disabled=not firmas or firma_imagen is None)
+        firma_y = st.number_input("Ajuste vertical de la firma (mm)", min_value=-15, max_value=15, value=0, step=1,
+                                  key=prefijo+"_firma_y", disabled=not firmas or firma_imagen is None)
+
         ingeniero = st.text_input("Ingeniero de operaciones", key=prefijo+"_ingeniero", max_chars=120)
         solicitante = st.text_input("Solicitante", key=prefijo+"_solicitante", max_chars=120)
         with st.container(border=True):
@@ -1345,7 +1377,8 @@ def campos_informe(prefijo):
             copia1 = st.text_input("Copia 1", value="Enap S.A. - DCEET", key=prefijo+"_copia1", max_chars=200)
             copia2 = st.text_input("Copia 2", value="Ingemars Ingeniería LTDA.", key=prefijo+"_copia2", max_chars=200)
     return {"numero":numero.strip(), "ot":ot.strip(), "revision":str(revision), "fecha_entrega":fecha_entrega.strftime("%d-%m-%Y"), "firmas":firmas, "solicitante":solicitante.strip(),
-            "inspector":inspector.strip(), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
+            "firma_imagen":firma_imagen, "firma_ancho":firma_ancho, "firma_y":firma_y,
+            "inspector":inspector.strip() or ("Juan Navarrete A." if firma_imagen else ""), "ingeniero":ingeniero.strip(), "destino":destino.strip(),
             "original":original.strip(), "copia1":copia1.strip(), "copia2":copia2.strip()}
 
 
@@ -1416,6 +1449,16 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
                 firmas = bloque_documento[-1]
                 firmas.wrap(180*mm,100*mm)
                 firmas.drawOn(canvas,15*mm,42*mm)
+                if documento.get("firma_imagen"):
+                    imagen_firma = ImageReader(BytesIO(documento["firma_imagen"]))
+                    ancho_px, alto_px = imagen_firma.getSize()
+                    factor = min(float(documento.get("firma_ancho",60))*mm/ancho_px, 26*mm/alto_px)
+                    ancho_firma, alto_firma = ancho_px*factor, alto_px*factor
+                    centro_y = 42*mm + firmas._rowHeights[-1] + firmas._rowHeights[-2]/2
+                    centro_y += float(documento.get("firma_y",0))*mm
+                    canvas.drawImage(imagen_firma,45*mm-ancho_firma/2,centro_y-alto_firma/2,
+                                     width=ancho_firma,height=alto_firma,mask="auto")
+
             canvas.setFillColor(verde)
             canvas.rect(110*mm, 19*mm, 85*mm, 15*mm, fill=1, stroke=0)
             canvas.setFillColor(amarillo)
