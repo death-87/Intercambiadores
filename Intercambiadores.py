@@ -172,6 +172,10 @@ def datos_operacionales(registro):
             fila[lado] = buscar_valor(campo, variantes, extremo)
         if any(informado(fila[lado]) for lado, _ in lados):
             filas.append(fila)
+    if not any(f["Parámetro"] == "Temperatura OUT (°C)" for f in filas):
+        for fila in filas:
+            if fila["Parámetro"] == "Temperatura IN (°C)":
+                fila["Parámetro"] = "Temperatura (°C)"
     activos = [lado for lado, _ in lados if any(informado(f[lado]) for f in filas)]
     return [{k: f[k] for k in ("Parámetro", *activos)} for f in filas]
 
