@@ -4281,7 +4281,8 @@
       const bounds = visibleEquipmentBounds();
       const center = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
-      const halfHeight = Math.max(size.y / 2, size.x / (2 * aspect), 0.5) * 1.08;
+      const reportMargin=currentModel==='H'?1.20:1.08;
+      const halfHeight = Math.max(size.y / 2, size.x / (2 * aspect), 0.5) * reportMargin;
       const reportCamera = new THREE.OrthographicCamera(-halfHeight * aspect,
         halfHeight * aspect, halfHeight, -halfHeight, 0.01, 1000);
       const side = currentNameplateSide === 'rear' ? -1 : 1;
@@ -4346,16 +4347,24 @@
         }).sort((a,b) => a.y - b.y || a.x - b.x);
         for (const item of active) {
           const {saved, point} = item;
-          const labelWidth = Math.max(50, ((saved.text || '').length + saved.suffix.length) * 9);
-          const labelHeight = 24;
+          const scale=saved.sprite.getWorldScale(new THREE.Vector3());
+          let spriteWidth=scale.x*width/(reportCamera.right-reportCamera.left);
+          let spriteHeight=scale.y*height/(reportCamera.top-reportCamera.bottom);
+          if(currentModel==='H') {
+            const factor=Math.min(1,width*.22/spriteWidth,height*.12/spriteHeight);
+            saved.sprite.scale.multiplyScalar(factor);
+            spriteWidth*=factor;spriteHeight*=factor;
+          }
+          const labelWidth=Math.max(50,spriteWidth),labelHeight=Math.max(24,spriteHeight);
+          const minY=labelHeight/2+8,maxY=height-labelHeight/2-8;
           let x = Math.max(labelWidth / 2 + 8, Math.min(width - labelWidth / 2 - 8, item.x));
-          let y = Math.max(20, Math.min(height - 20, item.y));
+          let y = Math.max(minY, Math.min(maxY, item.y));
           // Busca una posición libre en pantalla conservando el anclaje real.
           const candidates = [];
           for (let ring=0; ring<30; ring++) {
-            for (const sign of ring ? [-1,1] : [1]) candidates.push({x, y: y + sign*ring*28});
+            for (const sign of ring ? [-1,1] : [1]) candidates.push({x, y: y + sign*ring*(labelHeight+5)});
           }
-          const free = candidates.find(candidate => candidate.y >= 20 && candidate.y <= height-20 &&
+          const free = candidates.find(candidate => candidate.y >= minY && candidate.y <= maxY &&
             placed.every(rect => Math.abs(candidate.x-rect.x) >= (labelWidth+rect.w)/2+8 ||
               Math.abs(candidate.y-rect.y) >= (labelHeight+rect.h)/2+5));
           if (free) { x=free.x; y=free.y; }
@@ -4418,7 +4427,7 @@
             const corner=new THREE.Vector3(x,y,z).applyMatrix4(reportCamera.matrixWorldInverse);
             extent=Math.max(extent,Math.abs(corner.y),Math.abs(corner.x)/aspect);
           }
-          extent*=1.08;
+          extent*=reportMargin;
           reportCamera.left=-extent*aspect;reportCamera.right=extent*aspect;
           reportCamera.top=extent;reportCamera.bottom=-extent;reportCamera.updateProjectionMatrix();
           lightReportSide(viewSide,viewSide!==side);showLabelsForSide(viewSide);layoutReportLabels();
