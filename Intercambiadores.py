@@ -1720,6 +1720,38 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                     file_name=f"Fichas_{nombre}.zip", mime="application/zip", key="descargar_fichas_planta")
 
 
+def enlaces_sharepoint(enlace, termino=""):
+    enlace = str(enlace or "").strip()
+    partes = urllib.parse.urlsplit(enlace)
+    host = (partes.hostname or "").lower()
+    if partes.scheme != "https" or not host.endswith(".sharepoint.com") or partes.username or partes.password:
+        raise ValueError("Ingresa un enlace HTTPS de SharePoint.")
+    ruta = re.search(r"/(?:personal|sites|teams)/[^/]+", partes.path, flags=re.I)
+    sitio = urllib.parse.urlunsplit(("https", partes.netloc, ruta.group(0) if ruta else "", "", ""))
+    personal = bool(ruta and ruta.group(0).lower().startswith("/personal/"))
+    pagina, parametro = ("onedrive.aspx", "search") if personal else ("search.aspx", "q")
+    busqueda = sitio + "/_layouts/15/" + pagina + "?" + urllib.parse.urlencode({parametro:str(termino)})
+    return enlace, busqueda
+
+
+def configurar_sharepoint():
+    predeterminado = "https://ingemarsltdacl-my.sharepoint.com/personal/juan_navarrete_enap_ingemars_cl/_layouts/15/onedrive.aspx"
+    try:
+        predeterminado = st.secrets.get("sharepoint_folder_url", predeterminado)
+    except Exception:
+        pass  # La configuración privada es opcional.
+    with st.sidebar.expander("Documentos en SharePoint"):
+        enlace = st.text_input("Enlace del sitio o carpeta de SharePoint", value=predeterminado, key="sharepoint_folder_link")
+        st.caption("Puedes pegar aquí el enlace compartido de tu carpeta. Se conserva durante esta sesión. Para dejarlo fijo, configura sharepoint_folder_url en los Secrets de la aplicación.")
+        try:
+            carpeta, _ = enlaces_sharepoint(enlace)
+        except ValueError as exc:
+            st.warning(str(exc))
+            return None
+        st.link_button("Abrir SharePoint", carpeta, use_container_width=True)
+    return carpeta
+
+
 def main():
     aplicar_diseno()
     st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">HX</div>'
@@ -1736,6 +1768,7 @@ def main():
       <path d="M71 25H99M136 118H164" stroke="#40c7b0" stroke-width="3"/>
       <path d="M15 127H226M16 128V133M225 128V133" stroke-dasharray="3 4" opacity=".45"/></g>
     </svg></div>''', unsafe_allow_html=True)
+    sharepoint_url = configurar_sharepoint()
     st.sidebar.subheader("Filtrar equipos")
     # El editor incrementa esta revisión solo después de verificar una escritura.
     revision = st.session_state.get("design_revision", 0)
@@ -2019,6 +2052,12 @@ def main():
                 url = "https://drive.google.com/drive/u/0/search?q=" + urllib.parse.quote(str(termino), safe="")
                 st.link_button(f"Buscar {termino} en Drive", url, use_container_width=True)
                 st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
+            if sharepoint_url:
+                carpeta_sp, busqueda_sp = enlaces_sharepoint(sharepoint_url, termino if informado(termino) else "")
+                st.link_button("Abrir carpeta en SharePoint", carpeta_sp, use_container_width=True)
+                if informado(termino):
+                    st.link_button(f"Buscar {termino} en SharePoint", busqueda_sp, use_container_width=True)
+                st.caption("Se abre con tu sesión de Microsoft. La búsqueda puede incluir archivos accesibles fuera de la carpeta configurada.")
             revision_ficha = st.number_input("Revisión de la ficha PDF", min_value=0,
                 value=int(st.session_state.get("informe_planta_documento_revision", 0)), step=1, key="revision_ficha_pdf")
             try:
