@@ -35,7 +35,6 @@ HOJA_3D = "Diseño3D"
 TAG_CONFIG_INFORMES = "__CONFIG_INFORMES__"
 WEBAPP_INFORMES_URL = "https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec"
 HOJA_OPERACION = "Datos Operacionales"
-GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/10hv3MlaXaL4rZkQrssnROAX18ms_31rc"
 # Los primeros 11 índices se conservan para no alterar diseños históricos.
 DIAMETROS = ['1/2"', '3/4"', '1"', '1 1/2"', '2"', '3"', '4"', '6"',
              '8"', '10"', '12"', '2 1/2"', '14"', '16"', '18"', '20"', '24"', '42"']
@@ -1738,14 +1737,14 @@ def enlaces_sharepoint(enlace, termino=""):
 
 
 def configurar_sharepoint():
-    predeterminado = ""
+    predeterminado = "https://ingemarsltdacl-my.sharepoint.com/:f:/g/personal/juan_navarrete_enap_ingemars_cl/IgBWLkLQOY8GR6m4XVt8V2RjARrIlqCEPkDeetE1eVWzRCg?e=ixkFSM"
     try:
         predeterminado = st.secrets.get("sharepoint_folder_url", predeterminado)
     except Exception:
         pass  # La configuración privada es opcional.
     with st.sidebar.expander("Carpeta INTERCAMBIADORES · SharePoint"):
-        enlace = st.text_input("Enlace completo de la carpeta INTERCAMBIADORES", value=predeterminado, key="sharepoint_folder_link")
-        st.caption("Pega el enlace compartido completo de INTERCAMBIADORES, incluido lo que aparece después de ?. Se conserva durante esta sesión. Para dejarlo fijo, configura sharepoint_folder_url en los Secrets de la aplicación.")
+        enlace = st.text_input("Enlace completo de la carpeta INTERCAMBIADORES", value=predeterminado, key="sharepoint_folder_link_v2")
+        st.caption("El enlace de INTERCAMBIADORES está precargado. Puedes reemplazarlo por otro enlace completo; ese cambio se conserva durante esta sesión.")
         if not enlace.strip():
             st.info("Configura el enlace de INTERCAMBIADORES para habilitar el acceso directo.")
             return None
@@ -2052,12 +2051,7 @@ def main():
             seccion("Documentación", "Recursos y evidencia del equipo.")
             st.metric("Conexiones roscadas", cantidad if cantidad is not None else "No disponible")
             st.caption(origen)
-            st.link_button("Abrir carpeta del proyecto", GDRIVE_FOLDER_URL, use_container_width=True)
             termino = tag if informado(tag) else (registro[col_unidad] if col_unidad else "")
-            if informado(termino):
-                url = "https://drive.google.com/drive/u/0/search?q=" + urllib.parse.quote(str(termino), safe="")
-                st.link_button(f"Buscar {termino} en Drive", url, use_container_width=True)
-                st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
             if sharepoint_url:
                 carpeta_sp, _ = enlaces_sharepoint(sharepoint_url)
                 st.link_button("Abrir INTERCAMBIADORES en SharePoint", carpeta_sp, use_container_width=True)
@@ -2082,7 +2076,7 @@ def main():
             st.divider()
             foto = st.file_uploader("Evidencia fotográfica", type=["png", "jpg", "jpeg"],
                                     key="foto_" + hashlib.sha256(normalizar(tag).encode()).hexdigest()[:16])
-            st.caption("Vista temporal: la fotografía no se guarda en Drive ni se incorpora al PDF.")
+            st.caption("Vista temporal: la fotografía no se guarda en SharePoint ni se incorpora al PDF.")
             if foto is not None:
                 st.image(foto, caption=f"Equipo {tag}", use_container_width=True)
             coords = extraer_coordenadas(registro[col_geo]) if col_geo else None
