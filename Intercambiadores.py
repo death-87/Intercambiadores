@@ -1726,29 +1726,35 @@ def enlaces_sharepoint(enlace, termino=""):
     host = (partes.hostname or "").lower()
     if partes.scheme != "https" or not host.endswith(".sharepoint.com") or partes.username or partes.password:
         raise ValueError("Ingresa un enlace HTTPS de SharePoint.")
-    ruta = re.search(r"/(?:personal|sites|teams)/[^/]+", partes.path, flags=re.I)
-    sitio = urllib.parse.urlunsplit(("https", partes.netloc, ruta.group(0) if ruta else "", "", ""))
-    personal = bool(ruta and ruta.group(0).lower().startswith("/personal/"))
-    pagina, parametro = ("onedrive.aspx", "search") if personal else ("search.aspx", "q")
-    busqueda = sitio + "/_layouts/15/" + pagina + "?" + urllib.parse.urlencode({parametro:str(termino)})
-    return enlace, busqueda
+    parametros = urllib.parse.parse_qs(partes.query)
+    carpeta_compartida = "/:f:/" in partes.path.lower()
+    carpeta_directa = any(parametros.get(k) for k in ("id", "RootFolder")) or partes.path.rstrip("/").lower().endswith("/intercambiadores")
+    if not carpeta_compartida and not carpeta_directa:
+        raise ValueError("Pega el enlace de la carpeta INTERCAMBIADORES, no la página general de OneDrive.")
+    # Conservar el enlace compartido completo. Una búsqueda del sitio podría
+    # mostrar otros documentos y no permite acotar esta carpeta compartida.
+    return enlace, None
+
 
 
 def configurar_sharepoint():
-    predeterminado = "https://ingemarsltdacl-my.sharepoint.com/personal/juan_navarrete_enap_ingemars_cl/_layouts/15/onedrive.aspx"
+    predeterminado = ""
     try:
         predeterminado = st.secrets.get("sharepoint_folder_url", predeterminado)
     except Exception:
         pass  # La configuración privada es opcional.
-    with st.sidebar.expander("Documentos en SharePoint"):
-        enlace = st.text_input("Enlace del sitio o carpeta de SharePoint", value=predeterminado, key="sharepoint_folder_link")
-        st.caption("Puedes pegar aquí el enlace compartido de tu carpeta. Se conserva durante esta sesión. Para dejarlo fijo, configura sharepoint_folder_url en los Secrets de la aplicación.")
+    with st.sidebar.expander("Carpeta INTERCAMBIADORES · SharePoint"):
+        enlace = st.text_input("Enlace completo de la carpeta INTERCAMBIADORES", value=predeterminado, key="sharepoint_folder_link")
+        st.caption("Pega el enlace compartido completo de INTERCAMBIADORES, incluido lo que aparece después de ?. Se conserva durante esta sesión. Para dejarlo fijo, configura sharepoint_folder_url en los Secrets de la aplicación.")
+        if not enlace.strip():
+            st.info("Configura el enlace de INTERCAMBIADORES para habilitar el acceso directo.")
+            return None
         try:
             carpeta, _ = enlaces_sharepoint(enlace)
         except ValueError as exc:
             st.warning(str(exc))
             return None
-        st.link_button("Abrir SharePoint", carpeta, use_container_width=True)
+        st.link_button("Abrir carpeta INTERCAMBIADORES", carpeta, use_container_width=True)
     return carpeta
 
 
@@ -2053,11 +2059,10 @@ def main():
                 st.link_button(f"Buscar {termino} en Drive", url, use_container_width=True)
                 st.caption("La búsqueda abarca tu Drive; el botón anterior abre la carpeta del proyecto.")
             if sharepoint_url:
-                carpeta_sp, busqueda_sp = enlaces_sharepoint(sharepoint_url, termino if informado(termino) else "")
-                st.link_button("Abrir carpeta en SharePoint", carpeta_sp, use_container_width=True)
+                carpeta_sp, _ = enlaces_sharepoint(sharepoint_url)
+                st.link_button("Abrir INTERCAMBIADORES en SharePoint", carpeta_sp, use_container_width=True)
                 if informado(termino):
-                    st.link_button(f"Buscar {termino} en SharePoint", busqueda_sp, use_container_width=True)
-                st.caption("Se abre con tu sesión de Microsoft. La búsqueda puede incluir archivos accesibles fuera de la carpeta configurada.")
+                    st.caption(f"Dentro de la carpeta abierta, busca el TAG {termino} para localizar sus informes y fotos.")
             revision_ficha = st.number_input("Revisión de la ficha PDF", min_value=0,
                 value=int(st.session_state.get("informe_planta_documento_revision", 0)), step=1, key="revision_ficha_pdf")
             try:
