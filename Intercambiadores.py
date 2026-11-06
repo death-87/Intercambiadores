@@ -2074,11 +2074,6 @@ def main():
             if config and imagen_modelo is None:
                 st.caption("La vista para el PDF se prepara al cargar el modelo 3D de abajo. Si no aparece, recarga la página.")
             st.divider()
-            foto = st.file_uploader("Evidencia fotográfica", type=["png", "jpg", "jpeg"],
-                                    key="foto_" + hashlib.sha256(normalizar(tag).encode()).hexdigest()[:16])
-            st.caption("Vista temporal: la fotografía no se guarda en SharePoint ni se incorpora al PDF.")
-            if foto is not None:
-                st.image(foto, caption=f"Equipo {tag}", use_container_width=True)
             coords = extraer_coordenadas(registro[col_geo]) if col_geo else None
             if coords is None and col_lat and col_lon:
                 coords = extraer_coordenadas(f"{registro[col_lat]};{registro[col_lon]}")
