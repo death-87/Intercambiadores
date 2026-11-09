@@ -316,6 +316,8 @@ def validar_diseno(data, _nivel=0):
         low, high = limits[field]
         if not low <= value <= high:
             raise ValueError(f"{field} fuera de rango")
+    if dimensions.get("channelCoverStyle","bolted") not in {"bolted","welded"}:
+        raise ValueError("cierre del channel inválido")
     for campo in ("eccentricShellJoint", "eccentricChannelJoint"):
         if campo in dimensions and dimensions[campo] not in {"welded", "flanged"}:
             raise ValueError("unión de transición excéntrica inválida")
@@ -414,6 +416,18 @@ def validar_diseno(data, _nivel=0):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
+        rect = n.get("rectangular")
+        if rect is not None:
+            if not isinstance(rect,dict) or not isinstance(rect.get("enabled",False),bool):
+                raise ValueError("configuración rectangular inválida")
+            for campo, defecto in (("widthMM",400),("heightMM",250)):
+                valor=rect.get(campo,defecto)
+                if type(valor) not in (int,float) or not math.isfinite(valor) or not 25.4 <= valor <= 3000:
+                    raise ValueError("dimensión de boquilla rectangular fuera de rango")
+            if rect.get("orientation","horizontal") not in {"horizontal","vertical"}:
+                raise ValueError("orientación rectangular inválida")
+            if rect.get("enabled") and n.get("connectionType","flanged") != "flanged":
+                raise ValueError("la boquilla rectangular requiere una brida")
         tapa = n.get("davitCover")
         if tapa is not None:
             if not isinstance(tapa, dict) or not isinstance(tapa.get("enabled",False),bool):
@@ -1246,7 +1260,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v74"]
+    datos = [normalizar(tag), config, "report-v75"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -1984,7 +1998,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v74"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v75"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2130,7 +2144,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v74"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v75"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
