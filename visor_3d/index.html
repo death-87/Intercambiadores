@@ -321,10 +321,11 @@
       </div>
     </div>
     <div id="edit-cover-controls" class="input-group">
-      <label><input id="edit-cover-enabled" type="checkbox"> Tapa ciega con pescante sobre esta brida</label>
+      <label><input id="edit-cover-enabled" type="checkbox"> Tapa sólida apernada sobre esta brida</label>
       <div id="edit-cover-options" hidden>
+<label>Tipo de tapa:</label><select id="edit-cover-davit"><option value="no">Sólida con pernos · sin pescante</option><option value="yes" selected>Con pescante y manillas</option></select>
         <label>Giro del pescante alrededor de la brida (°):</label><input id="edit-cover-rotation" type="number" min="0" max="359" step="1" value="0">
-        <small>Tapa sin TAG propio, con dos manillas y soportes unidos por un eje. Adopta la medida y los pernos de esta brida.</small>
+        <small>Tapa sólida sin TAG propio. Adopta la forma circular, cuadrada o rectangular y los pernos de esta brida. El pescante es opcional.</small>
       </div>
     </div>
     <div id="edit-rv-controls" class="input-group">
@@ -515,10 +516,11 @@
       </div>
     </div>
     <div id="new-cover-controls" class="input-group">
-      <label><input id="new-cover-enabled" type="checkbox"> Tapa ciega con pescante sobre esta brida</label>
+      <label><input id="new-cover-enabled" type="checkbox"> Tapa sólida apernada sobre esta brida</label>
       <div id="new-cover-options" hidden>
+<label>Tipo de tapa:</label><select id="new-cover-davit"><option value="no">Sólida con pernos · sin pescante</option><option value="yes" selected>Con pescante y manillas</option></select>
         <label>Giro del pescante alrededor de la brida (°):</label><input id="new-cover-rotation" type="number" min="0" max="359" step="1" value="0">
-        <small>Tapa sin TAG propio, con dos manillas y soportes unidos por un eje. Adopta la medida y los pernos de esta brida.</small>
+        <small>Tapa sólida sin TAG propio. Adopta la forma circular, cuadrada o rectangular y los pernos de esta brida. El pescante es opcional.</small>
       </div>
     </div>
     <div id="new-rv-controls" class="input-group">
@@ -2944,17 +2946,19 @@
     }
     function normalizeDavitCover(value={}) {
       value=value&&typeof value==='object'?value:{};
-      return {enabled:value.enabled===true,rotation:Number.isFinite(Number(value.rotation))?((Number(value.rotation)%360)+360)%360:0};
+      return {enabled:value.enabled===true,withDavit:value.withDavit!==false,rotation:Number.isFinite(Number(value.rotation))?((Number(value.rotation)%360)+360)%360:0};
     }
     function davitCoverFromControls(prefix) {
-      return normalizeDavitCover({enabled:document.getElementById(prefix+'-cover-enabled').checked,rotation:Number(document.getElementById(prefix+'-cover-rotation').value)});
+      return normalizeDavitCover({enabled:document.getElementById(prefix+'-cover-enabled').checked,withDavit:document.getElementById(prefix+'-cover-davit').value==='yes',rotation:Number(document.getElementById(prefix+'-cover-rotation').value)});
     }
     function updateDavitCoverControls(prefix,type,config=null) {
       document.getElementById(prefix+'-cover-controls').hidden=type!=='flanged';
       if(config) {
         const cover=normalizeDavitCover(config);document.getElementById(prefix+'-cover-enabled').checked=cover.enabled;
         document.getElementById(prefix+'-cover-rotation').value=cover.rotation;
+        document.getElementById(prefix+'-cover-davit').value=cover.withDavit?'yes':'no';
       }
+      document.getElementById(prefix+'-cover-rotation').disabled=readOnly||document.getElementById(prefix+'-cover-davit').value==='no';
       document.getElementById(prefix+'-cover-options').hidden=!document.getElementById(prefix+'-cover-enabled').checked;
     }
     function buildDavitCover(data,material,flangeMaterial) {
@@ -2972,6 +2976,7 @@
         const stud=mesh(new THREE.CylinderGeometry(Math.max(.004,dim.L*.28),Math.max(.004,dim.L*.28),length,12),'Espárrago tapa',group,flangeMaterial);stud.position.set(point.x,gap/2,point.y);
         for(const y of [-dim.B-.009,gap+thickness+.009]) {const nut=mesh(new THREE.CylinderGeometry(dim.L*.46,dim.L*.46,.015,6),'Tuerca tapa',group,flangeMaterial);nut.position.set(point.x,y,point.y);}
       }
+      if(!cover.withDavit)return group;
       const top=gap+thickness,wire=Math.max(.004,D*.018),handleRise=Math.max(.025,D*.12);
       for(const offset of [-1,1]) {
         const x=offset*(settings.W||D)*.20,half=(settings.H||D)*.16;
@@ -3802,7 +3807,7 @@
         if(prefix==='edit')rebuildSelectedNozzle({davitCover:davitCoverFromControls(prefix),reliefValve:reliefValveFromControls(prefix),outletFlange:true});
       });
     }
-    for(const prefix of ['edit','new'])for(const field of ['enabled','rotation'])document.getElementById(prefix+'-cover-'+field).addEventListener('change',()=>{
+    for(const prefix of ['edit','new'])for(const field of ['enabled','rotation','davit'])document.getElementById(prefix+'-cover-'+field).addEventListener('change',()=>{
       const type=document.getElementById(prefix+'-nz-type').value;
       if(document.getElementById(prefix+'-cover-enabled').checked)document.getElementById(prefix+'-rv-enabled').checked=false;
       updateDavitCoverControls(prefix,type);updateReliefValveControls(prefix,type);
