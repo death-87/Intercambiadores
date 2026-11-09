@@ -300,6 +300,17 @@
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
     </div>
+    <div id="edit-rv-controls" class="input-group">
+      <label><input id="edit-rv-enabled" type="checkbox"> Válvula RV / alivio sobre esta brida</label>
+      <div id="edit-rv-options" hidden>
+        <label>TAG de la válvula:</label><input id="edit-rv-tag" type="text" placeholder="RV-01">
+        <label>Medida de la brida de salida:</label><select id="edit-rv-outlet"></select>
+        <label>Clase de la brida de salida:</label><select id="edit-rv-rating"><option>150#</option><option>300#</option><option>600#</option></select>
+        <label>Giro de la salida lateral (°):</label><input id="edit-rv-rotation" type="number" min="0" max="359" step="1" value="0">
+        <label>Altura de la válvula (m):</label><input id="edit-rv-height" type="number" min="0.20" max="3" step="0.05" value="0.80">
+        <small>La entrada adopta la medida, clase y pernos de la brida del equipo. La salida es independiente. Representación esquemática.</small>
+      </div>
+    </div>
     <small id="edit-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
       <div class="input-group" id="edit-neck-control">
         <label>Largo del niple / recto antes del codo: <output id="edit-neck-length-value">0.30</output> m</label>
@@ -463,6 +474,17 @@
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
+    </div>
+    <div id="new-rv-controls" class="input-group">
+      <label><input id="new-rv-enabled" type="checkbox"> Válvula RV / alivio sobre esta brida</label>
+      <div id="new-rv-options" hidden>
+        <label>TAG de la válvula:</label><input id="new-rv-tag" type="text" placeholder="RV-01">
+        <label>Medida de la brida de salida:</label><select id="new-rv-outlet"></select>
+        <label>Clase de la brida de salida:</label><select id="new-rv-rating"><option>150#</option><option>300#</option><option>600#</option></select>
+        <label>Giro de la salida lateral (°):</label><input id="new-rv-rotation" type="number" min="0" max="359" step="1" value="0">
+        <label>Altura de la válvula (m):</label><input id="new-rv-height" type="number" min="0.20" max="3" step="0.05" value="0.80">
+        <small>La entrada adopta la medida, clase y pernos de la brida del equipo. La salida es independiente. Representación esquemática.</small>
+      </div>
     </div>
     <small id="new-asme-info" style="display:block;color:#94a3b8;font-size:9px;line-height:1.35;margin:-2px 0 7px"></small>
     <div class="input-group" id="new-neck-control">
@@ -728,6 +750,13 @@
       if(nozzle.userData.flangePlateKey===key) return;
       plate.geometry.dispose();plate.geometry=nozzlePlateGeometry(nozzle.userData,nozzle.userData.flangeBore);
       nozzle.userData.flangePlateKey=key;
+      const oldValve=nozzle.userData.reliefValveGroup;
+      if(oldValve&&nozzle.userData.reliefValve?.enabled) {
+        const parent=oldValve.parent,materials=nozzle.userData.materials;
+        const replacement=buildReliefValve(nozzle.userData,materials[0],materials[1]);
+        replacement.position.copy(oldValve.position);parent.remove(oldValve);parent.add(replacement);
+        nozzle.userData.reliefValveGroup=replacement;disposeDetachedNozzle(oldValve);
+      }
     }
 
     function raisedFaceHeight(rating) {
@@ -886,7 +915,7 @@
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           swEnd: nz.userData.swEnd, swFlangeRating: nz.userData.swFlangeRating,
           flangeSquareSizeMM:nz.userData.flangeSquareSizeMM||0,
-          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false,
+          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false, reliefValve:{...nz.userData.reliefValve},
           flangeType: "WN",
           face: nz.userData.face || "RF",
           neckLength: nz.userData.neckLength || undefined,
@@ -2737,9 +2766,74 @@
       return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
     }
 
+    function normalizeReliefValve(value={}) {
+      value=value&&typeof value==='object'?value:{};
+      return {enabled:value.enabled===true,tag:String(value.tag||''),
+        outletDiaIndex:FLANGED_DIAMETER_INDEXES.includes(Number(value.outletDiaIndex))?Number(value.outletDiaIndex):6,
+        outletRating:['150#','300#','600#'].includes(value.outletRating)?value.outletRating:'150#',
+        rotation:Number.isFinite(Number(value.rotation))?((Number(value.rotation)%360)+360)%360:0,
+        height:Math.max(.2,Math.min(3,Number(value.height)||.8))};
+    }
+    function reliefValveFromControls(prefix) {
+      return normalizeReliefValve({enabled:document.getElementById(prefix+'-rv-enabled').checked,
+        tag:document.getElementById(prefix+'-rv-tag').value,
+        outletDiaIndex:Number(document.getElementById(prefix+'-rv-outlet').value),
+        outletRating:document.getElementById(prefix+'-rv-rating').value,
+        rotation:Number(document.getElementById(prefix+'-rv-rotation').value),
+        height:Number(document.getElementById(prefix+'-rv-height').value)});
+    }
+    function updateReliefValveControls(prefix,type,config=null) {
+      const enabled=document.getElementById(prefix+'-rv-enabled');
+      document.getElementById(prefix+'-rv-controls').hidden=type!=='flanged';
+      if(config) {
+        const rv=normalizeReliefValve(config);enabled.checked=rv.enabled;
+        for(const [id,value] of [['tag',rv.tag],['outlet',rv.outletDiaIndex],['rating',rv.outletRating],['rotation',rv.rotation],['height',rv.height]])document.getElementById(prefix+'-rv-'+id).value=value;
+      }
+      document.getElementById(prefix+'-rv-options').hidden=!enabled.checked;
+      const outlet=document.getElementById(prefix+'-outlet-flange');
+      outlet.disabled=readOnly||(type==='flanged'&&enabled.checked);
+      if(type==='flanged'&&enabled.checked)outlet.value='yes';
+    }
+    function buildReliefValve(data,material,flangeMaterial) {
+      const rv=normalizeReliefValve(data.reliefValve),inlet=flangeDimensions(data.diaIndex,data.rating),out=flangeDimensions(rv.outletDiaIndex,rv.outletRating);
+      const group=new THREE.Group();group.name='Válvula RV / alivio '+(rv.tag||'');
+      const settings=nozzleFlangeSettings(data),br=Math.max(inlet.OD*.65,out.OD*.55,.055),gap=.006;
+      const bodyY=gap+inlet.B+br*1.55,height=Math.max(rv.height,bodyY+br*4.5);
+      group.userData={inletDiaIndex:data.diaIndex,outletDiaIndex:rv.outletDiaIndex,inletRating:data.rating,outletRating:rv.outletRating,inletBolts:settings.count,totalHeight:height};
+      function part(geometry,name,parent=group,mat=material) {const m=new THREE.Mesh(geometry,mat);m.name=name;parent.add(m);return m;}
+      function cyl(radius,length,y,name,parent=group,mat=material) {const m=part(new THREE.CylinderGeometry(radius,radius,length,48),name,parent,mat);m.position.y=y;return m;}
+      const entry=part(nozzlePlateGeometry(data,inlet.OD*.40),'Brida entrada RV coincidente',group,flangeMaterial);
+      entry.rotation.x=-Math.PI/2;entry.position.y=gap;
+      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form)) {
+        const length=2*inlet.B+.035;
+        const stud=cyl(Math.max(.004,inlet.L*.28),length,gap/2,'Espárrago unión RV',group,flangeMaterial);stud.position.x=point.x;stud.position.z=point.y;
+        for(const y of [-inlet.B-.009,gap+inlet.B+.009]) {const nut=part(new THREE.CylinderGeometry(inlet.L*.46,inlet.L*.46,.015,6),'Tuerca unión RV',group,flangeMaterial);nut.position.set(point.x,y,point.y);}
+      }
+      cyl(inlet.OD/2,bodyY-gap-inlet.B,(bodyY+gap+inlet.B)/2,'Cuello entrada RV');
+      const body=part(new THREE.SphereGeometry(br,48,32),'Cuerpo fundido RV');body.scale.y=1.22;body.position.y=bodyY;
+      const discharge=new THREE.Group();discharge.name='Salida lateral RV';discharge.rotation.y=THREE.MathUtils.degToRad(rv.rotation);group.add(discharge);
+      const length=Math.max(br*1.6,out.H+br),outR=out.OD/2,inner=out.OD*.40;
+      const profile=[[inner,0],[outR,0],[outR,length-out.H],[out.A/2,length-out.B],[inner,length-out.B],[inner,0]].map(([r,y])=>new THREE.Vector2(r,y));
+      const neck=part(new THREE.LatheGeometry(profile,48),'Cuello salida RV',discharge);neck.rotation.x=Math.PI/2;neck.position.y=bodyY;
+      const outletData={diaIndex:rv.outletDiaIndex,rating:rv.outletRating,flangeShape:'round',flangeBoltCount:out.bolts};
+      const exit=part(nozzlePlateGeometry(outletData,inner),'Brida salida RV independiente',discharge,flangeMaterial);
+      exit.position.set(0,bodyY,length-out.B);exit.userData.diaIndex=rv.outletDiaIndex;
+      const top=height-br*.45,start=bodyY+br*1.05,springR=br*.56;
+      cyl(br*.90,.025,start,'Placa base del resorte',group,flangeMaterial);
+      cyl(br*.80,.025,top,'Placa superior RV',group,flangeMaterial);
+      for(const x of [-1,1])for(const z of [-1,1]) {const rod=cyl(br*.065,top-start,(top+start)/2,'Columna del bonete abierto RV');rod.position.x=x*br*.57;rod.position.z=z*br*.57;}
+      cyl(br*.065,top-start,(top+start)/2,'Vástago RV');
+      const helix=new THREE.Curve();helix.getPoint=t=>new THREE.Vector3(springR*Math.cos(t*Math.PI*18),start+.04+(top-start-.08)*t,springR*Math.sin(t*Math.PI*18));
+      part(new THREE.TubeGeometry(helix,192,Math.max(.002,br*.06),8,false),'Resorte visible RV');
+      cyl(br*.48,height-top,top+(height-top)/2,'Capuchón superior RV');
+      const lever=part(new THREE.BoxGeometry(br*.12,(top-start)*.72,br*.12),'Palanca RV');lever.position.set(-br*1.12,(top+start)/2,0);
+      const arm=part(new THREE.BoxGeometry(br*1.12,br*.10,br*.12),'Brazo palanca RV');arm.position.set(-br*.6,top-br*.15,0);
+      if(rv.tag) {const label=createTextSprite(rv.tag,'white',40);attachNozzleLabel(group,label,height,inlet.D);}
+      return group;
+    }
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0, reliefValve = null) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -2752,6 +2846,7 @@
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
       const pipeIndex=type==='flanged' && pipeDiaIndex!==null && pipeDiaIndex!==undefined && Number.isInteger(Number(pipeDiaIndex)) && FLANGED_DIAMETER_INDEXES.includes(Number(pipeDiaIndex)) && DIAMETER_INCHES[Number(pipeDiaIndex)]<=DIAMETER_INCHES[dIndex]?Number(pipeDiaIndex):dIndex;
+      const rv=normalizeReliefValve(reliefValve);rv.enabled=type==='flanged'&&rv.enabled;
       const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
       
       const visualNeckLength = type !== 'threaded'
@@ -2763,7 +2858,7 @@
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
         elbow90: type === 'flanged' && elbow90 === true,
         flangeSquareSizeMM:Math.max(0,Math.min(5000,Number(flangeSquareSizeMM)||0)),
-        inletFlange:inletFlange===true, outletFlange:outletFlange!==false,
+        inletFlange:inletFlange===true, outletFlange:rv.enabled||outletFlange!==false, reliefValve:rv,
         elbowOutletLength:Math.max(0,Math.min(10,Number(elbowOutletLength)||0)),
         elbowRotation: Number.isFinite(Number(elbowRotation)) ? ((Number(elbowRotation) % 360) + 360) % 360 : 0,
         direction: NOZZLE_DIRECTIONS.includes(direction) ? direction : 'radial',
@@ -3014,6 +3109,11 @@
       group.userData.plugNS = plugNS;
       group.userData.plugFS = plugFS;
 
+      if(type==='flanged'&&rv.enabled) {
+        const valve=buildReliefValve(group.userData,nzMat,flMat);
+        valve.position.y=labelHeight??totalH;labelParent.add(valve);
+        group.userData.reliefValveGroup=valve;
+      }
       const nozzleSprite = createTextSprite(tagText, 'white', 40);
       const referenceOD = flangeDimensions(dIndex, type === 'flanged' ? normalizedRating : '150#').D;
       attachNozzleLabel(labelParent, nozzleSprite, labelHeight ?? totalH, referenceOD, posX < 0 ? -1 : 1);
@@ -3068,7 +3168,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX, n.reliefValve
           );
           nozzlesList.push(newNz);
         });
@@ -3098,7 +3198,7 @@
         const d=n.userData;
         const branches=[d.hasNS?'NS '+(d.tagNS||''):null,d.hasFS?'FS '+(d.tagFS||''):null,
           d.subFront?.enabled?d.subFront.tag:null,d.subRear?.enabled?d.subRear.tag:null].filter(Boolean).join(' · ');
-        const label=[d.tagName||'Sin TAG',d.bodyPart,branches].filter(Boolean).join(' · ');
+        const label=[d.tagName||'Sin TAG',d.bodyPart,branches,d.reliefValve?.enabled?('RV '+(d.reliefValve.tag||'')):null].filter(Boolean).join(' · ');
         if(query&&!label.toLocaleUpperCase().includes(query))return;
         picker.add(new Option(label,d.idName));count++;
       });
@@ -3190,6 +3290,7 @@
       document.getElementById('edit-elbow-outlet-length').value=data.elbowOutletLength||0;
       document.getElementById('edit-inlet-flange').value=data.inletFlange?'yes':'no';
       document.getElementById('edit-outlet-flange').value=data.outletFlange===false?'no':'yes';
+      updateReliefValveControls('edit',data.connectionType,data.reliefValve);
       document.getElementById('edit-elbow-angle').value = data.elbowRotation || 0;
       document.getElementById('edit-elbow-angle-value').value = `${data.elbowRotation || 0}°`;
       document.getElementById('edit-nz-direction').value = data.direction || 'radial';
@@ -3358,6 +3459,7 @@
       const threaded = type !== 'flanged';
       updateElbowControls('edit', type);
       updateSwControls('edit', type);
+      updateReliefValveControls('edit',type);
       populateRatingSelect(editRating, type, preferredRating);
       document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'block';
       document.getElementById('edit-asme-info').style.display = threaded ? 'none' : 'block';
@@ -3413,7 +3515,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX, data.reliefValve
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -3440,6 +3542,15 @@
     document.getElementById('edit-flange-bolts').addEventListener('change',event=>{
       const n=Number(event.target.value);if(Number.isInteger(n)&&(n===0||(n>=4&&n<=120))) rebuildSelectedNozzle({flangeBoltCount:n});
     });
+    for(const prefix of ['edit','new']) {
+      const select=document.getElementById(prefix+'-rv-outlet');
+      select.replaceChildren(...FLANGED_DIAMETER_INDEXES.map(i=>new Option(DIAMETERS[i],String(i))));select.value='6';
+      for(const field of ['enabled','tag','outlet','rating','rotation','height'])document.getElementById(prefix+'-rv-'+field).addEventListener('change',()=>{
+        const type=document.getElementById(prefix+'-nz-type').value;
+        updateReliefValveControls(prefix,type);
+        if(prefix==='edit')rebuildSelectedNozzle({reliefValve:reliefValveFromControls(prefix),outletFlange:true});
+      });
+    }
     document.getElementById('edit-nz-direction').addEventListener('change', event => {
       rebuildSelectedNozzle({direction: event.target.value});
     });
@@ -3643,6 +3754,7 @@
     const newPos = document.getElementById('new-nz-pos');
     const newAngle = document.getElementById('new-nz-angle');
     function updateNewConnectionUI(preferred) {
+      updateReliefValveControls('new',document.getElementById('new-nz-type').value);
       const type = newType.value;
       updateElbowControls('new', type);
       updateSwControls('new', type);
@@ -3723,7 +3835,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes',Number(document.getElementById('new-flange-square-size').value));
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes',Number(document.getElementById('new-flange-square-size').value),0,reliefValveFromControls('new'));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();

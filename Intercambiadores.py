@@ -411,6 +411,23 @@ def validar_diseno(data, _nivel=0):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
+        rv = n.get("reliefValve")
+        if rv is not None:
+            if not isinstance(rv, dict) or not isinstance(rv.get("enabled", False), bool):
+                raise ValueError("configuración de válvula RV inválida")
+            if not isinstance(rv.get("tag", ""), str):
+                raise ValueError("TAG de válvula RV inválido")
+            salida_rv = rv.get("outletDiaIndex", 6)
+            if type(salida_rv) is not int or not 0 <= salida_rv < len(DIAMETROS):
+                raise ValueError("medida de salida RV inválida")
+            if rv.get("outletRating", "150#") not in {"150#", "300#", "600#"}:
+                raise ValueError("clase de salida RV inválida")
+            for campo, minimo, maximo, defecto in (("rotation",0,359,0),("height",.2,3,.8)):
+                valor = rv.get(campo, defecto)
+                if type(valor) not in (int,float) or not math.isfinite(valor) or not minimo <= valor <= maximo:
+                    raise ValueError(f"{campo} de válvula RV fuera de rango")
+            if rv.get("enabled") and (n.get("connectionType", "flanged") != "flanged" or n.get("outletFlange",True) is False):
+                raise ValueError("la válvula RV necesita una boquilla con brida de salida")
         largo_salida = n.get("elbowOutletLength", 0)
         if type(largo_salida) not in (int, float) or not math.isfinite(largo_salida) or not 0 <= largo_salida <= 10:
             raise ValueError("largo recto de salida del codo fuera de rango")
@@ -1214,7 +1231,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v71"]
+    datos = [normalizar(tag), config, "report-v72"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -1952,7 +1969,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v71"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v72"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2098,7 +2115,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v71"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v72"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
