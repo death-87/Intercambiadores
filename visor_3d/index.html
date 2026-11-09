@@ -235,6 +235,9 @@
     <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.80</output> m</label><input type="range" id="bonnet-length" min="0.20" max="2.00" step="0.05" value="0.80"></div>
   </div>
 </div>
+<div class="input-group" id="channel-cover-control" hidden>
+<label>Cierre del channel:</label><select id="channel-cover-style"><option value="bolted">Tapa apernada · desmontable</option><option value="welded">Cabezal soldado · sin tapa desmontable</option></select>
+</div>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
     
@@ -303,6 +306,15 @@
       <label>Giro del codo: <output id="edit-elbow-angle-value">0°</output></label>
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
+    </div>
+    <div id="edit-rect-controls" class="input-group">
+      <label><input id="edit-rect-enabled" type="checkbox"> Boquilla rectangular</label>
+      <div id="edit-rect-options" hidden>
+        <label>Lado mayor libre (mm):</label><input id="edit-rect-width" type="number" min="25.4" max="3000" step="1" value="400">
+        <label>Lado menor libre (mm):</label><input id="edit-rect-height" type="number" min="25.4" max="3000" step="1" value="250">
+        <label>Orientación del rectángulo:</label><select id="edit-rect-orientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select>
+        <small>El cuello y la abertura son rectangulares. La cantidad de pernos se ajusta en «Pernos / agujeros».</small>
+      </div>
     </div>
     <div id="edit-cover-controls" class="input-group">
       <label><input id="edit-cover-enabled" type="checkbox"> Tapa ciega con pescante sobre esta brida</label>
@@ -485,6 +497,15 @@
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
+    </div>
+    <div id="new-rect-controls" class="input-group">
+      <label><input id="new-rect-enabled" type="checkbox"> Boquilla rectangular</label>
+      <div id="new-rect-options" hidden>
+        <label>Lado mayor libre (mm):</label><input id="new-rect-width" type="number" min="25.4" max="3000" step="1" value="400">
+        <label>Lado menor libre (mm):</label><input id="new-rect-height" type="number" min="25.4" max="3000" step="1" value="250">
+        <label>Orientación del rectángulo:</label><select id="new-rect-orientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select>
+        <small>El cuello y la abertura son rectangulares. La cantidad de pernos se ajusta en «Pernos / agujeros».</small>
+      </div>
     </div>
     <div id="new-cover-controls" class="input-group">
       <label><input id="new-cover-enabled" type="checkbox"> Tapa ciega con pescante sobre esta brida</label>
@@ -715,13 +736,20 @@
         K:K*INCH, L:L*INCH, bolts, R:RAISED_FACE_DIAMETER_INCHES[diaIndex]*INCH};
     }
 
-    function flangeOutline(diameter,form='round') {
+    function flangeOutline(diameter,form='round',width=diameter,height=diameter) {
       const shape=new THREE.Shape(),r=diameter/2;
-      if(form==='square') {shape.moveTo(-r,-r);shape.lineTo(r,-r);shape.lineTo(r,r);shape.lineTo(-r,r);shape.closePath();}
+      if(form==='rectangular') {shape.moveTo(-width/2,-height/2);shape.lineTo(width/2,-height/2);shape.lineTo(width/2,height/2);shape.lineTo(-width/2,height/2);shape.closePath();}
+      else if(form==='square') {shape.moveTo(-r,-r);shape.lineTo(r,-r);shape.lineTo(r,r);shape.lineTo(-r,r);shape.closePath();}
       else shape.absarc(0,0,r,0,Math.PI*2,false);
       return shape;
     }
-    function flangeBoltPoints(count,pitch,form='round') {
+    function flangeBoltPoints(count,pitch,form='round',width=pitch,height=pitch) {
+      if(form==='rectangular') {
+        const perimeter=2*(width+height),points=[];
+        for(let i=0;i<count;i++){let t=(i+.5)*perimeter/count;let x,y;
+          if(t<width){x=-width/2+t;y=-height/2;}else if((t-=width)<height){x=width/2;y=-height/2+t;}else if((t-=height)<width){x=width/2-t;y=height/2;}else{t-=width;x=-width/2;y=height/2-t;}
+          points.push(new THREE.Vector2(x,y));}return points;
+      }
       const r=pitch/2,result=[];
       for(let i=0;i<count;i++) {
         if(form==='square') {
@@ -737,6 +765,12 @@
       return {D,K:dim.K*D/dim.D};
     }
     function nozzleFlangeSettings(data) {
+      if(data.rectangular?.enabled) {
+        const r=normalizeRectangular(data.rectangular),vertical=r.orientation==='vertical';
+        const innerW=(vertical?r.heightMM:r.widthMM)/1000,innerH=(vertical?r.widthMM:r.heightMM)/1000;
+        const margin=Math.max(.035,flangeDimensions(data.diaIndex,data.rating).L*1.8),W=innerW+2*margin+.012,H=innerH+2*margin+.012;
+        return {form:'rectangular',D:Math.max(W,H),K:Math.max(W,H)-margin,count:data.flangeBoltCount||12,W,H,innerW,innerH,pitchW:W-margin,pitchH:H-margin};
+      }
       let form=data.flangeShape||'auto',count=data.flangeBoltCount||0,size=data.flangeSquareSizeMM||0;
       if(currentModel==='H' && ['shell','shellLower'].includes(data.bodyPart) && data.pos==='axialPlus') {
         const prefix=data.bodyPart==='shell'?'hairpinSpoolUpper':'hairpinSpoolLower';
@@ -753,12 +787,13 @@
     }
     function nozzlePlateGeometry(data,bore) {
       const dim=flangeDimensions(data.diaIndex,data.rating),settings=nozzleFlangeSettings(data);
-      const shape=flangeOutline(settings.D,settings.form);
-      addFlangeCutout(shape,settings.form,settings.D,0,0,bore);
-      for(const p of flangeBoltPoints(settings.count,settings.K,settings.form)) {
+      const shape=flangeOutline(settings.D,settings.form,settings.W,settings.H);
+      if(settings.form==='rectangular')shape.holes.push(new THREE.Path(flangeOutline(0,'rectangular',settings.innerW,settings.innerH).getPoints()));
+      else addFlangeCutout(shape,settings.form,settings.D,0,0,bore);
+      for(const p of flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH)) {
         addFlangeCutout(shape,settings.form,settings.D,p.x,p.y,dim.L/2,bore);
       }
-      return new THREE.ExtrudeGeometry(shape,{depth:dim.B,bevelEnabled:settings.form!=='square',bevelThickness:Math.min(.0015,dim.B*.06),bevelSize:Math.min(.0015,dim.B*.06),bevelSegments:1,steps:1,curveSegments:48});
+      return new THREE.ExtrudeGeometry(shape,{depth:dim.B,bevelEnabled:!['square','rectangular'].includes(settings.form),bevelThickness:Math.min(.0015,dim.B*.06),bevelSize:Math.min(.0015,dim.B*.06),bevelSegments:1,steps:1,curveSegments:48});
     }
     function updateNozzleFlangePlate(nozzle) {
       if(nozzle.userData.inletPlate) {const plate=nozzle.userData.inletPlate;plate.geometry.dispose();plate.geometry=nozzlePlateGeometry({...nozzle.userData,diaIndex:nozzle.userData.baseDiaIndex},nozzle.userData.inletBore);}
@@ -839,6 +874,10 @@
       if (type === 'threaded') {
         element.style.display = 'none';
         return;
+      }
+      const rectPrefix=elementId.startsWith('edit')?'edit':'new';
+      if(document.getElementById(rectPrefix+'-rect-enabled').checked) {
+        const rect=rectangularFromControls(rectPrefix);element.textContent=`Boquilla rectangular ${rect.widthMM} × ${rect.heightMM} mm · ${rect.orientation==='vertical'?'vertical':'horizontal'} · brida personalizada.`;element.style.display='block';return;
       }
       const dim = flangeDimensions(Number(diaIndex), rating);
       if(dim.custom) {
@@ -939,7 +978,7 @@
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           swEnd: nz.userData.swEnd, swFlangeRating: nz.userData.swFlangeRating,
           flangeSquareSizeMM:nz.userData.flangeSquareSizeMM||0,
-          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false, reliefValve:{...nz.userData.reliefValve}, davitCover:{...nz.userData.davitCover},
+          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false, reliefValve:{...nz.userData.reliefValve}, davitCover:{...nz.userData.davitCover}, rectangular:{...nz.userData.rectangular},
           flangeType: "WN",
           face: nz.userData.face || "RF",
           neckLength: nz.userData.neckLength || undefined,
@@ -1459,7 +1498,7 @@
       const stride = segments + 1;
       for (let i = 0; i < segments; i++) {
         const a = i, b = i + 1, c = stride + i, d = stride + i + 1;
-        indices.push(a, c, b, b, c, d);
+        indices.push(a, b, c, b, d, c);
       }
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -1517,18 +1556,24 @@
         ringX(weld,p.reducerSmall,p.channelRadius,.007,weldMat);
       }
 
-      // Tapa plana: brida exterior + junta + placa circular.
-      const coverJoint = p.channelBodyLeft;
-      cylinderX(channel, coverJoint - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
-      const outerGasket = new THREE.Group();
-      outerGasket.scale.set(1, gasketScale, gasketScale);
-      channel.add(outerGasket);
-      spiralGasket(outerGasket, coverJoint - T_FLANGE - GASKET_T / 2);
-      const coverThickness = 0.10;
-      cylinderX(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness / 2,
-        channelFlangeRadius, coverThickness, flangeMatBase);
-      studCircle(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness,
-        coverJoint, 16, channelPitchRadius);
+      if(currentDimensions.channelCoverStyle==='welded') {
+        const head=new THREE.Mesh(new THREE.SphereGeometry(p.channelRadius,64,32,0,Math.PI*2,0,Math.PI/2),shellMat);
+        head.name='Cabezal soldado del channel';head.rotation.z=Math.PI/2;head.scale.y=.45;head.position.x=p.channelBodyLeft;channel.add(head);
+        ringX(channel,p.channelBodyLeft,p.channelRadius,.007,weldMat);
+      } else {
+        // Tapa plana: brida exterior + junta + placa circular.
+        const coverJoint = p.channelBodyLeft;
+        cylinderX(channel, coverJoint - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
+        const outerGasket = new THREE.Group();
+        outerGasket.scale.set(1, gasketScale, gasketScale);
+        channel.add(outerGasket);
+        spiralGasket(outerGasket, coverJoint - T_FLANGE - GASKET_T / 2);
+        const coverThickness = 0.10;
+        cylinderX(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness / 2,
+          channelFlangeRadius, coverThickness, flangeMatBase);
+        studCircle(channel, coverJoint - T_FLANGE - GASKET_T - coverThickness,
+          coverJoint, 16, channelPitchRadius);
+      }
     }
     const hairpinGroup = new THREE.Group();
     hairpinGroup.name = 'Horquilla: dos cuerpos, charretes y cabezal común';
@@ -1820,7 +1865,7 @@
       const half=currentDimensions.shellLength/2,r=currentDimensions.channelDiameter/2;
       const shellRadius=currentDimensions.shellDiameter/2;
       const transitionLength=Math.abs(shellRadius-r)>1e-6?Math.min(.35,Math.max(.10,Math.abs(shellRadius-r)*.8)):0;
-      return {half:half+transitionLength,shellHalf:half,transitionLength,r,jointBolts:currentDimensions.dualJointBolts??24,rounded:currentModel==='I',
+      return {coverStyle:currentDimensions.channelCoverStyle||'bolted',half:half+transitionLength,shellHalf:half,transitionLength,r,jointBolts:currentDimensions.dualJointBolts??24,rounded:currentModel==='I',
         uLength:Math.min(currentDimensions.shellLength-.1,currentDimensions.dualULength??currentDimensions.shellLength*.8),
         uRadius:Math.min(currentDimensions.shellDiameter*.95,(currentDimensions.dualUDiameterMM??currentDimensions.shellDiameter*700)/1000)/2,
         uDepth:currentDimensions.dualUDepth??.5,uSupportWidth:currentDimensions.dualUSupportWidth??.20,
@@ -1857,6 +1902,7 @@
     }
     function updateDualChannelControls() {
       const p=dualChannelLayout();
+      for(const id of ['dual-arc-bolts','dual-seam-bolts','dual-left-davits','dual-right-davits','dual-left-cover-count','dual-right-cover-count'])document.getElementById(id).disabled=readOnly||p.coverStyle==='welded';
       document.getElementById('dual-u-controls').hidden=!p.rounded;
       for(const [id,value] of [['dual-u-length',p.uLength],['dual-u-diameter',p.uRadius*2000],['dual-u-depth',p.uDepth],['dual-u-support-width',p.uSupportWidth]])document.getElementById(id).value=value;
       document.getElementById('dual-u-length').max=currentDimensions.shellLength-.1;
@@ -1882,7 +1928,7 @@
         const end=cover.key.startsWith('Left')?'Left':'Right',single=p.coverCounts[end]===1;
         for(const suffix of ['enabled','diameter','bolts']) {
           const input=document.getElementById(id+'-'+suffix);
-          input.disabled=p.coverCounts[end]===0||(single&&(cover.key.includes('FS')||cover.key.endsWith('2')));
+          input.disabled=readOnly||p.coverStyle==='welded'||p.coverCounts[end]===0||(single&&(cover.key.includes('FS')||cover.key.endsWith('2')));
         }
         if(!cover.key.endsWith('2')) document.getElementById(id+'-enabled').parentElement.lastChild.textContent=single&&cover.key.endsWith('NS')?' Subtapa centrada · '+(end==='Left'?'Channel':'Channel extremo'):' Subtapa extremo '+(end==='Left'?'−X':' +X')+' · '+(cover.key.endsWith('NS')?'NS':'FS');
         document.getElementById(id+'-enabled').checked=cover.enabled;
@@ -1943,95 +1989,100 @@
           boltAt(jointX,Math.cos(a)*p.r*1.10,Math.sin(a)*p.r*1.10,joint,.14);
         }
 
-        const ring=new THREE.Shape();ring.absarc(0,0,p.r*1.22,0,Math.PI*2,false);
-        const bore=new THREE.Path();bore.absarc(0,0,p.r*.96,0,Math.PI*2,true);ring.holes.push(bore);
-        const flange=mesh(new THREE.ExtrudeGeometry(ring,{depth:.045,bevelEnabled:false,curveSegments:64}),flangeMatBase,'Brida de tapa partida');
-        flange.rotation.y=Math.PI/2;flange.position.x=face-.0225;
-        const seam=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(face+sign*.0755,-p.r*1.18,0),new THREE.Vector3(face+sign*.0755,p.r*1.18,0)]),dualSeamMaterial);
-        seam.name='Corte vertical de tapa';dualChannelGroup.add(seam);
-        for(const side of ['NS','FS']) {
-          const halfSign=side==='NS'?-p.frontSide:p.frontSide,shape=new THREE.Shape();
-          if(halfSign>0)shape.absarc(0,0,p.r*1.18,-Math.PI/2,Math.PI/2,false);
-          else shape.absarc(0,0,p.r*1.18,Math.PI/2,3*Math.PI/2,false);
-          shape.closePath();
-          const plate=mesh(new THREE.ExtrudeGeometry(shape,{depth:.035,bevelEnabled:false,curveSegments:64}),flangeMatBase,'Media tapa '+end+' '+side);
-          plate.rotation.y=Math.PI/2;plate.position.set(face+(sign<0?-.075:.04),0,-halfSign*.002);
-          const fasteners=new THREE.Group();fasteners.name='Pernos media tapa '+end+' '+side;
-          fasteners.userData={arcCount:p.arcBolts,seamCount:p.seamBolts,boltCount:p.arcBolts+p.seamBolts};dualChannelGroup.add(fasteners);
-          const sideSign=-halfSign;
-          for(let i=0;i<p.arcBolts;i++) {
-            const a=-Math.PI/2+(i+.5)*Math.PI/p.arcBolts;
-            boltAt(face+sign*.04,Math.sin(a)*p.r*1.10,sideSign*Math.cos(a)*p.r*1.10,fasteners);
-          }
-          for(let i=0;i<p.seamBolts;i++) {
-            const y=p.seamBolts===1?0:-p.r*.94+(2*p.r*.94)*i/(p.seamBolts-1);
-            boltAt(face+sign*.04,y,sideSign*p.r*.10,fasteners);
-          }
-        }
-        if(p.davits[end]) for(const side of ['NS','FS']) {
-          const sideSign=side==='NS'?p.frontSide:-p.frontSide;
-          const assembly=new THREE.Group();assembly.name='Pescantes '+end+' '+side;
-          assembly.userData={end,side,attachment:'canto de brida fija y canto de tapa',supportCount:2};dualChannelGroup.add(assembly);
-          function edgeArm(radius,centerY,centerX,thickness,tipZ,name) {
-            // Perfil recortado contra el canto circular: no invade la cara.
-            const halfHeight=p.r*.045,shape=new THREE.Shape();
-            const boundary=y=>sideSign*Math.sqrt(Math.max(0,radius*radius-y*y));
-            shape.moveTo(boundary(centerY-halfHeight),centerY-halfHeight);
-            shape.lineTo(tipZ,centerY-halfHeight);shape.lineTo(tipZ,centerY+halfHeight);
-            for(let i=0;i<=24;i++) {
-              const y=centerY+halfHeight-2*halfHeight*i/24;
-              shape.lineTo(boundary(y),y);
-            }
+        if(p.coverStyle==='welded') {
+          const head=mesh(new THREE.SphereGeometry(p.r,64,32,0,Math.PI*2,0,Math.PI/2),shellMat,'Cabezal soldado del channel '+end);
+          head.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(sign,0,0));head.scale.y=.45;head.position.x=face;
+        } else {
+          const ring=new THREE.Shape();ring.absarc(0,0,p.r*1.22,0,Math.PI*2,false);
+          const bore=new THREE.Path();bore.absarc(0,0,p.r*.96,0,Math.PI*2,true);ring.holes.push(bore);
+          const flange=mesh(new THREE.ExtrudeGeometry(ring,{depth:.045,bevelEnabled:false,curveSegments:64}),flangeMatBase,'Brida de tapa partida');
+          flange.rotation.y=Math.PI/2;flange.position.x=face-.0225;
+          const seam=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(face+sign*.0755,-p.r*1.18,0),new THREE.Vector3(face+sign*.0755,p.r*1.18,0)]),dualSeamMaterial);
+          seam.name='Corte vertical de tapa';dualChannelGroup.add(seam);
+          for(const side of ['NS','FS']) {
+            const halfSign=side==='NS'?-p.frontSide:p.frontSide,shape=new THREE.Shape();
+            if(halfSign>0)shape.absarc(0,0,p.r*1.18,-Math.PI/2,Math.PI/2,false);
+            else shape.absarc(0,0,p.r*1.18,Math.PI/2,3*Math.PI/2,false);
             shape.closePath();
-            const part=mesh(new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false}),shellMat,name,assembly);
-            part.rotation.y=-Math.PI/2;part.position.x=centerX+thickness/2;
-            part.userData={edgeRadius:radius,attachmentX:centerX};return part;
-          }
-          for(const level of [-1,1]) {
-            // Cada brazo nace en el canto de su propia brida y sale en Z.
-            // La unión axial entre orejas queda fuera de ambas circunferencias.
-            const y=level*p.r*.68,projection=Math.max(.06,p.r*.20);
-            const z=sideSign*(p.r*1.22+projection),bodyX=face,lidX=face+sign*.0575;
-            const pivotX=(bodyX+lidX)/2,pivot=new THREE.Vector3(pivotX,y,z);
-            const bodyY=y-level*p.r*.08,lidY=y+level*p.r*.08;
-            edgeArm(p.r*1.22,bodyY,bodyX,.024,z,'Brazo pescante soldado al cuerpo');
-            edgeArm(p.r*1.18+.002,lidY,lidX,.024,z,'Oreja pescante soldada a tapa');
-            for(const [x,cy] of [[bodyX,bodyY],[lidX,lidY]]) {
-              const bridge=mesh(new THREE.BoxGeometry(Math.abs(x-pivotX)+.024,p.r*.09,p.r*.12),shellMat,'Enlace exterior de oreja',assembly);
-              bridge.position.set((x+pivotX)/2,cy,z);
+            const plate=mesh(new THREE.ExtrudeGeometry(shape,{depth:.035,bevelEnabled:false,curveSegments:64}),flangeMatBase,'Media tapa '+end+' '+side);
+            plate.rotation.y=Math.PI/2;plate.position.set(face+(sign<0?-.075:.04),0,-halfSign*.002);
+            const fasteners=new THREE.Group();fasteners.name='Pernos media tapa '+end+' '+side;
+            fasteners.userData={arcCount:p.arcBolts,seamCount:p.seamBolts,boltCount:p.arcBolts+p.seamBolts};dualChannelGroup.add(fasteners);
+            const sideSign=-halfSign;
+            for(let i=0;i<p.arcBolts;i++) {
+              const a=-Math.PI/2+(i+.5)*Math.PI/p.arcBolts;
+              boltAt(face+sign*.04,Math.sin(a)*p.r*1.10,sideSign*Math.cos(a)*p.r*1.10,fasteners);
             }
-            if(!p.rounded) {
-              const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
-              pin.position.copy(pivot);
-            }
-            for(const offset of [-.08,.08]) {
-              const sleeve=mesh(new THREE.CylinderGeometry(p.r*.085,p.r*.085,p.r*.075,32),flangeMatBase,offset*level>0?'Articulación de tapa':'Articulación de cuerpo',assembly);
-              sleeve.position.set(pivotX,y+offset*p.r,z);
-            }
-            if(!p.rounded) {
-              const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador pescante',assembly);
-              head.position.set(pivotX,y+p.r*.142,z);
+            for(let i=0;i<p.seamBolts;i++) {
+              const y=p.seamBolts===1?0:-p.r*.94+(2*p.r*.94)*i/(p.seamBolts-1);
+              boltAt(face+sign*.04,y,sideSign*p.r*.10,fasteners);
             }
           }
-          if(p.rounded) {
-            const z=sideSign*(p.r*1.22+Math.max(.06,p.r*.20)),x=face+sign*.02875;
-            const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*1.66,32),studMat,'Pasador largo continuo superior-inferior',assembly);
-            pin.position.set(x,0,z);pin.userData.connectsBothSupports=true;
-            const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador largo',assembly);head.position.set(x,p.r*.8425,z);
+          if(p.davits[end]) for(const side of ['NS','FS']) {
+            const sideSign=side==='NS'?p.frontSide:-p.frontSide;
+            const assembly=new THREE.Group();assembly.name='Pescantes '+end+' '+side;
+            assembly.userData={end,side,attachment:'canto de brida fija y canto de tapa',supportCount:2};dualChannelGroup.add(assembly);
+            function edgeArm(radius,centerY,centerX,thickness,tipZ,name) {
+              // Perfil recortado contra el canto circular: no invade la cara.
+              const halfHeight=p.r*.045,shape=new THREE.Shape();
+              const boundary=y=>sideSign*Math.sqrt(Math.max(0,radius*radius-y*y));
+              shape.moveTo(boundary(centerY-halfHeight),centerY-halfHeight);
+              shape.lineTo(tipZ,centerY-halfHeight);shape.lineTo(tipZ,centerY+halfHeight);
+              for(let i=0;i<=24;i++) {
+                const y=centerY+halfHeight-2*halfHeight*i/24;
+                shape.lineTo(boundary(y),y);
+              }
+              shape.closePath();
+              const part=mesh(new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false}),shellMat,name,assembly);
+              part.rotation.y=-Math.PI/2;part.position.x=centerX+thickness/2;
+              part.userData={edgeRadius:radius,attachmentX:centerX};return part;
+            }
+            for(const level of [-1,1]) {
+              // Cada brazo nace en el canto de su propia brida y sale en Z.
+              // La unión axial entre orejas queda fuera de ambas circunferencias.
+              const y=level*p.r*.68,projection=Math.max(.06,p.r*.20);
+              const z=sideSign*(p.r*1.22+projection),bodyX=face,lidX=face+sign*.0575;
+              const pivotX=(bodyX+lidX)/2,pivot=new THREE.Vector3(pivotX,y,z);
+              const bodyY=y-level*p.r*.08,lidY=y+level*p.r*.08;
+              edgeArm(p.r*1.22,bodyY,bodyX,.024,z,'Brazo pescante soldado al cuerpo');
+              edgeArm(p.r*1.18+.002,lidY,lidX,.024,z,'Oreja pescante soldada a tapa');
+              for(const [x,cy] of [[bodyX,bodyY],[lidX,lidY]]) {
+                const bridge=mesh(new THREE.BoxGeometry(Math.abs(x-pivotX)+.024,p.r*.09,p.r*.12),shellMat,'Enlace exterior de oreja',assembly);
+                bridge.position.set((x+pivotX)/2,cy,z);
+              }
+              if(!p.rounded) {
+                const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*.26,24),studMat,'Pasador vertical pescante',assembly);
+                pin.position.copy(pivot);
+              }
+              for(const offset of [-.08,.08]) {
+                const sleeve=mesh(new THREE.CylinderGeometry(p.r*.085,p.r*.085,p.r*.075,32),flangeMatBase,offset*level>0?'Articulación de tapa':'Articulación de cuerpo',assembly);
+                sleeve.position.set(pivotX,y+offset*p.r,z);
+              }
+              if(!p.rounded) {
+                const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador pescante',assembly);
+                head.position.set(pivotX,y+p.r*.142,z);
+              }
+            }
+            if(p.rounded) {
+              const z=sideSign*(p.r*1.22+Math.max(.06,p.r*.20)),x=face+sign*.02875;
+              const pin=mesh(new THREE.CylinderGeometry(p.r*.045,p.r*.045,p.r*1.66,32),studMat,'Pasador largo continuo superior-inferior',assembly);
+              pin.position.set(x,0,z);pin.userData.connectsBothSupports=true;
+              const head=mesh(new THREE.CylinderGeometry(p.r*.067,p.r*.067,p.r*.025,6),nutMat,'Cabeza pasador largo',assembly);head.position.set(x,p.r*.8425,z);
+            }
           }
-        }
-        for(const cover of p.covers.filter(c=>c.key.startsWith(end))) {
-          const extra=cover.key.endsWith('2'),side=cover.key.includes('NS')?'NS':'FS';
-          if(!cover.enabled||p.coverCounts[end]===0||(p.coverCounts[end]===1&&(side==='FS'||extra)))continue;
-          const paired=p.coverCounts[end]===2&&p.covers.some(c=>c.key===end+side+'2'&&c.enabled);
-          const sideSign=side==='NS'?p.frontSide:-p.frontSide;
-          const parent=new THREE.Group();parent.name='Subtapa '+end+' '+(p.coverCounts[end]===1?'Centro':side+(extra?' 2':''));
-          parent.userData={diameter:cover.diameter,boltCount:cover.bolts};dualChannelGroup.add(parent);
-          parent.position.y=paired?(extra?-1:1)*p.r*.4:0;
-          const centerZ=p.coverCounts[end]===1?0:sideSign*p.r*.52,base=face+sign*.075,smallR=cover.diameter/2;
-          const neck=cylinderX(smallR,.045,base+sign*.0225,'Cuello subtapa',parent);neck.position.z=centerZ;
-          const lid=cylinderX(smallR*1.18,.025,base+sign*.055,'Subtapa apernada',parent,flangeMatBase);lid.position.z=centerZ;
-          boltsX(cover.bolts,smallR*1.04,base+sign*.055,centerZ,parent,'Pernos subtapa',sign);
+          for(const cover of p.covers.filter(c=>c.key.startsWith(end))) {
+            const extra=cover.key.endsWith('2'),side=cover.key.includes('NS')?'NS':'FS';
+            if(!cover.enabled||p.coverCounts[end]===0||(p.coverCounts[end]===1&&(side==='FS'||extra)))continue;
+            const paired=p.coverCounts[end]===2&&p.covers.some(c=>c.key===end+side+'2'&&c.enabled);
+            const sideSign=side==='NS'?p.frontSide:-p.frontSide;
+            const parent=new THREE.Group();parent.name='Subtapa '+end+' '+(p.coverCounts[end]===1?'Centro':side+(extra?' 2':''));
+            parent.userData={diameter:cover.diameter,boltCount:cover.bolts};dualChannelGroup.add(parent);
+            parent.position.y=paired?(extra?-1:1)*p.r*.4:0;
+            const centerZ=p.coverCounts[end]===1?0:sideSign*p.r*.52,base=face+sign*.075,smallR=cover.diameter/2;
+            const neck=cylinderX(smallR,.045,base+sign*.0225,'Cuello subtapa',parent);neck.position.z=centerZ;
+            const lid=cylinderX(smallR*1.18,.025,base+sign*.055,'Subtapa apernada',parent,flangeMatBase);lid.position.z=centerZ;
+            boltsX(cover.bolts,smallR*1.04,base+sign*.055,centerZ,parent,'Pernos subtapa',sign);
+          }
         }
       }
       if(p.rounded) {
@@ -2165,6 +2216,7 @@
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
       currentDimensions.eccentricShellJoint=dimensions.eccentricShellJoint==='flanged'?'flanged':'welded';
       currentDimensions.eccentricChannelJoint=dimensions.eccentricChannelJoint==='welded'?'welded':'flanged';
+      currentDimensions.channelCoverStyle=dimensions.channelCoverStyle==='welded'?'welded':'bolted';
       loadDualChannelDimensions(dimensions);
       updateDimensionControls();
       buildModelB();
@@ -2188,22 +2240,28 @@
       innerFlange.rotation.z = Math.PI / 2;
       innerFlange.position.x = -0.06;
       channelGroup.add(innerFlange);
-      const outerFlangeX = -(length + 0.18);
-      const outerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
-      outerFlange.rotation.z = Math.PI / 2;
-      outerFlange.position.x = outerFlangeX;
-      channelGroup.add(outerFlange);
-      const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
-      coverPlate.rotation.z = Math.PI / 2;
-      coverPlate.position.x = -(length + 0.29 + GASKET_T);
-      channelGroup.add(coverPlate);
-      spiralGasket(channelGroup, -(length + 0.24 + GASKET_T / 2));
-      studCircle(channelGroup, -(length + 0.34 + GASKET_T), -(length + 0.12));
+      if(currentDimensions.channelCoverStyle==='welded') {
+        const head=new THREE.Mesh(new THREE.SphereGeometry(R,64,32,0,Math.PI*2,0,Math.PI/2),shellMat);
+        head.name='Cabezal soldado del channel';head.rotation.z=Math.PI/2;head.scale.y=.45;head.position.x=bodyLeft;channelGroup.add(head);
+        ringX(channelGroup,bodyLeft,R,.009,weldMat);
+      } else {
+        const outerFlangeX = -(length + 0.18);
+        const outerFlange = new THREE.Mesh(flangeGeo, flangeMatBase);
+        outerFlange.rotation.z = Math.PI / 2;
+        outerFlange.position.x = outerFlangeX;
+        channelGroup.add(outerFlange);
+        const coverPlate = new THREE.Mesh(new THREE.CylinderGeometry(R_FLANGE, R_FLANGE, 0.1, 96), flangeMatBase);
+        coverPlate.rotation.z = Math.PI / 2;
+        coverPlate.position.x = -(length + 0.29 + GASKET_T);
+        channelGroup.add(coverPlate);
+        spiralGasket(channelGroup, -(length + 0.24 + GASKET_T / 2));
+        studCircle(channelGroup, -(length + 0.34 + GASKET_T), -(length + 0.12));
+      }
       studCircle(channelGroup, -T_FLANGE, T_FLANGE + GASKET_T);
       spiralGasket(channelGroup, GASKET_T / 2);
-      ringX(channelGroup, -(length + 0.11), R, 0.009, weldMat);
+      if(currentDimensions.channelCoverStyle!=='welded')ringX(channelGroup, -(length + 0.11), R, 0.009, weldMat);
       ringX(channelGroup, -0.13, R, 0.009, weldMat);
-      ringX(channelGroup, -(length + 0.342 + GASKET_T), R_FLANGE - 0.02, 0.003, nutMat);
+      if(currentDimensions.channelCoverStyle!=='welded')ringX(channelGroup, -(length + 0.342 + GASKET_T), R_FLANGE - 0.02, 0.003, nutMat);
       const partition = new THREE.Mesh(new THREE.BoxGeometry(length, 0.02, 1.09), partitionMat);
       partition.position.x = bodyCenter;
       channelGroup.add(partition);
@@ -2400,7 +2458,7 @@
     function isAxial(pos) { return pos === 'axialMinus' || pos === 'axialPlus'; }
     function axialFaceX(bodyPart, positive) {
       if(['G','I'].includes(currentModel)&&['channel','channelRight'].includes(bodyPart)) {
-        const p=dualChannelLayout();return bodyPart==='channel'?(positive?-p.half:-p.half-p.length):(positive?p.half+p.length:p.half);
+        const p=dualChannelLayout();const extra=p.coverStyle==='welded'?p.r*.45:0;return bodyPart==='channel'?(positive?-p.half:-p.half-p.length-extra):(positive?p.half+p.length+extra:p.half);
       }
       const bounds = BODY_BOUNDS[bodyPart];
       if (currentModel === 'H') {
@@ -2409,8 +2467,8 @@
         return positive?p.spoolEnd:p.left;
       }
       if (bodyPart === 'channel' && !positive) {
-        return currentModel === 'B' ? modelBLayout().channelBodyLeft - 0.10
-          : channelGroup.position.x - currentDimensions.channelLength - 0.34 - GASKET_T;
+        return currentModel === 'B' ? modelBLayout().channelBodyLeft - (currentDimensions.channelCoverStyle==='welded'?modelBLayout().channelRadius*.45:.10)
+          : channelGroup.position.x - currentDimensions.channelLength - (currentDimensions.channelCoverStyle==='welded'?.12+currentDimensions.channelDiameter*.225:.34+GASKET_T);
       }
       if (bodyPart === 'shell') return (positive ? 1 : -1) * currentDimensions.shellLength / 2;
       return positive ? bounds.max + 0.05 : bounds.min - 0.05;
@@ -2548,6 +2606,8 @@
     function applyModel(model, reposition = false) {
       currentModel = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].includes(model) ? model : 'A';
       document.getElementById('equipment-model').value = currentModel;
+      document.getElementById('channel-cover-control').hidden=!['A','B','C','G','I'].includes(currentModel);
+      document.getElementById('channel-cover-style').value=currentDimensions.channelCoverStyle||'bolted';
       heatExchanger.rotation.z=currentModel==='J'?Math.PI/2:0;
       modelAShellGroup.visible = !['B','H'].includes(currentModel);
       channelGroup.visible = currentModel === 'A' || currentModel === 'C';
@@ -2805,6 +2865,52 @@
       return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
     }
 
+    function normalizeRectangular(value={}) {
+      value=value&&typeof value==='object'?value:{};
+      const a=Math.max(25.4,Math.min(3000,Number(value.widthMM)||400)),b=Math.max(25.4,Math.min(3000,Number(value.heightMM)||250));
+      return {enabled:value.enabled===true,widthMM:Math.max(a,b),heightMM:Math.min(a,b),orientation:value.orientation==='vertical'?'vertical':'horizontal'};
+    }
+    function rectangularFromControls(prefix) {
+      return normalizeRectangular({enabled:document.getElementById(prefix+'-rect-enabled').checked,widthMM:Number(document.getElementById(prefix+'-rect-width').value),heightMM:Number(document.getElementById(prefix+'-rect-height').value),orientation:document.getElementById(prefix+'-rect-orientation').value});
+    }
+    function updateRectangularControls(prefix,type,config=null) {
+      document.getElementById(prefix+'-rect-controls').hidden=type!=='flanged';
+      if(config) {
+        const r=normalizeRectangular(config);document.getElementById(prefix+'-rect-enabled').checked=r.enabled;
+        for(const [id,value] of [['width',r.widthMM],['height',r.heightMM],['orientation',r.orientation]])document.getElementById(prefix+'-rect-'+id).value=value;
+      }
+      const on=type==='flanged'&&document.getElementById(prefix+'-rect-enabled').checked;
+      document.getElementById(prefix+'-rect-options').hidden=!on;
+      document.getElementById(prefix+'-flange-shape').disabled=readOnly||on;
+      if(on)document.getElementById(prefix+'-flange-square-size').disabled=true;
+      document.getElementById(prefix+'-rv-enabled').disabled=readOnly||on;
+      if(on)document.getElementById(prefix+'-rv-enabled').checked=false;
+      document.getElementById(prefix+'-elbow').disabled=readOnly||on;
+      if(on)document.getElementById(prefix+'-elbow').value='straight';
+    }
+    function buildRectangularNozzle(group,data,length,material,flangeMaterial) {
+      const d=flangeDimensions(data.diaIndex,data.rating),s=nozzleFlangeSettings(data),wall=.006;
+      const outer=flangeOutline(0,'rectangular',s.innerW+wall*2,s.innerH+wall*2);
+      const bore=new THREE.Path(flangeOutline(0,'rectangular',s.innerW,s.innerH).getPoints());outer.holes.push(bore);
+      const neck=new THREE.Mesh(new THREE.ExtrudeGeometry(outer,{depth:length,bevelEnabled:false}),material);neck.name='Cuello rectangular hueco';neck.rotation.x=-Math.PI/2;group.add(neck);
+      const plate=new THREE.Mesh(nozzlePlateGeometry(data,0),flangeMaterial);plate.name='Brida rectangular';plate.rotation.x=-Math.PI/2;plate.position.y=length;plate.visible=data.outletFlange;group.add(plate);
+      group.userData.flangePlate=plate;group.userData.flangeBore=0;group.userData.flangePlateKey=JSON.stringify(s);
+      if(data.outletFlange&&!data.davitCover.enabled) for(const p of flangeBoltPoints(s.count,s.K,s.form,s.pitchW,s.pitchH)) {
+        const bolt=new THREE.Mesh(new THREE.CylinderGeometry(d.L*.28,d.L*.28,d.B+.02,12),flangeMaterial);bolt.name='Perno brida rectangular';bolt.position.set(p.x,length+d.B/2,p.y);group.add(bolt);
+        const nut=new THREE.Mesh(new THREE.CylinderGeometry(d.L*.46,d.L*.46,.015,6),flangeMaterial);nut.position.set(p.x,length+d.B+.006,p.y);group.add(nut);
+      }
+      const bottom=new THREE.Mesh(new THREE.PlaneGeometry(s.innerW,s.innerH),holeMat);bottom.name='Abertura rectangular';bottom.rotation.x=-Math.PI/2;bottom.position.y=.002;group.add(bottom);
+      if(data.inletFlange) {
+        const inlet=new THREE.Mesh(nozzlePlateGeometry(data,0),flangeMaterial);inlet.rotation.x=-Math.PI/2;inlet.name='Brida entrada rectangular';group.add(inlet);group.userData.inletPlate=inlet;group.userData.inletBore=0;
+      }
+      const front=localSubNozzleSide(data.angleDeg,nameplateGlobalSide());
+      group.userData.subFrontGroup=createFlangedSubNozzle(data.subFront,front,s.innerH/2+wall,length,data.rating,data.face,material,flangeMaterial,flangeMaterial);
+      group.userData.subRearGroup=createFlangedSubNozzle(data.subRear,-front,s.innerH/2+wall,length,data.rating,data.face,material,flangeMaterial,flangeMaterial);
+      group.add(group.userData.subFrontGroup,group.userData.subRearGroup);
+      const ns=createNozzlePlug(flangeMaterial,data.tagNS,data.ratingNS,true,data.sizeNS),fs=createNozzlePlug(flangeMaterial,data.tagFS,data.ratingFS,true,data.sizeFS);
+      ns.position.set(0,length*.55,s.innerH/2+wall);fs.position.set(0,length*.55,-s.innerH/2-wall);ns.visible=data.hasNS;fs.visible=data.hasFS;group.add(ns,fs);
+      return {totalH:length+(data.outletFlange?d.B:0),plugNS:ns,plugFS:fs};
+    }
     function normalizeDavitCover(value={}) {
       value=value&&typeof value==='object'?value:{};
       return {enabled:value.enabled===true,rotation:Number.isFinite(Number(value.rotation))?((Number(value.rotation)%360)+360)%360:0};
@@ -2826,18 +2932,18 @@
       group.userData={diaIndex:data.diaIndex,boltCount:settings.count,handles:2};
       const gap=.006,thickness=dim.B,D=settings.D,pipeRadius=pipeOutsideDiameter(data.pipeDiaIndex??data.diaIndex)/2;
       function mesh(geometry,name,parent=group,mat=material){const part=new THREE.Mesh(geometry,mat);part.name=name;parent.add(part);return part;}
-      const outline=flangeOutline(D,settings.form);
-      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form))addFlangeCutout(outline,settings.form,D,point.x,point.y,dim.L/2);
+      const outline=flangeOutline(D,settings.form,settings.W,settings.H);
+      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH))addFlangeCutout(outline,settings.form,D,point.x,point.y,dim.L/2);
       const lid=mesh(new THREE.ExtrudeGeometry(outline,{depth:thickness,bevelEnabled:false,curveSegments:64}),'Brida tapa ciega',group,flangeMaterial);
       lid.rotation.x=-Math.PI/2;lid.position.y=gap;
-      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form)) {
+      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH)) {
         const length=2*dim.B+.035;
         const stud=mesh(new THREE.CylinderGeometry(Math.max(.004,dim.L*.28),Math.max(.004,dim.L*.28),length,12),'Espárrago tapa',group,flangeMaterial);stud.position.set(point.x,gap/2,point.y);
         for(const y of [-dim.B-.009,gap+thickness+.009]) {const nut=mesh(new THREE.CylinderGeometry(dim.L*.46,dim.L*.46,.015,6),'Tuerca tapa',group,flangeMaterial);nut.position.set(point.x,y,point.y);}
       }
       const top=gap+thickness,wire=Math.max(.004,D*.018),handleRise=Math.max(.025,D*.12);
       for(const offset of [-1,1]) {
-        const x=offset*D*.20,half=D*.16;
+        const x=offset*(settings.W||D)*.20,half=(settings.H||D)*.16;
         const path=new THREE.CatmullRomCurve3([new THREE.Vector3(x,top,-half),new THREE.Vector3(x,top+handleRise,-half*.8),new THREE.Vector3(x,top+handleRise,half*.8),new THREE.Vector3(x,top,half)]);
         mesh(new THREE.TubeGeometry(path,32,wire,8,false),'Manilla de tapa');
       }
@@ -2894,7 +3000,7 @@
       function cyl(radius,length,y,name,parent=group,mat=material) {const m=part(new THREE.CylinderGeometry(radius,radius,length,48),name,parent,mat);m.position.y=y;return m;}
       const entry=part(nozzlePlateGeometry(data,inlet.OD*.40),'Brida entrada RV coincidente',group,flangeMaterial);
       entry.rotation.x=-Math.PI/2;entry.position.y=gap;
-      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form)) {
+      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH)) {
         const length=2*inlet.B+.035;
         const stud=cyl(Math.max(.004,inlet.L*.28),length,gap/2,'Espárrago unión RV',group,flangeMaterial);stud.position.x=point.x;stud.position.z=point.y;
         for(const y of [-inlet.B-.009,gap+inlet.B+.009]) {const nut=part(new THREE.CylinderGeometry(inlet.L*.46,inlet.L*.46,.015,6),'Tuerca unión RV',group,flangeMaterial);nut.position.set(point.x,y,point.y);}
@@ -2923,7 +3029,7 @@
     }
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0, reliefValve = null, davitCover = null) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0, reliefValve = null, davitCover = null, rectangular = null) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -2936,9 +3042,10 @@
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
       const pipeIndex=type==='flanged' && pipeDiaIndex!==null && pipeDiaIndex!==undefined && Number.isInteger(Number(pipeDiaIndex)) && FLANGED_DIAMETER_INDEXES.includes(Number(pipeDiaIndex)) && DIAMETER_INCHES[Number(pipeDiaIndex)]<=DIAMETER_INCHES[dIndex]?Number(pipeDiaIndex):dIndex;
+      const rect=normalizeRectangular(rectangular);rect.enabled=type==='flanged'&&rect.enabled;
       const cover=normalizeDavitCover(davitCover);cover.enabled=type==='flanged'&&cover.enabled;
       const rv=normalizeReliefValve(reliefValve);rv.enabled=type==='flanged'&&rv.enabled;
-      if(cover.enabled)rv.enabled=false;
+      if(cover.enabled||rect.enabled)rv.enabled=false;
       const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
       
       const visualNeckLength = type !== 'threaded'
@@ -2948,9 +3055,9 @@
         sideMount: sideMount === 'elbow' ? 'elbow' : 'straight',
         angleNS: Math.max(-180, Math.min(180, Number(angleNS) || 0)),
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
-        elbow90: type === 'flanged' && elbow90 === true,
+        elbow90: type === 'flanged' && elbow90 === true && !rect.enabled,
         flangeSquareSizeMM:Math.max(0,Math.min(5000,Number(flangeSquareSizeMM)||0)),
-        inletFlange:inletFlange===true, outletFlange:cover.enabled||rv.enabled||outletFlange!==false, reliefValve:rv, davitCover:cover,
+        inletFlange:inletFlange===true, outletFlange:cover.enabled||rv.enabled||outletFlange!==false, reliefValve:rv, davitCover:cover, rectangular:rect,
         elbowOutletLength:Math.max(0,Math.min(10,Number(elbowOutletLength)||0)),
         elbowRotation: Number.isFinite(Number(elbowRotation)) ? ((Number(elbowRotation) % 360) + 360) % 360 : 0,
         direction: NOZZLE_DIRECTIONS.includes(direction) ? direction : 'radial',
@@ -3030,6 +3137,9 @@
           group.add(flange); weld(pipeR, totalH); totalH += dim.H;
         }
         plugNS = new THREE.Group(); plugFS = new THREE.Group(); group.add(plugNS, plugFS);
+      } else if(rect.enabled) {
+        const built=buildRectangularNozzle(group,group.userData,visualNeckLength,nzMat,flMat);
+        totalH=built.totalH;plugNS=built.plugNS;plugFS=built.plugFS;
       } else {
         const dim = flangeDimensions(dIndex, normalizedRating);
         const pipeOD=pipeOutsideDiameter(group.userData.pipeDiaIndex);
@@ -3264,7 +3374,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX, n.reliefValve, n.davitCover
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX, n.reliefValve, n.davitCover, n.rectangular
           );
           nozzlesList.push(newNz);
         });
@@ -3386,6 +3496,7 @@
       document.getElementById('edit-elbow-outlet-length').value=data.elbowOutletLength||0;
       document.getElementById('edit-inlet-flange').value=data.inletFlange?'yes':'no';
       document.getElementById('edit-outlet-flange').value=data.outletFlange===false?'no':'yes';
+      updateRectangularControls('edit',data.connectionType,data.rectangular);
       updateDavitCoverControls('edit',data.connectionType,data.davitCover);
       updateReliefValveControls('edit',data.connectionType,data.reliefValve);
       document.getElementById('edit-elbow-angle').value = data.elbowRotation || 0;
@@ -3556,6 +3667,7 @@
       const threaded = type !== 'flanged';
       updateElbowControls('edit', type);
       updateSwControls('edit', type);
+      updateRectangularControls('edit',type);
       updateDavitCoverControls('edit',type);
       updateReliefValveControls('edit',type);
       populateRatingSelect(editRating, type, preferredRating);
@@ -3613,7 +3725,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX, data.reliefValve, data.davitCover
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX, data.reliefValve, data.davitCover, data.rectangular
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -3656,6 +3768,11 @@
       if(document.getElementById(prefix+'-cover-enabled').checked)document.getElementById(prefix+'-rv-enabled').checked=false;
       updateDavitCoverControls(prefix,type);updateReliefValveControls(prefix,type);
       if(prefix==='edit')rebuildSelectedNozzle({davitCover:davitCoverFromControls(prefix),reliefValve:reliefValveFromControls(prefix),outletFlange:true});
+    });
+    for(const prefix of ['edit','new'])for(const field of ['enabled','width','height','orientation'])document.getElementById(prefix+'-rect-'+field).addEventListener('change',()=>{
+      const type=document.getElementById(prefix+'-nz-type').value;
+      updateRectangularControls(prefix,type);updateReliefValveControls(prefix,type);
+      if(prefix==='edit')rebuildSelectedNozzle({rectangular:rectangularFromControls(prefix),reliefValve:reliefValveFromControls(prefix),elbow90:false});
     });
     document.getElementById('edit-nz-direction').addEventListener('change', event => {
       rebuildSelectedNozzle({direction: event.target.value});
@@ -3860,6 +3977,7 @@
     const newPos = document.getElementById('new-nz-pos');
     const newAngle = document.getElementById('new-nz-angle');
     function updateNewConnectionUI(preferred) {
+      updateRectangularControls('new',document.getElementById('new-nz-type').value);
       updateDavitCoverControls('new',document.getElementById('new-nz-type').value);
       updateReliefValveControls('new',document.getElementById('new-nz-type').value);
       const type = newType.value;
@@ -3942,7 +4060,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes',Number(document.getElementById('new-flange-square-size').value),0,reliefValveFromControls('new'),davitCoverFromControls('new'));
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes',Number(document.getElementById('new-flange-square-size').value),0,reliefValveFromControls('new'),davitCoverFromControls('new'),rectangularFromControls('new'));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
@@ -4172,6 +4290,10 @@
     animate();
     for(const [id,field] of [['eccentric-shell-joint','eccentricShellJoint'],['eccentric-channel-joint','eccentricChannelJoint']])document.getElementById(id).addEventListener('change',event=>{
       if(readOnly)return;currentDimensions[field]=event.target.value;buildModelB();applyModel(currentModel,true);syncStateToParent();
+    });
+    document.getElementById('channel-cover-style').addEventListener('change',event=>{
+      if(readOnly)return;currentDimensions.channelCoverStyle=event.target.value;
+      rebuildModelAChannel();buildModelB();applyModel(currentModel,true);syncStateToParent();
     });
     document.getElementById('equipment-model').addEventListener('change', event => {
       applyModel(event.target.value, true);
