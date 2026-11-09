@@ -414,6 +414,18 @@ def validar_diseno(data, _nivel=0):
         idx = n.get("diaIndex")
         if type(idx) is not int or not 0 <= idx < len(DIAMETROS):
             raise ValueError("diaIndex fuera de la tabla de diámetros")
+        tapa = n.get("davitCover")
+        if tapa is not None:
+            if not isinstance(tapa, dict) or not isinstance(tapa.get("enabled",False),bool):
+                raise ValueError("configuración de tapa pescante inválida")
+            giro = tapa.get("rotation",0)
+            if type(giro) not in (int,float) or not math.isfinite(giro) or not 0 <= giro <= 359:
+                raise ValueError("giro de tapa pescante fuera de rango")
+            if tapa.get("enabled"):
+                if n.get("connectionType","flanged") != "flanged" or n.get("outletFlange",True) is False:
+                    raise ValueError("la tapa pescante requiere una boquilla con brida")
+                if isinstance(n.get("reliefValve"),dict) and n["reliefValve"].get("enabled"):
+                    raise ValueError("la misma brida no puede llevar tapa y válvula RV a la vez")
         rv = n.get("reliefValve")
         if rv is not None:
             if not isinstance(rv, dict) or not isinstance(rv.get("enabled", False), bool):
@@ -1234,7 +1246,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v73"]
+    datos = [normalizar(tag), config, "report-v74"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -1972,7 +1984,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v73"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v74"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2118,7 +2130,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v73"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v74"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
