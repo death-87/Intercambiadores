@@ -227,6 +227,10 @@
     <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">LARGOS</strong>
     <div class="input-group"><label>Shell: <output id="shell-length-value">4.28</output> m</label><input type="range" id="shell-length" min="0.50" max="7.00" step="0.025" value="4.275"></div>
     <div class="input-group" id="transition-length-control" style="display:none"><label>Transición: <output id="reducer-length-value">0.90</output> m</label><input type="range" id="reducer-length" min="0.20" max="2.00" step="0.05" value="0.90"></div>
+    <div class="input-group" id="eccentric-joints-control" hidden>
+      <label>Unión shell–transición:</label><select id="eccentric-shell-joint"><option value="welded">Soldada</option><option value="flanged">Bridas apernadas</option></select>
+      <label>Unión transición–channel:</label><select id="eccentric-channel-joint"><option value="flanged">Bridas apernadas</option><option value="welded">Soldada</option></select>
+    </div>
     <div class="input-group"><label>Channel: <output id="channel-length-value">1.20</output> m</label><input type="range" id="channel-length" min="0.20" max="2.00" step="0.05" value="1.20"></div>
     <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.80</output> m</label><input type="range" id="bonnet-length" min="0.20" max="2.00" step="0.05" value="0.80"></div>
   </div>
@@ -1411,10 +1415,13 @@
       const bonnetRadius = currentDimensions.bonnetDiameter / 2;
       const shellLeft = -currentDimensions.shellLength / 2;
       const shellRight = currentDimensions.shellLength / 2;
-      const reducerSmall = shellLeft - currentDimensions.reducerLength;
-      const channelBodyRight = reducerSmall - (2 * T_FLANGE + GASKET_T);
+      const shellJoint=currentDimensions.eccentricShellJoint||'welded';
+      const channelJoint=currentDimensions.eccentricChannelJoint||'flanged';
+      const reducerLarge=shellLeft-(shellJoint==='flanged'?2*T_FLANGE+GASKET_T:0);
+      const reducerSmall = reducerLarge - currentDimensions.reducerLength;
+      const channelBodyRight = reducerSmall - (channelJoint==='flanged'?2*T_FLANGE+GASKET_T:0);
       const channelBodyLeft = channelBodyRight - currentDimensions.channelLength;
-      return {shellLeft, shellRight, reducerSmall, channelBodyRight, channelBodyLeft,
+      return {shellLeft, shellRight, reducerLarge, reducerSmall, shellJoint, channelJoint, channelBodyRight, channelBodyLeft,
         bonnetTip: shellRight + currentDimensions.bonnetLength,
         channelY: -shellRadius + channelRadius, shellRadius, channelRadius, bonnetRadius};
     }
@@ -1448,11 +1455,21 @@
       clearModelB();
       const p = modelBLayout();
       cylinderX(modelB, 0, p.shellRadius, currentDimensions.shellLength, shellMat);
-      ringX(modelB, p.shellLeft, p.shellRadius, 0.007, weldMat);
+      if(p.shellJoint==='welded')ringX(modelB, p.shellLeft, p.shellRadius, 0.007, weldMat);
       ringX(modelB, p.shellRight, p.shellRadius, 0.007, weldMat);
 
       // Reductor excéntrico: fondo recto y parte superior diagonal.
-      modelB.add(eccentricReducer(p.reducerSmall, p.shellLeft, p.channelRadius, p.shellRadius));
+      modelB.add(eccentricReducer(p.reducerSmall, p.reducerLarge, p.channelRadius, p.shellRadius));
+
+      function jointFlanges(parent,right,radius,name) {
+        const joint=new THREE.Group();joint.name=name;parent.add(joint);
+        cylinderX(joint,right-T_FLANGE/2,radius*1.25,T_FLANGE,flangeMatBase);
+        cylinderX(joint,right-1.5*T_FLANGE-GASKET_T,radius*1.25,T_FLANGE,flangeMatBase);
+        const gasket=new THREE.Group();gasket.scale.set(1,radius/R,radius/R);joint.add(gasket);
+        spiralGasket(gasket,right-T_FLANGE-GASKET_T/2);
+        studCircle(joint,right-2*T_FLANGE-GASKET_T,right,16,radius*1.133);
+      }
+      if(p.shellJoint==='flanged')jointFlanges(modelB,p.shellLeft,p.shellRadius,'Unión apernada shell-transición');
 
       // Bonete mayor soldado: fondo elíptico integrado y sin brida.
       const bonnet = new THREE.Mesh(
@@ -1473,15 +1490,12 @@
       // Unión reductor-channel.
       const channelFlangeRadius = p.channelRadius * 1.25;
       const channelPitchRadius = p.channelRadius * 1.133;
-      cylinderX(channel, p.reducerSmall - T_FLANGE / 2, channelFlangeRadius, T_FLANGE, flangeMatBase);
-      cylinderX(channel, p.reducerSmall - 1.5 * T_FLANGE - GASKET_T, channelFlangeRadius, T_FLANGE, flangeMatBase);
-      const innerGasket = new THREE.Group();
       const gasketScale = p.channelRadius / R;
-      innerGasket.scale.set(1, gasketScale, gasketScale);
-      channel.add(innerGasket);
-      spiralGasket(innerGasket, p.reducerSmall - T_FLANGE - GASKET_T / 2);
-      studCircle(channel, p.reducerSmall - 2 * T_FLANGE - GASKET_T,
-        p.reducerSmall, 16, channelPitchRadius);
+      if(p.channelJoint==='flanged')jointFlanges(channel,p.reducerSmall,p.channelRadius,'Unión apernada transición-channel');
+      else {
+        const weld=new THREE.Group();weld.name='Unión soldada transición-channel';channel.add(weld);
+        ringX(weld,p.reducerSmall,p.channelRadius,.007,weldMat);
+      }
 
       // Tapa plana: brida exterior + junta + placa circular.
       const coverJoint = p.channelBodyLeft;
@@ -2129,6 +2143,8 @@
       const shared=Number(dimensions.hairpinFlangeSquareSizeMM ?? (dimensions.hairpinSpoolUpperSquareSizeMM||dimensions.hairpinSpoolLowerSquareSizeMM||0));
       currentDimensions.hairpinFlangeSquareSizeMM=shared>0?Math.max(25.4,Math.min(5000,shared)):0;
       currentDimensions.hairpinSpoolUpperSquareSizeMM=currentDimensions.hairpinSpoolLowerSquareSizeMM=currentDimensions.hairpinFlangeSquareSizeMM;
+      currentDimensions.eccentricShellJoint=dimensions.eccentricShellJoint==='flanged'?'flanged':'welded';
+      currentDimensions.eccentricChannelJoint=dimensions.eccentricChannelJoint==='welded'?'welded':'flanged';
       loadDualChannelDimensions(dimensions);
       updateDimensionControls();
       buildModelB();
@@ -2241,8 +2257,8 @@
         return {centerY: p.channelY, radius: p.channelRadius};
       }
       if (bodyPart === 'transition' || x < p.shellLeft) {
-        const radius = p.channelRadius + (x - p.reducerSmall) /
-          currentDimensions.reducerLength * (p.shellRadius - p.channelRadius);
+        const radius = p.channelRadius + Math.max(0,Math.min(1,(x - p.reducerSmall) /
+          currentDimensions.reducerLength)) * (p.shellRadius - p.channelRadius);
         return {centerY: -p.shellRadius + radius, radius};
       }
       if (bodyPart === 'bonnet' || x > p.shellRight) {
@@ -2546,6 +2562,9 @@
           !(currentModel === 'E' && ring.userData.modelASide < 0);
       });
       document.getElementById('transition-length-control').style.display = currentModel === 'B' ? '' : 'none';
+      document.getElementById('eccentric-joints-control').hidden=currentModel!=='B';
+      document.getElementById('eccentric-shell-joint').value=currentDimensions.eccentricShellJoint||'welded';
+      document.getElementById('eccentric-channel-joint').value=currentDimensions.eccentricChannelJoint||'flanged';
       document.getElementById('model-channel-note').style.display = ['A', 'C'].includes(currentModel) ? 'block' : 'none';
       document.getElementById('model-c-note').style.display = currentModel === 'C' ? 'block' : 'none';
       document.getElementById('model-d-note').style.display = currentModel === 'D' ? 'block' : 'none';
@@ -2576,8 +2595,8 @@
         : {min: -currentDimensions.shellLength / 2 + 0.15,
           max: currentDimensions.shellLength / 2 - 0.15, center: 0};
       BODY_BOUNDS.transition = currentModel === 'B'
-        ? {min: p.reducerSmall + 0.05, max: p.shellLeft - 0.05,
-          center: (p.reducerSmall + p.shellLeft) / 2}
+        ? {min: p.reducerSmall + 0.05, max: p.reducerLarge - 0.05,
+          center: (p.reducerSmall + p.reducerLarge) / 2}
         : {...BODY_BOUNDS.shell};
       const leftHead = ['F','J'].includes(currentModel) ? leftBoltedBonnetGroup : leftBonnetGroup;
       BODY_BOUNDS.bonnetLeft = {
@@ -4063,6 +4082,9 @@
       renderer.render(scene, camera);
     }
     animate();
+    for(const [id,field] of [['eccentric-shell-joint','eccentricShellJoint'],['eccentric-channel-joint','eccentricChannelJoint']])document.getElementById(id).addEventListener('change',event=>{
+      if(readOnly)return;currentDimensions[field]=event.target.value;buildModelB();applyModel(currentModel,true);syncStateToParent();
+    });
     document.getElementById('equipment-model').addEventListener('change', event => {
       applyModel(event.target.value, true);
       faceNearSide();
