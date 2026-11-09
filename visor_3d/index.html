@@ -323,7 +323,7 @@
     <div id="edit-cover-controls" class="input-group">
       <label><input id="edit-cover-enabled" type="checkbox"> Tapa sólida apernada sobre esta brida</label>
       <div id="edit-cover-options" hidden>
-<label>Tipo de tapa:</label><select id="edit-cover-davit"><option value="no">Sólida con pernos · sin pescante</option><option value="yes" selected>Con pescante y manillas</option></select>
+<label>Tipo de tapa:</label><select id="edit-cover-davit"><option value="no" selected>Flange tapa sólido · espárragos y tuercas por ambos lados</option><option value="yes">Con pescante y manillas</option></select>
         <label>Giro del pescante alrededor de la brida (°):</label><input id="edit-cover-rotation" type="number" min="0" max="359" step="1" value="0">
         <small>Tapa sólida sin TAG propio. Adopta la forma circular, cuadrada o rectangular y los pernos de esta brida. El pescante es opcional.</small>
       </div>
@@ -518,7 +518,7 @@
     <div id="new-cover-controls" class="input-group">
       <label><input id="new-cover-enabled" type="checkbox"> Tapa sólida apernada sobre esta brida</label>
       <div id="new-cover-options" hidden>
-<label>Tipo de tapa:</label><select id="new-cover-davit"><option value="no">Sólida con pernos · sin pescante</option><option value="yes" selected>Con pescante y manillas</option></select>
+<label>Tipo de tapa:</label><select id="new-cover-davit"><option value="no" selected>Flange tapa sólido · espárragos y tuercas por ambos lados</option><option value="yes">Con pescante y manillas</option></select>
         <label>Giro del pescante alrededor de la brida (°):</label><input id="new-cover-rotation" type="number" min="0" max="359" step="1" value="0">
         <small>Tapa sólida sin TAG propio. Adopta la forma circular, cuadrada o rectangular y los pernos de esta brida. El pescante es opcional.</small>
       </div>
@@ -822,7 +822,7 @@
         if(neck){const outline=flangeOutline(0,'rectangular',settings.innerW+.012,settings.innerH+.012);outline.holes.push(new THREE.Path(flangeOutline(0,'rectangular',settings.innerW,settings.innerH).getPoints()));const depth=neck.geometry.parameters.options.depth;neck.geometry.dispose();neck.geometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:false});}
         const bottom=nozzle.children.find(c=>c.name==='Abertura rectangular');if(bottom){bottom.geometry.dispose();bottom.geometry=new THREE.PlaneGeometry(settings.innerW,settings.innerH);}
         const points=flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH);
-        nozzle.children.filter(c=>c.name==='Perno brida rectangular').forEach((bolt,i)=>{bolt.position.x=points[i].x;bolt.position.z=points[i].y;const nut=nozzle.children[nozzle.children.indexOf(bolt)+1];if(nut){nut.position.x=points[i].x;nut.position.z=points[i].y;}});
+        nozzle.children.filter(c=>c.name==='Perno brida rectangular').forEach((bolt,i)=>{bolt.position.x=points[i].x;bolt.position.z=points[i].y;for(const offset of [1,2]){const nut=nozzle.children[nozzle.children.indexOf(bolt)+offset];if(nut?.name==='Tuerca brida rectangular'){nut.position.x=points[i].x;nut.position.z=points[i].y;}}});
         if(nozzle.userData.plugNS)nozzle.userData.plugNS.position.z=settings.innerH/2+.006;
         if(nozzle.userData.plugFS)nozzle.userData.plugFS.position.z=-settings.innerH/2-.006;
       }
@@ -2929,8 +2929,8 @@
       const plate=new THREE.Mesh(nozzlePlateGeometry(data,0),flangeMaterial);plate.name='Brida rectangular';plate.rotation.x=-Math.PI/2;plate.position.y=length;plate.visible=data.outletFlange;group.add(plate);
       group.userData.flangePlate=plate;group.userData.flangeBore=0;group.userData.flangePlateKey=JSON.stringify(s);
       if(data.outletFlange&&!data.davitCover.enabled) for(const p of flangeBoltPoints(s.count,s.K,s.form,s.pitchW,s.pitchH)) {
-        const bolt=new THREE.Mesh(new THREE.CylinderGeometry(d.L*.28,d.L*.28,d.B+.02,12),flangeMaterial);bolt.name='Perno brida rectangular';bolt.position.set(p.x,length+d.B/2,p.y);group.add(bolt);
-        const nut=new THREE.Mesh(new THREE.CylinderGeometry(d.L*.46,d.L*.46,.015,6),flangeMaterial);nut.position.set(p.x,length+d.B+.006,p.y);group.add(nut);
+        const bolt=new THREE.Mesh(new THREE.CylinderGeometry(d.L*.28,d.L*.28,d.B+.05,12),studMat);bolt.name='Perno brida rectangular';bolt.position.set(p.x,length+d.B/2,p.y);group.add(bolt);
+        for(const y of [length-.009,length+d.B+.009]) {const nut=new THREE.Mesh(new THREE.CylinderGeometry(d.L*.46,d.L*.46,.015,6),nutMat);nut.name='Tuerca brida rectangular';nut.position.set(p.x,y,p.y);group.add(nut);}
       }
       const bottom=new THREE.Mesh(new THREE.PlaneGeometry(s.innerW,s.innerH),holeMat);bottom.name='Abertura rectangular';bottom.rotation.x=-Math.PI/2;bottom.position.y=.002;group.add(bottom);
       if(data.inletFlange) {
@@ -2963,8 +2963,8 @@
     }
     function buildDavitCover(data,material,flangeMaterial) {
       const cover=normalizeDavitCover(data.davitCover),dim=flangeDimensions(data.diaIndex,data.rating),settings=nozzleFlangeSettings(data);
-      const group=new THREE.Group();group.name='Tapa ciega con pescante';
-      group.userData={diaIndex:data.diaIndex,boltCount:settings.count,handles:2};
+      const group=new THREE.Group();group.name=cover.withDavit?'Tapa ciega con pescante':'Flange tapa sólido apernado';
+      group.userData={diaIndex:data.diaIndex,boltCount:settings.count,handles:cover.withDavit?2:0};
       const gap=.006,thickness=dim.B,D=settings.D,pipeRadius=pipeOutsideDiameter(data.pipeDiaIndex??data.diaIndex)/2;
       function mesh(geometry,name,parent=group,mat=material){const part=new THREE.Mesh(geometry,mat);part.name=name;parent.add(part);return part;}
       const outline=flangeOutline(D,settings.form,settings.W,settings.H);
@@ -2973,8 +2973,8 @@
       lid.rotation.x=-Math.PI/2;lid.position.y=gap;
       for(const point of flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH)) {
         const length=2*dim.B+.035;
-        const stud=mesh(new THREE.CylinderGeometry(Math.max(.004,dim.L*.28),Math.max(.004,dim.L*.28),length,12),'Espárrago tapa',group,flangeMaterial);stud.position.set(point.x,gap/2,point.y);
-        for(const y of [-dim.B-.009,gap+thickness+.009]) {const nut=mesh(new THREE.CylinderGeometry(dim.L*.46,dim.L*.46,.015,6),'Tuerca tapa',group,flangeMaterial);nut.position.set(point.x,y,point.y);}
+        const stud=mesh(new THREE.CylinderGeometry(Math.max(.004,dim.L*.28),Math.max(.004,dim.L*.28),length,12),'Espárrago tapa',group,studMat);stud.position.set(point.x,gap/2,point.y);
+        for(const y of [-dim.B-.009,gap+thickness+.009]) {const nut=mesh(new THREE.CylinderGeometry(dim.L*.46,dim.L*.46,.015,6),'Tuerca tapa',group,nutMat);nut.position.set(point.x,y,point.y);}
       }
       if(!cover.withDavit)return group;
       const top=gap+thickness,wire=Math.max(.004,D*.018),handleRise=Math.max(.025,D*.12);

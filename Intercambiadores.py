@@ -1130,11 +1130,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     if estado_roscas == "Sin conexiones roscadas" or sin_roscas_declarado(registro) or (cantidad == 0 and conexiones):
         conflicto = estado_roscas == "Revisar discrepancia"
         destacado_style = ParagraphStyle("hx_sin_roscas", parent=body, fontName="Helvetica-Bold",
-            fontSize=13, leading=17, textColor=navy)
+            fontSize=11, leading=14, textColor=navy)
         mensaje = "REVISAR · DISCREPANCIA EN CONEXIONES ROSCADAS" if conflicto else "EQUIPO SIN CONEXIONES ROSCADAS"
         detalle = ("El comentario o el total cero no coinciden con las conexiones registradas. Revisar antes de dar por verificada la ausencia de roscas."
-            if conflicto else None
-            if sin_roscas_declarado(registro) else "Cantidad registrada de conexiones roscadas: 0.")
+            if conflicto else None)
         filas_destacado = [[p(mensaje, destacado_style)]]
         if detalle:
             filas_destacado.append([p(detalle, body)])
@@ -1143,9 +1142,9 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF2CC") if conflicto else pale),
             ("BOX", (0, 0), (-1, -1), 1.5, colors.HexColor("#C58A18") if conflicto else teal),
             ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-            ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ]))
-        elementos += [KeepTogether([destacado, Spacer(1, 5 * mm)])]
+        elementos += [KeepTogether([destacado, Spacer(1, 3 * mm)])]
     omitir_registro_vacio = not conexiones and estado_roscas != "Revisar discrepancia" and (estado_roscas == "Sin conexiones roscadas" or sin_roscas_declarado(registro))
     total = cantidad if cantidad is not None else "No disponible"
     total_label_style = ParagraphStyle("hx_total_label", parent=body,
@@ -1270,7 +1269,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v78"]
+    datos = [normalizar(tag), config, "report-v79"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -2008,7 +2007,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v78"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v79"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2154,7 +2153,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v78"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v79"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
