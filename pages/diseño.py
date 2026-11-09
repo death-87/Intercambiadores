@@ -112,19 +112,40 @@ def resolver_tag_guardado(tag, db):
     return coincidencias[0] if coincidencias else solicitado
 
 
-def guardar_db(tag, data):
-    response = requests.post(WEBAPP_URL, json={
-        "tag": tag, "datos": json.dumps(data, ensure_ascii=False)
-    }, timeout=30)
+def tag_origen_guardado(selected, db):
+    origen = db.get(selected, {})
+    apilado = origen.get("stackedEquipment", {})
+    superior = str(apilado.get("data", {}).get("nameplate", "")).strip()
+    if superior and not apilado.get("sameEquipment") and normalizar_tag(superior) == normalizar_tag(selected):
+        return tag_registro(origen)
+    return selected
+
+
+def guardar_db(tag, data, original_tag=None):
+    payload = {"tag":tag, "datos":json.dumps(data, ensure_ascii=False)}
+    renombrar = original_tag and normalizar_tag(original_tag) != normalizar_tag(tag)
+    if renombrar:
+        payload["original_tag"] = original_tag
+    response = requests.post(WEBAPP_URL, json=payload, timeout=30)
     response.raise_for_status()
-    # Un HTTP 200 no demuestra que Apps Script haya escrito la fila.
+    try:
+        confirmacion = response.json()
+    except (ValueError, AttributeError):
+        confirmacion = None  # Compatibilidad con el servicio anterior.
+    if isinstance(confirmacion, dict) and confirmacion.get("ok") is False:
+        raise ValueError(str(confirmacion.get("error") or "El servicio rechazó el guardado."))
+    guardado = False
     for attempt in range(3):
         fresh = cargar_db()
-        if fresh.get(tag) == data:
+        guardado = fresh.get(tag) == data
+        anterior_presente = renombrar and any(normalizar_tag(k) == normalizar_tag(original_tag) for k in fresh)
+        if guardado and not anterior_presente:
             return fresh
         if attempt < 2:
             time.sleep(1)
-    raise ValueError("No se pudo confirmar el contenido en Sheets. La escritura puede haberse realizado; revisa la hoja antes de reintentar.")
+    if guardado and renombrar:
+        raise ValueError(f"'{tag}' sí quedó guardado, pero '{original_tag}' sigue en la hoja. Actualiza Apps Script con el soporte de renombrado y vuelve a guardar; el borrador se conserva.")
+    raise ValueError("No se pudo confirmar el contenido en Sheets. El borrador se conserva; descarga su respaldo antes de cerrar.")
 
 
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
@@ -235,7 +256,7 @@ if selected != NEW:
 if selected == NEW and ss.get("ex_template_source"):
     st.info(f"Plantilla copiada desde '{ss.ex_template_source}'. Escribe el TAG de destino: si ya existe, su diseño se reemplazará; si no existe, se creará un registro nuevo.")
 else:
-    st.caption("Edita el TAG y guarda desde el panel del visor. Cambiar el TAG guarda bajo ese nombre; no elimina la fila anterior.")
+    st.caption("Edita el TAG y guarda desde el panel del visor. Al renombrar, se verifica el nuevo registro antes de retirar el TAG anterior. Crear usando este formato conserva el equipo original.")
 viewer_path = Path(__file__).resolve().parent.parent / "visor_3d"
 if not (viewer_path / "index.html").is_file():
     st.error(f"No se encontró {viewer_path / 'index.html'}")
@@ -281,7 +302,8 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                 else:
                     data["nameplate"] = tag
                 with st.spinner("Guardando y verificando en Sheets..."):
-                    ss.ex_db = guardar_db(tag, data)
+                    original_tag = tag_origen_guardado(selected, ss.ex_db) if selected != NEW else None
+                    ss.ex_db = guardar_db(tag, data, original_tag=original_tag)
                 ss.ex_drafts[tag] = deepcopy(data)
                 upper_tag = str(data.get("stackedEquipment", {}).get("data", {}).get("nameplate", "")).strip()
                 ss.ex_select_pending = upper_tag if not data.get("stackedEquipment", {}).get("sameEquipment") and upper_tag and normalizar_tag(selected) == normalizar_tag(upper_tag) else tag
@@ -295,3 +317,22 @@ if isinstance(result, dict) and result.get("event_id") != ss.ex_seen.get(ss.ex_g
                 message = f"❌ Guardado no confirmado: {exc}"
             ss.ex_ack = {"event_id": event_id, "message": message}
             st.rerun()
+
+# También queda disponible si el visor no consigue terminar un guardado.
+with st.expander("Respaldo y recuperación del avance"):
+    borrador = ss.ex_drafts.get(selected, plantilla_blanco)
+    nombre_respaldo = (tag_registro(borrador) or "equipo").replace("/", "_")
+    st.download_button("Descargar respaldo del borrador recibido", data=json.dumps(borrador, ensure_ascii=False, indent=2),
+                       file_name="Respaldo_"+nombre_respaldo+".json", mime="application/json", key="descargar_borrador_recibido")
+    archivo_respaldo = st.file_uploader("Recuperar un respaldo JSON", type=["json"], key="recuperar_borrador_json")
+    if archivo_respaldo is not None and st.button("Cargar este respaldo en el editor", key="cargar_borrador_json"):
+        try:
+            recuperado = json.loads(archivo_respaldo.getvalue())
+            if not isinstance(recuperado, dict) or not isinstance(recuperado.get("nozzles"), list):
+                raise ValueError("El archivo no contiene un diseño de intercambiador válido.")
+            ss.ex_drafts[selected] = deepcopy(recuperado)
+            ss.ex_generation = uuid.uuid4().hex
+            ss.ex_ack = None
+            st.rerun()
+        except (ValueError, TypeError) as exc:
+            st.error(f"No se pudo recuperar el respaldo: {exc}")
