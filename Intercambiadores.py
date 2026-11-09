@@ -316,6 +316,9 @@ def validar_diseno(data, _nivel=0):
         low, high = limits[field]
         if not low <= value <= high:
             raise ValueError(f"{field} fuera de rango")
+    for campo in ("eccentricShellJoint", "eccentricChannelJoint"):
+        if campo in dimensions and dimensions[campo] not in {"welded", "flanged"}:
+            raise ValueError("unión de transición excéntrica inválida")
     dual_index = dimensions.get("dualLowerDiameterIndex", 15)
     if type(dual_index) is not int or not 0 <= dual_index < len(DIAMETROS) or DIAMETROS_PULGADAS[dual_index] < 1:
         raise ValueError("medida del cuerpo inferior inválida")
@@ -1231,7 +1234,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v72"]
+    datos = [normalizar(tag), config, "report-v73"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -1969,7 +1972,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v72"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v73"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2115,7 +2118,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v72"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v73"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
