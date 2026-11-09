@@ -237,6 +237,7 @@
 </div>
 <div class="input-group" id="channel-cover-control" hidden>
 <label>Cierre del channel:</label><select id="channel-cover-style"><option value="bolted">Tapa apernada · desmontable</option><option value="welded">Cabezal soldado · sin tapa desmontable</option></select>
+<label>Forma del cierre soldado:</label><select id="channel-head-shape"><option value="rounded">Redondeado</option><option value="flat">Plano · sin pernos</option></select>
 </div>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
@@ -312,7 +313,10 @@
       <div id="edit-rect-options" hidden>
         <label>Lado mayor libre (mm):</label><input id="edit-rect-width" type="number" min="25.4" max="3000" step="1" value="400">
         <label>Lado menor libre (mm):</label><input id="edit-rect-height" type="number" min="25.4" max="3000" step="1" value="250">
-        <label>Orientación del rectángulo:</label><select id="edit-rect-orientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select>
+        <label>Lado exterior mayor de brida (mm, 0 = automático):</label><input id="edit-rect-outer-width" type="number" min="0" max="5000" value="0">
+<label>Lado exterior menor de brida (mm, 0 = automático):</label><input id="edit-rect-outer-height" type="number" min="0" max="5000" value="0">
+<small>La brida puede superar el diámetro del channel. El cuello se limita automáticamente para caber dentro de su diámetro, incluyendo su pared.</small>
+<label>Orientación del rectángulo:</label><select id="edit-rect-orientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select>
         <small>El cuello y la abertura son rectangulares. La cantidad de pernos se ajusta en «Pernos / agujeros».</small>
       </div>
     </div>
@@ -503,7 +507,10 @@
       <div id="new-rect-options" hidden>
         <label>Lado mayor libre (mm):</label><input id="new-rect-width" type="number" min="25.4" max="3000" step="1" value="400">
         <label>Lado menor libre (mm):</label><input id="new-rect-height" type="number" min="25.4" max="3000" step="1" value="250">
-        <label>Orientación del rectángulo:</label><select id="new-rect-orientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select>
+        <label>Lado exterior mayor de brida (mm, 0 = automático):</label><input id="new-rect-outer-width" type="number" min="0" max="5000" value="0">
+<label>Lado exterior menor de brida (mm, 0 = automático):</label><input id="new-rect-outer-height" type="number" min="0" max="5000" value="0">
+<small>La brida puede superar el diámetro del channel. El cuello se limita automáticamente para caber dentro de su diámetro, incluyendo su pared.</small>
+<label>Orientación del rectángulo:</label><select id="new-rect-orientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select>
         <small>El cuello y la abertura son rectangulares. La cantidad de pernos se ajusta en «Pernos / agujeros».</small>
       </div>
     </div>
@@ -767,8 +774,13 @@
     function nozzleFlangeSettings(data) {
       if(data.rectangular?.enabled) {
         const r=normalizeRectangular(data.rectangular),vertical=r.orientation==='vertical';
-        const innerW=(vertical?r.heightMM:r.widthMM)/1000,innerH=(vertical?r.widthMM:r.heightMM)/1000;
-        const margin=Math.max(.035,flangeDimensions(data.diaIndex,data.rating).L*1.8),W=innerW+2*margin+.012,H=innerH+2*margin+.012;
+        let innerW=(vertical?r.heightMM:r.widthMM)/1000,innerH=(vertical?r.widthMM:r.heightMM)/1000;
+        if(['channel','channelRight'].includes(data.bodyPart)) {
+          const diameter=currentDimensions.channelDiameter||1.098;
+          const diagonal=Math.hypot(innerW+.012,innerH+.012);
+          if(diagonal>diameter){const scale=diameter/diagonal;innerW=(innerW+.012)*scale-.012;innerH=(innerH+.012)*scale-.012;}
+        }
+        const margin=Math.max(.035,flangeDimensions(data.diaIndex,data.rating).L*1.8),W=Math.max(innerW+2*margin+.012,(vertical?r.outerHeightMM:r.outerWidthMM)/1000),H=Math.max(innerH+2*margin+.012,(vertical?r.outerWidthMM:r.outerHeightMM)/1000);
         return {form:'rectangular',D:Math.max(W,H),K:Math.max(W,H)-margin,count:data.flangeBoltCount||12,W,H,innerW,innerH,pitchW:W-margin,pitchH:H-margin};
       }
       let form=data.flangeShape||'auto',count=data.flangeBoltCount||0,size=data.flangeSquareSizeMM||0;
@@ -803,6 +815,16 @@
       if(nozzle.userData.flangePlateKey===key) return;
       plate.geometry.dispose();plate.geometry=nozzlePlateGeometry(nozzle.userData,nozzle.userData.flangeBore);
       nozzle.userData.flangePlateKey=key;
+      if(settings.form==='rectangular') {
+        const neck=nozzle.children.find(c=>c.name==='Cuello rectangular hueco');
+        if(neck){const outline=flangeOutline(0,'rectangular',settings.innerW+.012,settings.innerH+.012);outline.holes.push(new THREE.Path(flangeOutline(0,'rectangular',settings.innerW,settings.innerH).getPoints()));const depth=neck.geometry.parameters.options.depth;neck.geometry.dispose();neck.geometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:false});}
+        const bottom=nozzle.children.find(c=>c.name==='Abertura rectangular');if(bottom){bottom.geometry.dispose();bottom.geometry=new THREE.PlaneGeometry(settings.innerW,settings.innerH);}
+        const points=flangeBoltPoints(settings.count,settings.K,settings.form,settings.pitchW,settings.pitchH);
+        nozzle.children.filter(c=>c.name==='Perno brida rectangular').forEach((bolt,i)=>{bolt.position.x=points[i].x;bolt.position.z=points[i].y;const nut=nozzle.children[nozzle.children.indexOf(bolt)+1];if(nut){nut.position.x=points[i].x;nut.position.z=points[i].y;}});
+        if(nozzle.userData.plugNS)nozzle.userData.plugNS.position.z=settings.innerH/2+.006;
+        if(nozzle.userData.plugFS)nozzle.userData.plugFS.position.z=-settings.innerH/2-.006;
+      }
+
       const oldCover=nozzle.userData.davitCoverGroup;
       if(oldCover&&nozzle.userData.davitCover?.enabled) {
         const parent=oldCover.parent,materials=nozzle.userData.materials;
@@ -1557,8 +1579,8 @@
       }
 
       if(currentDimensions.channelCoverStyle==='welded') {
-        const head=new THREE.Mesh(new THREE.SphereGeometry(p.channelRadius,64,32,0,Math.PI*2,0,Math.PI/2),shellMat);
-        head.name='Cabezal soldado del channel';head.rotation.z=Math.PI/2;head.scale.y=.45;head.position.x=p.channelBodyLeft;channel.add(head);
+        const head=new THREE.Mesh(weldedChannelGeometry(p.channelRadius),shellMat);
+        head.name='Cabezal soldado del channel';head.rotation.z=Math.PI/2;head.position.x=p.channelBodyLeft;channel.add(head);
         ringX(channel,p.channelBodyLeft,p.channelRadius,.007,weldMat);
       } else {
         // Tapa plana: brida exterior + junta + placa circular.
@@ -1865,7 +1887,7 @@
       const half=currentDimensions.shellLength/2,r=currentDimensions.channelDiameter/2;
       const shellRadius=currentDimensions.shellDiameter/2;
       const transitionLength=Math.abs(shellRadius-r)>1e-6?Math.min(.35,Math.max(.10,Math.abs(shellRadius-r)*.8)):0;
-      return {coverStyle:currentDimensions.channelCoverStyle||'bolted',half:half+transitionLength,shellHalf:half,transitionLength,r,jointBolts:currentDimensions.dualJointBolts??24,rounded:currentModel==='I',
+      return {headShape:currentDimensions.channelHeadShape||'rounded',coverStyle:currentDimensions.channelCoverStyle||'bolted',half:half+transitionLength,shellHalf:half,transitionLength,r,jointBolts:currentDimensions.dualJointBolts??24,rounded:currentModel==='I',
         uLength:Math.min(currentDimensions.shellLength-.1,currentDimensions.dualULength??currentDimensions.shellLength*.8),
         uRadius:Math.min(currentDimensions.shellDiameter*.95,(currentDimensions.dualUDiameterMM??currentDimensions.shellDiameter*700)/1000)/2,
         uDepth:currentDimensions.dualUDepth??.5,uSupportWidth:currentDimensions.dualUSupportWidth??.20,
@@ -1990,8 +2012,8 @@
         }
 
         if(p.coverStyle==='welded') {
-          const head=mesh(new THREE.SphereGeometry(p.r,64,32,0,Math.PI*2,0,Math.PI/2),shellMat,'Cabezal soldado del channel '+end);
-          head.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(sign,0,0));head.scale.y=.45;head.position.x=face;
+          const head=mesh(weldedChannelGeometry(p.r),shellMat,'Cabezal soldado del channel '+end);
+          head.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(sign,0,0));head.position.x=face;
         } else {
           const ring=new THREE.Shape();ring.absarc(0,0,p.r*1.22,0,Math.PI*2,false);
           const bore=new THREE.Path();bore.absarc(0,0,p.r*.96,0,Math.PI*2,true);ring.holes.push(bore);
@@ -2217,6 +2239,7 @@
       currentDimensions.eccentricShellJoint=dimensions.eccentricShellJoint==='flanged'?'flanged':'welded';
       currentDimensions.eccentricChannelJoint=dimensions.eccentricChannelJoint==='welded'?'welded':'flanged';
       currentDimensions.channelCoverStyle=dimensions.channelCoverStyle==='welded'?'welded':'bolted';
+      currentDimensions.channelHeadShape=dimensions.channelHeadShape==='flat'?'flat':'rounded';
       loadDualChannelDimensions(dimensions);
       updateDimensionControls();
       buildModelB();
@@ -2241,8 +2264,8 @@
       innerFlange.position.x = -0.06;
       channelGroup.add(innerFlange);
       if(currentDimensions.channelCoverStyle==='welded') {
-        const head=new THREE.Mesh(new THREE.SphereGeometry(R,64,32,0,Math.PI*2,0,Math.PI/2),shellMat);
-        head.name='Cabezal soldado del channel';head.rotation.z=Math.PI/2;head.scale.y=.45;head.position.x=bodyLeft;channelGroup.add(head);
+        const head=new THREE.Mesh(weldedChannelGeometry(R),shellMat);
+        head.name='Cabezal soldado del channel';head.rotation.z=Math.PI/2;head.position.x=bodyLeft;channelGroup.add(head);
         ringX(channelGroup,bodyLeft,R,.009,weldMat);
       } else {
         const outerFlangeX = -(length + 0.18);
@@ -2459,7 +2482,7 @@
     function isAxial(pos) { return pos === 'axialMinus' || pos === 'axialPlus'; }
     function axialFaceX(bodyPart, positive) {
       if(['G','I'].includes(currentModel)&&['channel','channelRight'].includes(bodyPart)) {
-        const p=dualChannelLayout();const extra=p.coverStyle==='welded'?p.r*.45:0;return bodyPart==='channel'?(positive?-p.half:-p.half-p.length-extra):(positive?p.half+p.length+extra:p.half);
+        const p=dualChannelLayout();const extra=p.coverStyle==='welded'?weldedChannelDepth(p.r):0;return bodyPart==='channel'?(positive?-p.half:-p.half-p.length-extra):(positive?p.half+p.length+extra:p.half);
       }
       const bounds = BODY_BOUNDS[bodyPart];
       if (currentModel === 'H') {
@@ -2468,8 +2491,8 @@
         return positive?p.spoolEnd:p.left;
       }
       if (bodyPart === 'channel' && !positive) {
-        return currentModel === 'B' ? modelBLayout().channelBodyLeft - (currentDimensions.channelCoverStyle==='welded'?modelBLayout().channelRadius*.45:.10)
-          : channelGroup.position.x - currentDimensions.channelLength - (currentDimensions.channelCoverStyle==='welded'?.12+currentDimensions.channelDiameter*.225:.34+GASKET_T);
+        return currentModel === 'B' ? modelBLayout().channelBodyLeft - (currentDimensions.channelCoverStyle==='welded'?weldedChannelDepth(modelBLayout().channelRadius):.10)
+          : channelGroup.position.x - currentDimensions.channelLength - (currentDimensions.channelCoverStyle==='welded'?.12+weldedChannelDepth(currentDimensions.channelDiameter/2):.34+GASKET_T);
       }
       if (bodyPart === 'shell') return (positive ? 1 : -1) * currentDimensions.shellLength / 2;
       return positive ? bounds.max + 0.05 : bounds.min - 0.05;
@@ -2609,6 +2632,8 @@
       document.getElementById('equipment-model').value = currentModel;
       document.getElementById('channel-cover-control').hidden=!['A','B','C','G','I'].includes(currentModel);
       document.getElementById('channel-cover-style').value=currentDimensions.channelCoverStyle||'bolted';
+      document.getElementById('channel-head-shape').value=currentDimensions.channelHeadShape||'rounded';
+      document.getElementById('channel-head-shape').disabled=readOnly||currentDimensions.channelCoverStyle!=='welded';
       heatExchanger.rotation.z=currentModel==='J'?Math.PI/2:0;
       modelAShellGroup.visible = !['B','H'].includes(currentModel);
       channelGroup.visible = currentModel === 'A' || currentModel === 'C';
@@ -2866,19 +2891,24 @@
       return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
     }
 
+    function weldedChannelGeometry(radius) {
+      if(currentDimensions.channelHeadShape==='flat')return new THREE.CylinderGeometry(radius,radius,.02,96).translate(0,.01,0);
+      return new THREE.SphereGeometry(radius,64,32,0,Math.PI*2,0,Math.PI/2).scale(1,.45,1);
+    }
+    function weldedChannelDepth(radius){return currentDimensions.channelHeadShape==='flat'?.02:radius*.45;}
     function normalizeRectangular(value={}) {
       value=value&&typeof value==='object'?value:{};
       const a=Math.max(25.4,Math.min(3000,Number(value.widthMM)||400)),b=Math.max(25.4,Math.min(3000,Number(value.heightMM)||250));
-      return {enabled:value.enabled===true,widthMM:Math.max(a,b),heightMM:Math.min(a,b),orientation:value.orientation==='vertical'?'vertical':'horizontal'};
+      return {enabled:value.enabled===true,widthMM:Math.max(a,b),heightMM:Math.min(a,b),orientation:value.orientation==='vertical'?'vertical':'horizontal',outerWidthMM:Math.max(0,Math.min(5000,Number(value.outerWidthMM)||0)),outerHeightMM:Math.max(0,Math.min(5000,Number(value.outerHeightMM)||0))};
     }
     function rectangularFromControls(prefix) {
-      return normalizeRectangular({enabled:document.getElementById(prefix+'-rect-enabled').checked,widthMM:Number(document.getElementById(prefix+'-rect-width').value),heightMM:Number(document.getElementById(prefix+'-rect-height').value),orientation:document.getElementById(prefix+'-rect-orientation').value});
+      return normalizeRectangular({enabled:document.getElementById(prefix+'-rect-enabled').checked,widthMM:Number(document.getElementById(prefix+'-rect-width').value),heightMM:Number(document.getElementById(prefix+'-rect-height').value),orientation:document.getElementById(prefix+'-rect-orientation').value,outerWidthMM:Number(document.getElementById(prefix+'-rect-outer-width').value),outerHeightMM:Number(document.getElementById(prefix+'-rect-outer-height').value)});
     }
     function updateRectangularControls(prefix,type,config=null) {
       document.getElementById(prefix+'-rect-controls').hidden=type!=='flanged';
       if(config) {
         const r=normalizeRectangular(config);document.getElementById(prefix+'-rect-enabled').checked=r.enabled;
-        for(const [id,value] of [['width',r.widthMM],['height',r.heightMM],['orientation',r.orientation]])document.getElementById(prefix+'-rect-'+id).value=value;
+        for(const [id,value] of [['width',r.widthMM],['height',r.heightMM],['orientation',r.orientation],['outer-width',r.outerWidthMM],['outer-height',r.outerHeightMM]])document.getElementById(prefix+'-rect-'+id).value=value;
       }
       const on=type==='flanged'&&document.getElementById(prefix+'-rect-enabled').checked;
       document.getElementById(prefix+'-rect-options').hidden=!on;
@@ -3778,7 +3808,7 @@
       updateDavitCoverControls(prefix,type);updateReliefValveControls(prefix,type);
       if(prefix==='edit')rebuildSelectedNozzle({davitCover:davitCoverFromControls(prefix),reliefValve:reliefValveFromControls(prefix),outletFlange:true});
     });
-    for(const prefix of ['edit','new'])for(const field of ['enabled','width','height','orientation'])document.getElementById(prefix+'-rect-'+field).addEventListener('change',()=>{
+    for(const prefix of ['edit','new'])for(const field of ['enabled','width','height','orientation','outer-width','outer-height'])document.getElementById(prefix+'-rect-'+field).addEventListener('change',()=>{
       const type=document.getElementById(prefix+'-nz-type').value;
       updateRectangularControls(prefix,type);updateReliefValveControls(prefix,type);
       if(prefix==='edit')rebuildSelectedNozzle({rectangular:rectangularFromControls(prefix),reliefValve:reliefValveFromControls(prefix),elbow90:false});
@@ -4300,6 +4330,7 @@
     for(const [id,field] of [['eccentric-shell-joint','eccentricShellJoint'],['eccentric-channel-joint','eccentricChannelJoint']])document.getElementById(id).addEventListener('change',event=>{
       if(readOnly)return;currentDimensions[field]=event.target.value;buildModelB();applyModel(currentModel,true);syncStateToParent();
     });
+    document.getElementById('channel-head-shape').addEventListener('change',event=>{if(readOnly)return;currentDimensions.channelHeadShape=event.target.value;rebuildModelAChannel();buildModelB();applyModel(currentModel,true);syncStateToParent();});
     document.getElementById('channel-cover-style').addEventListener('change',event=>{
       if(readOnly)return;currentDimensions.channelCoverStyle=event.target.value;
       rebuildModelAChannel();buildModelB();applyModel(currentModel,true);syncStateToParent();
