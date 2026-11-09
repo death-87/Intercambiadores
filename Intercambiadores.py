@@ -434,6 +434,8 @@ def validar_diseno(data, _nivel=0):
         if tapa is not None:
             if not isinstance(tapa, dict) or not isinstance(tapa.get("enabled",False),bool):
                 raise ValueError("configuración de tapa pescante inválida")
+            if not isinstance(tapa.get("withDavit",True),bool):
+                raise ValueError("opción de pescante inválida")
             giro = tapa.get("rotation",0)
             if type(giro) not in (int,float) or not math.isfinite(giro) or not 0 <= giro <= 359:
                 raise ValueError("giro de tapa pescante fuera de rango")
@@ -1144,6 +1146,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ]))
         elementos += [KeepTogether([destacado, Spacer(1, 5 * mm)])]
+    omitir_registro_vacio = not conexiones and estado_roscas != "Revisar discrepancia" and (estado_roscas == "Sin conexiones roscadas" or sin_roscas_declarado(registro))
     total = cantidad if cantidad is not None else "No disponible"
     total_label_style = ParagraphStyle("hx_total_label", parent=body,
                                       fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=navy)
@@ -1183,7 +1186,9 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
-    elementos += [tabla_operacion, Spacer(1, 6 * mm), recuadro_total, Spacer(1, 2 * mm)]
+    elementos += [tabla_operacion, Spacer(1, 6 * mm)]
+    if not omitir_registro_vacio:
+        elementos += [recuadro_total, Spacer(1, 2 * mm)]
     aviso_roscas = aviso_diferencia_roscas(registro, config)
     if aviso_roscas:
         aviso_style = ParagraphStyle("hx_aviso_roscas", parent=body, textColor=colors.HexColor("#784600"))
@@ -1210,7 +1215,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ]))
         elementos.append(tabla_roscas)
-    else:
+    elif not omitir_registro_vacio:
         elementos.append(p("No hay conexiones roscadas registradas.", body))
     conjunto = (config or {}).get("assemblyContext", {}).get("lower") or config or {}
     titulo_vistas = "VISTA DEL CONJUNTO" if conjunto.get("stackedEquipment") else "VISTA DEL EQUIPO"
@@ -1265,7 +1270,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v77"]
+    datos = [normalizar(tag), config, "report-v78"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -2003,7 +2008,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v77"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v78"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2149,7 +2154,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v77"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v78"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
