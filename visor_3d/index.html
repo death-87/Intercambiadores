@@ -304,6 +304,13 @@
       <input id="edit-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
     </div>
+    <div id="edit-cover-controls" class="input-group">
+      <label><input id="edit-cover-enabled" type="checkbox"> Tapa ciega con pescante sobre esta brida</label>
+      <div id="edit-cover-options" hidden>
+        <label>Giro del pescante alrededor de la brida (°):</label><input id="edit-cover-rotation" type="number" min="0" max="359" step="1" value="0">
+        <small>Tapa sin TAG propio, con dos manillas y soportes unidos por un eje. Adopta la medida y los pernos de esta brida.</small>
+      </div>
+    </div>
     <div id="edit-rv-controls" class="input-group">
       <label><input id="edit-rv-enabled" type="checkbox"> Válvula RV / alivio sobre esta brida</label>
       <div id="edit-rv-options" hidden>
@@ -478,6 +485,13 @@
       <label>Giro del codo: <output id="new-elbow-angle-value">0°</output></label>
       <input id="new-elbow-angle" type="range" min="0" max="359" step="1" value="0" disabled>
       <small>Gira la salida alrededor del tramo inicial. El largo del niple regula el tramo antes del codo.</small>
+    </div>
+    <div id="new-cover-controls" class="input-group">
+      <label><input id="new-cover-enabled" type="checkbox"> Tapa ciega con pescante sobre esta brida</label>
+      <div id="new-cover-options" hidden>
+        <label>Giro del pescante alrededor de la brida (°):</label><input id="new-cover-rotation" type="number" min="0" max="359" step="1" value="0">
+        <small>Tapa sin TAG propio, con dos manillas y soportes unidos por un eje. Adopta la medida y los pernos de esta brida.</small>
+      </div>
     </div>
     <div id="new-rv-controls" class="input-group">
       <label><input id="new-rv-enabled" type="checkbox"> Válvula RV / alivio sobre esta brida</label>
@@ -754,6 +768,12 @@
       if(nozzle.userData.flangePlateKey===key) return;
       plate.geometry.dispose();plate.geometry=nozzlePlateGeometry(nozzle.userData,nozzle.userData.flangeBore);
       nozzle.userData.flangePlateKey=key;
+      const oldCover=nozzle.userData.davitCoverGroup;
+      if(oldCover&&nozzle.userData.davitCover?.enabled) {
+        const parent=oldCover.parent,materials=nozzle.userData.materials;
+        const replacement=buildDavitCover(nozzle.userData,materials[0],materials[1]);replacement.position.copy(oldCover.position);
+        parent.remove(oldCover);parent.add(replacement);nozzle.userData.davitCoverGroup=replacement;disposeDetachedNozzle(oldCover);
+      }
       const oldValve=nozzle.userData.reliefValveGroup;
       if(oldValve&&nozzle.userData.reliefValve?.enabled) {
         const parent=oldValve.parent,materials=nozzle.userData.materials;
@@ -919,7 +939,7 @@
           rating: nz.userData.rating || (nz.userData.connectionType === 'threaded' ? "3000#" : "150#"),
           swEnd: nz.userData.swEnd, swFlangeRating: nz.userData.swFlangeRating,
           flangeSquareSizeMM:nz.userData.flangeSquareSizeMM||0,
-          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false, reliefValve:{...nz.userData.reliefValve},
+          inletFlange:!!nz.userData.inletFlange, outletFlange:nz.userData.outletFlange!==false, reliefValve:{...nz.userData.reliefValve}, davitCover:{...nz.userData.davitCover},
           flangeType: "WN",
           face: nz.userData.face || "RF",
           neckLength: nz.userData.neckLength || undefined,
@@ -2785,6 +2805,57 @@
       return BODY_BOUNDS[bodyPart] ? bodyPart : 'shell';
     }
 
+    function normalizeDavitCover(value={}) {
+      value=value&&typeof value==='object'?value:{};
+      return {enabled:value.enabled===true,rotation:Number.isFinite(Number(value.rotation))?((Number(value.rotation)%360)+360)%360:0};
+    }
+    function davitCoverFromControls(prefix) {
+      return normalizeDavitCover({enabled:document.getElementById(prefix+'-cover-enabled').checked,rotation:Number(document.getElementById(prefix+'-cover-rotation').value)});
+    }
+    function updateDavitCoverControls(prefix,type,config=null) {
+      document.getElementById(prefix+'-cover-controls').hidden=type!=='flanged';
+      if(config) {
+        const cover=normalizeDavitCover(config);document.getElementById(prefix+'-cover-enabled').checked=cover.enabled;
+        document.getElementById(prefix+'-cover-rotation').value=cover.rotation;
+      }
+      document.getElementById(prefix+'-cover-options').hidden=!document.getElementById(prefix+'-cover-enabled').checked;
+    }
+    function buildDavitCover(data,material,flangeMaterial) {
+      const cover=normalizeDavitCover(data.davitCover),dim=flangeDimensions(data.diaIndex,data.rating),settings=nozzleFlangeSettings(data);
+      const group=new THREE.Group();group.name='Tapa ciega con pescante';
+      group.userData={diaIndex:data.diaIndex,boltCount:settings.count,handles:2};
+      const gap=.006,thickness=dim.B,D=settings.D,pipeRadius=pipeOutsideDiameter(data.pipeDiaIndex??data.diaIndex)/2;
+      function mesh(geometry,name,parent=group,mat=material){const part=new THREE.Mesh(geometry,mat);part.name=name;parent.add(part);return part;}
+      const outline=flangeOutline(D,settings.form);
+      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form))addFlangeCutout(outline,settings.form,D,point.x,point.y,dim.L/2);
+      const lid=mesh(new THREE.ExtrudeGeometry(outline,{depth:thickness,bevelEnabled:false,curveSegments:64}),'Brida tapa ciega',group,flangeMaterial);
+      lid.rotation.x=-Math.PI/2;lid.position.y=gap;
+      for(const point of flangeBoltPoints(settings.count,settings.K,settings.form)) {
+        const length=2*dim.B+.035;
+        const stud=mesh(new THREE.CylinderGeometry(Math.max(.004,dim.L*.28),Math.max(.004,dim.L*.28),length,12),'Espárrago tapa',group,flangeMaterial);stud.position.set(point.x,gap/2,point.y);
+        for(const y of [-dim.B-.009,gap+thickness+.009]) {const nut=mesh(new THREE.CylinderGeometry(dim.L*.46,dim.L*.46,.015,6),'Tuerca tapa',group,flangeMaterial);nut.position.set(point.x,y,point.y);}
+      }
+      const top=gap+thickness,wire=Math.max(.004,D*.018),handleRise=Math.max(.025,D*.12);
+      for(const offset of [-1,1]) {
+        const x=offset*D*.20,half=D*.16;
+        const path=new THREE.CatmullRomCurve3([new THREE.Vector3(x,top,-half),new THREE.Vector3(x,top+handleRise,-half*.8),new THREE.Vector3(x,top+handleRise,half*.8),new THREE.Vector3(x,top,half)]);
+        mesh(new THREE.TubeGeometry(path,32,wire,8,false),'Manilla de tapa');
+      }
+      const mechanism=new THREE.Group();mechanism.name='Pescante articulado de tapa';mechanism.rotation.y=THREE.MathUtils.degToRad(cover.rotation);group.add(mechanism);
+      const pivotX=Math.max(D*.68,pipeRadius+.08),lowerY=-Math.max(dim.H*.8,dim.B+.03),upperY=top+Math.max(.08,D*.30);
+      const armWidth=pivotX-pipeRadius+.01;
+      const lower=mesh(new THREE.BoxGeometry(armWidth,Math.max(.014,D*.05),Math.max(.018,D*.08)),'Soporte inferior soldado bajo flange',mechanism);lower.position.set(pipeRadius+(armWidth-.02)/2,lowerY,0);
+      const startX=D*.10;
+      const upperPath=new THREE.CatmullRomCurve3([new THREE.Vector3(startX,top,0),new THREE.Vector3(startX,upperY-D*.10,0),new THREE.Vector3(startX+D*.08,upperY,0),new THREE.Vector3(pivotX-D*.08,upperY,0),new THREE.Vector3(pivotX,upperY-D*.08,0),new THREE.Vector3(pivotX,upperY-D*.18,0)]);
+      mesh(new THREE.TubeGeometry(upperPath,64,Math.max(.006,D*.025),12,false),'Brazo superior soldado a tapa',mechanism);
+      const upperPivot=upperY-D*.18,pinRadius=Math.max(.006,D*.025),sleeveHeight=Math.max(.025,D*.10),pinBottom=lowerY-sleeveHeight,pinTop=upperPivot+sleeveHeight;
+      const pin=mesh(new THREE.CylinderGeometry(pinRadius,pinRadius,pinTop-pinBottom,24),'Eje común del pescante',mechanism);pin.position.set(pivotX,(pinTop+pinBottom)/2,0);
+      for(const [y,name] of [[lowerY,'Oreja inferior pescante'],[upperPivot,'Oreja superior pescante']]) {
+        const sleeve=mesh(new THREE.CylinderGeometry(pinRadius*1.7,pinRadius*1.7,sleeveHeight,32),name,mechanism,flangeMaterial);sleeve.position.set(pivotX,y,0);
+      }
+      const head=mesh(new THREE.CylinderGeometry(pinRadius*1.5,pinRadius*1.5,.012,6),'Cabeza del eje',mechanism,flangeMaterial);head.position.set(pivotX,pinTop,0);
+      return group;
+    }
     function normalizeReliefValve(value={}) {
       value=value&&typeof value==='object'?value:{};
       return {enabled:value.enabled===true,tag:String(value.tag||''),
@@ -2810,8 +2881,8 @@
       }
       document.getElementById(prefix+'-rv-options').hidden=!enabled.checked;
       const outlet=document.getElementById(prefix+'-outlet-flange');
-      outlet.disabled=readOnly||(type==='flanged'&&enabled.checked);
-      if(type==='flanged'&&enabled.checked)outlet.value='yes';
+      outlet.disabled=readOnly||(type==='flanged'&&(enabled.checked||document.getElementById(prefix+'-cover-enabled').checked));
+      if(type==='flanged'&&(enabled.checked||document.getElementById(prefix+'-cover-enabled').checked))outlet.value='yes';
     }
     function buildReliefValve(data,material,flangeMaterial) {
       const rv=normalizeReliefValve(data.reliefValve),inlet=flangeDimensions(data.diaIndex,data.rating),out=flangeDimensions(rv.outletDiaIndex,rv.outletRating);
@@ -2852,7 +2923,7 @@
     }
     function buildNozzle(internalName, tagText, diaIndex, connectionType, rating, bodyPart, pos, posX,
       hasNS, sizeNS, tagNS, hasFS, sizeFS, tagFS, service = 'process', face = 'RF', neckLength = null,
-      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0, reliefValve = null) {
+      subFront = null, subRear = null, angleDeg = null, ratingNS = '3000#', ratingFS = '3000#', offsetY = 0, offsetZ = 0, baseDiaIndex = diaIndex, swEnd = 'none', swFlangeRating = '150#', direction = 'radial', elbow90 = false, elbowRotation = 0, angleNS = 0, angleFS = 0, sideMount = 'straight', sideAxis = 'Z', headMount = false, headAngle = 45, flangeShape = 'auto', flangeBoltCount = 0, pipeDiaIndex = null, elbowOutletLength = 0, inletFlange = false, outletFlange = true, flangeSquareSizeMM = 0, offsetX = 0, reliefValve = null, davitCover = null) {
       const group = new THREE.Group();
       const requestedBodyPart = bodyPart;
       bodyPart = normalizeBodyPartForCurrentModel(bodyPart);
@@ -2865,7 +2936,9 @@
         ? (['3000#', '6000#'].includes(rating) ? rating : '3000#')
         : (['150#', '300#', '600#'].includes(rating) ? rating : '150#');
       const pipeIndex=type==='flanged' && pipeDiaIndex!==null && pipeDiaIndex!==undefined && Number.isInteger(Number(pipeDiaIndex)) && FLANGED_DIAMETER_INDEXES.includes(Number(pipeDiaIndex)) && DIAMETER_INCHES[Number(pipeDiaIndex)]<=DIAMETER_INCHES[dIndex]?Number(pipeDiaIndex):dIndex;
+      const cover=normalizeDavitCover(davitCover);cover.enabled=type==='flanged'&&cover.enabled;
       const rv=normalizeReliefValve(reliefValve);rv.enabled=type==='flanged'&&rv.enabled;
+      if(cover.enabled)rv.enabled=false;
       const normalizedAngle = normalizedPerimeterAngle(angleDeg, pos);
       
       const visualNeckLength = type !== 'threaded'
@@ -2877,7 +2950,7 @@
         angleFS: Math.max(-180, Math.min(180, Number(angleFS) || 0)),
         elbow90: type === 'flanged' && elbow90 === true,
         flangeSquareSizeMM:Math.max(0,Math.min(5000,Number(flangeSquareSizeMM)||0)),
-        inletFlange:inletFlange===true, outletFlange:rv.enabled||outletFlange!==false, reliefValve:rv,
+        inletFlange:inletFlange===true, outletFlange:cover.enabled||rv.enabled||outletFlange!==false, reliefValve:rv, davitCover:cover,
         elbowOutletLength:Math.max(0,Math.min(10,Number(elbowOutletLength)||0)),
         elbowRotation: Number.isFinite(Number(elbowRotation)) ? ((Number(elbowRotation) % 360) + 360) % 360 : 0,
         direction: NOZZLE_DIRECTIONS.includes(direction) ? direction : 'radial',
@@ -3128,6 +3201,10 @@
       group.userData.plugNS = plugNS;
       group.userData.plugFS = plugFS;
 
+      if(type==='flanged'&&cover.enabled) {
+        const lid=buildDavitCover(group.userData,nzMat,flMat);lid.position.y=labelHeight??totalH;labelParent.add(lid);
+        group.userData.davitCoverGroup=lid;
+      }
       if(type==='flanged'&&rv.enabled) {
         const valve=buildReliefValve(group.userData,nzMat,flMat);
         valve.position.y=labelHeight??totalH;labelParent.add(valve);
@@ -3187,7 +3264,7 @@
             n.hasNS, legacyNS ? (n.tagNS || "") : (n.sizeNS || ""), legacyNS ? "" : (n.tagNS || ""),
             n.hasFS, legacyFS ? (n.tagFS || "") : (n.sizeFS || ""), legacyFS ? "" : (n.tagFS || ""),
             n.service || 'process', n.face || 'RF', n.neckLength,
-            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX, n.reliefValve
+            n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX, n.reliefValve, n.davitCover
           );
           nozzlesList.push(newNz);
         });
@@ -3217,7 +3294,7 @@
         const d=n.userData;
         const branches=[d.hasNS?'NS '+(d.tagNS||''):null,d.hasFS?'FS '+(d.tagFS||''):null,
           d.subFront?.enabled?d.subFront.tag:null,d.subRear?.enabled?d.subRear.tag:null].filter(Boolean).join(' · ');
-        const label=[d.tagName||'Sin TAG',d.bodyPart,branches,d.reliefValve?.enabled?('RV '+(d.reliefValve.tag||'')):null].filter(Boolean).join(' · ');
+        const label=[d.tagName||'Sin TAG',d.bodyPart,branches,d.reliefValve?.enabled?('RV '+(d.reliefValve.tag||'')):null,d.davitCover?.enabled?'Tapa pescante':null].filter(Boolean).join(' · ');
         if(query&&!label.toLocaleUpperCase().includes(query))return;
         picker.add(new Option(label,d.idName));count++;
       });
@@ -3309,6 +3386,7 @@
       document.getElementById('edit-elbow-outlet-length').value=data.elbowOutletLength||0;
       document.getElementById('edit-inlet-flange').value=data.inletFlange?'yes':'no';
       document.getElementById('edit-outlet-flange').value=data.outletFlange===false?'no':'yes';
+      updateDavitCoverControls('edit',data.connectionType,data.davitCover);
       updateReliefValveControls('edit',data.connectionType,data.reliefValve);
       document.getElementById('edit-elbow-angle').value = data.elbowRotation || 0;
       document.getElementById('edit-elbow-angle-value').value = `${data.elbowRotation || 0}°`;
@@ -3478,6 +3556,7 @@
       const threaded = type !== 'flanged';
       updateElbowControls('edit', type);
       updateSwControls('edit', type);
+      updateDavitCoverControls('edit',type);
       updateReliefValveControls('edit',type);
       populateRatingSelect(editRating, type, preferredRating);
       document.getElementById('edit-flange-details').style.display = threaded ? 'none' : 'block';
@@ -3534,7 +3613,7 @@
         type === 'flanged' && data.hasNS, data.sizeNS, data.tagNS,
         type === 'flanged' && data.hasFS, data.sizeFS, data.tagFS,
         data.service || 'process', data.face || 'RF', data.neckLength,
-        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX, data.reliefValve
+        data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX, data.reliefValve, data.davitCover
       );
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
@@ -3566,10 +3645,18 @@
       select.replaceChildren(...FLANGED_DIAMETER_INDEXES.map(i=>new Option(DIAMETERS[i],String(i))));select.value='6';
       for(const field of ['enabled','tag','outlet','rating','rotation','height'])document.getElementById(prefix+'-rv-'+field).addEventListener('change',()=>{
         const type=document.getElementById(prefix+'-nz-type').value;
+        if(document.getElementById(prefix+'-rv-enabled').checked)document.getElementById(prefix+'-cover-enabled').checked=false;
+        updateDavitCoverControls(prefix,type);
         updateReliefValveControls(prefix,type);
-        if(prefix==='edit')rebuildSelectedNozzle({reliefValve:reliefValveFromControls(prefix),outletFlange:true});
+        if(prefix==='edit')rebuildSelectedNozzle({davitCover:davitCoverFromControls(prefix),reliefValve:reliefValveFromControls(prefix),outletFlange:true});
       });
     }
+    for(const prefix of ['edit','new'])for(const field of ['enabled','rotation'])document.getElementById(prefix+'-cover-'+field).addEventListener('change',()=>{
+      const type=document.getElementById(prefix+'-nz-type').value;
+      if(document.getElementById(prefix+'-cover-enabled').checked)document.getElementById(prefix+'-rv-enabled').checked=false;
+      updateDavitCoverControls(prefix,type);updateReliefValveControls(prefix,type);
+      if(prefix==='edit')rebuildSelectedNozzle({davitCover:davitCoverFromControls(prefix),reliefValve:reliefValveFromControls(prefix),outletFlange:true});
+    });
     document.getElementById('edit-nz-direction').addEventListener('change', event => {
       rebuildSelectedNozzle({direction: event.target.value});
     });
@@ -3773,6 +3860,7 @@
     const newPos = document.getElementById('new-nz-pos');
     const newAngle = document.getElementById('new-nz-angle');
     function updateNewConnectionUI(preferred) {
+      updateDavitCoverControls('new',document.getElementById('new-nz-type').value);
       updateReliefValveControls('new',document.getElementById('new-nz-type').value);
       const type = newType.value;
       updateElbowControls('new', type);
@@ -3854,7 +3942,7 @@
 
       const suggestedTag = service === 'vent' ? 'VENT' : (service === 'drain' ? 'DRAIN' : '');
       const newNz = buildNozzle(internalName, suggestedTag, diaIndex, connectionType, rating, bodyPart, pos, startX,
-        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes',Number(document.getElementById('new-flange-square-size').value),0,reliefValveFromControls('new'));
+        false, "", "", false, "", "", service, face, neckLength, null, null, angleDeg, '3000#', '3000#', 0, 0, Number(document.getElementById('new-base-dia').value), document.getElementById('new-sw-end').value, document.getElementById('new-sw-flange-rating').value, document.getElementById('new-nz-direction').value, document.getElementById('new-elbow').value === 'elbow', Number(document.getElementById('new-elbow-angle').value), 0, 0, document.getElementById('new-side-mount').value, document.getElementById('new-side-axis').value, false, 45, document.getElementById('new-flange-shape').value,Number(document.getElementById('new-flange-bolts').value),Number(document.getElementById('new-pipe-dia').value),Number(document.getElementById('new-elbow-outlet-length').value),document.getElementById('new-inlet-flange').value==='yes',document.getElementById('new-outlet-flange').value==='yes',Number(document.getElementById('new-flange-square-size').value),0,reliefValveFromControls('new'),davitCoverFromControls('new'));
       nozzlesList.push(newNz);
       selectNozzle(newNz);
       syncStateToParent();
