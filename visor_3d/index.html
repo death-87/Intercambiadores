@@ -1864,13 +1864,17 @@
       }
       if(bolted) {
         const joint=p.left;
-        const flangeShape=capsule(r*1.22),hole=new THREE.Path(capsule(r*.98).getPoints(96));flangeShape.holes.push(hole);
+        // El ancho del anillo debe alojar la tuerca completa, incluso en tubos pequeños.
+        const nutRadius=.019,edgeMargin=.008,innerRadius=r*.98;
+        const boltRadius=Math.max(r*1.12,r+nutRadius+edgeMargin);
+        const outerRadius=Math.max(r*1.22,boltRadius+nutRadius+edgeMargin);
+        const flangeShape=capsule(outerRadius),hole=new THREE.Path(capsule(innerRadius).getPoints(96));flangeShape.holes.push(hole);
         for(const sign of [-1,1]) {
           const ring=new THREE.Mesh(new THREE.ExtrudeGeometry(flangeShape,{depth:thickness,bevelEnabled:false,curveSegments:48}),flangeMatBase);
           ring.rotation.y=Math.PI/2;ring.position.x=joint+sign*thickness*.7-thickness/2;ring.name=circular?'Brida circular de tapa común':'Brida oval de tapa común';(sign<0?bonnetAssembly:hairpinGroup).add(ring);
         }
-        const bolts=new THREE.Group();bolts.name='Pernos de tapa común';bonnetAssembly.add(bolts);
-        const points=capsule(r*1.12).getSpacedPoints(p.boltCount);
+        const bolts=new THREE.Group();bolts.name='Pernos de tapa común';bolts.userData={innerRadius,outerRadius,boltRadius,nutRadius,headSpine};bonnetAssembly.add(bolts);
+        const points=capsule(boltRadius).getSpacedPoints(p.boltCount);
         for(let i=0;i<p.boltCount;i++) {
           const point=points[i];
           const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.010,.010,thickness*3.8,10),studMat);
