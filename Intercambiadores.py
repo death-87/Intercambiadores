@@ -1104,8 +1104,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("LINEBELOW", (0, 0), (-1, -1), 2, colors.HexColor("#FFC321")),
     ]))
     elementos += [logos, Spacer(1, 4 * mm)]
+    numero_informe = (documento or {}).get("numero")
+    titulo_registro = "REGISTRO DE INSPECCIÓN" + (" · INFORME N° " + str(numero_informe) if numero_informe else "")
     cabecera = Table([
-        [Paragraph("REGISTRO DE INSPECCIÓN", eyebrow)],
+        [p(titulo_registro, eyebrow)],
         [Paragraph(f"Ficha técnica de boquillas · {escape(str(tag))}", title_style)],
         [p(f"UNIDAD: {unidad}", unidad_style)],
     ], colWidths=[180 * mm])
@@ -1117,9 +1119,6 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
     ]))
     elementos += [cabecera, Spacer(1, 7 * mm)]
-    if (documento or {}).get("numero"):
-        elementos.append(p("INFORME N° " + documento["numero"], small))
-        elementos.append(Spacer(1, 3*mm))
 
     for campo, etiqueta in (("ot", "OT / ORDEN DE TRABAJO"), ("fecha_entrega", "FECHA DE ENTREGA")):
         if (documento or {}).get(campo):
