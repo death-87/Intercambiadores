@@ -1228,40 +1228,43 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     if solo_vistas_45:
         imagen_modelo = imagen_posterior = None
     solo_near_side = not cuatro_vistas and (estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje)
+    cantidad_vistas = sum(bool(v) for v in (imagen_modelo, imagen_posterior if not solo_near_side else None, imagen_angular if cuatro_vistas else None, imagen_angular_posterior if cuatro_vistas else None))
+    ancho_vista = 156 if cantidad_vistas > 1 else 180
+    vista_style = ParagraphStyle("hx_vista", parent=section_style, spaceBefore=0, spaceAfter=1, leading=12)
     if (config or {}).get("model") == "J":
         vistas=[]
         for etiqueta, contenido in (("NS (NEAR SIDE)", imagen_modelo), ("FS (FAR SIDE)", imagen_posterior if not solo_near_side else None)):
             if contenido:
-                vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, section_style),
+                vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, vista_style),
                                Image(BytesIO(contenido), width=84*mm, height=140*mm)])
         if cuatro_vistas:
             for etiqueta, contenido in (("NS (NEAR SIDE) · 45°", imagen_angular), ("FS (FAR SIDE) · 45°", imagen_angular_posterior)):
                 if contenido:
-                    vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, section_style),
+                    vistas.append([Paragraph(titulo_vistas+" · "+etiqueta, vista_style),
                                    Image(BytesIO(contenido), width=84*mm, height=140*mm)])
         for inicio in range(0,len(vistas),2):
             fila=vistas[inicio:inicio+2]
             tabla_vistas=Table([fila], colWidths=[90*mm]*len(fila))
             tabla_vistas.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
-            elementos.append(KeepTogether([Spacer(1,6*mm),tabla_vistas]))
+            elementos.append(KeepTogether([Spacer(1,1.5*mm),tabla_vistas]))
     else:
         if imagen_modelo:
-            imagen = Image(BytesIO(imagen_modelo), width=180 * mm, height=78.75 * mm)
-            elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                Paragraph(titulo_vistas + " · NS (NEAR SIDE)", section_style), imagen]))
+            imagen = Image(BytesIO(imagen_modelo), width=ancho_vista * mm, height=ancho_vista * 7 / 16 * mm)
+            elementos.append(KeepTogether([Spacer(1, 1.5 * mm),
+                Paragraph(titulo_vistas + " · NS (NEAR SIDE)", vista_style), imagen]))
         elif solo_near_side and imagen_posterior:
             elementos.append(p("Vista NS (NEAR SIDE) no disponible.", small))
         if imagen_posterior and not solo_near_side:
-            imagen = Image(BytesIO(imagen_posterior), width=180 * mm, height=78.75 * mm)
-            elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                Paragraph(titulo_vistas + " · FS (FAR SIDE)", section_style), imagen]))
+            imagen = Image(BytesIO(imagen_posterior), width=ancho_vista * mm, height=ancho_vista * 7 / 16 * mm)
+            elementos.append(KeepTogether([Spacer(1, 1.5 * mm),
+                Paragraph(titulo_vistas + " · FS (FAR SIDE)", vista_style), imagen]))
     if cuatro_vistas and (config or {}).get("model") != "J":
         for etiqueta, contenido in (("NS (NEAR SIDE) · 45°", imagen_angular),
                                     ("FS (FAR SIDE) · 45°", imagen_angular_posterior)):
             if contenido:
-                elementos.append(KeepTogether([Spacer(1, 6 * mm),
-                    Paragraph(titulo_vistas + " · " + etiqueta, section_style),
-                    Image(BytesIO(contenido), width=180 * mm, height=78.75 * mm)]))
+                elementos.append(KeepTogether([Spacer(1, 1.5 * mm),
+                    Paragraph(titulo_vistas + " · " + etiqueta, vista_style),
+                    Image(BytesIO(contenido), width=ancho_vista * mm, height=ancho_vista * 7 / 16 * mm)]))
     doc.build(elementos, onFirstPage=pie, onLaterPages=pie)
     return salida.getvalue()
 
