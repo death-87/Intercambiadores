@@ -1161,31 +1161,30 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
         ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
-    recuadro_operacion = Table([[p("DATOS OPERACIONALES", total_label_style)]],
-                              colWidths=[180 * mm])
-    recuadro_operacion.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), pale), ("BOX", (0, 0), (-1, -1), 1.2, teal),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-        ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-    ]))
-    elementos += [recuadro_operacion, Spacer(1, 2 * mm)]
     operacion = datos_operacionales(registro_operacional or {})
-    columnas_operacion = list(operacion[0]) if operacion else ["Parámetro"]
-    datos_operacion = [[p(k.upper(), cell_header) for k in columnas_operacion]] + [
-        [p(fila[k]) for k in columnas_operacion] for fila in operacion
-    ]
-    if not operacion:
-        datos_operacion.append([p("Sin datos operacionales registrados.")])
-    tabla_operacion = Table(datos_operacion, colWidths=[180 * mm / len(columnas_operacion)] * len(columnas_operacion), repeatRows=1)
-    tabla_operacion.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), teal), ("GRID", (0, 0), (-1, -1), .4, line),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    elementos += [tabla_operacion, Spacer(1, 6 * mm)]
+    if operacion:
+        recuadro_operacion = Table([[p("DATOS OPERACIONALES", total_label_style)]],
+                                  colWidths=[180 * mm])
+        recuadro_operacion.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), pale), ("BOX", (0, 0), (-1, -1), 1.2, teal),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+            ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ]))
+        elementos += [recuadro_operacion, Spacer(1, 2 * mm)]
+        columnas_operacion = list(operacion[0]) if operacion else ["Parámetro"]
+        datos_operacion = [[p(k.upper(), cell_header) for k in columnas_operacion]] + [
+            [p(fila[k]) for k in columnas_operacion] for fila in operacion
+        ]
+        tabla_operacion = Table(datos_operacion, colWidths=[180 * mm / len(columnas_operacion)] * len(columnas_operacion), repeatRows=1)
+        tabla_operacion.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), teal), ("GRID", (0, 0), (-1, -1), .4, line),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        elementos += [tabla_operacion, Spacer(1, 6 * mm)]
     if not omitir_registro_vacio:
         elementos += [recuadro_total, Spacer(1, 2 * mm)]
     aviso_roscas = aviso_diferencia_roscas(registro, config)
