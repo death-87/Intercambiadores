@@ -318,6 +318,9 @@ def validar_diseno(data, _nivel=0):
             raise ValueError(f"{field} fuera de rango")
     if dimensions.get("channelCoverStyle","bolted") not in {"bolted","welded"}:
         raise ValueError("cierre del channel inválido")
+    for campo in ("verticalUpperEnd","verticalLowerEnd"):
+        if dimensions.get(campo,"bonnet") not in {"bonnet","channel"}:
+            raise ValueError("tipo de extremo vertical inválido")
     if dimensions.get("channelHeadShape","rounded") not in {"rounded","flat"}:
         raise ValueError("forma del cierre del channel inválida")
     for campo in ("eccentricShellJoint", "eccentricChannelJoint"):
@@ -629,7 +632,7 @@ def cuerpo_tecnico_boquilla(boquilla, config):
     cuerpo = boquilla.get("bodyPart")
     if config.get("model") != "J" or cuerpo not in {"bonnet", "bonnetLeft"}:
         return cuerpo
-    if boquilla.get("headMount"):
+    if boquilla.get("headMount") and config.get("dimensions", {}).get("verticalLowerEnd" if cuerpo == "bonnetLeft" else "verticalUpperEnd", "bonnet") != "channel":
         return cuerpo  # El montaje sobre la curva no aplica desplazamientos libres.
     dimensiones = config.get("dimensions", {})
     posicion = float(boquilla.get("valX") or 0)
@@ -638,7 +641,10 @@ def cuerpo_tecnico_boquilla(boquilla, config):
         posicion += signo * (float(dimensiones.get("shellLength", 4.275)) / 2
                             + float(dimensiones.get("bonnetLength", .8)) / 2)
     posicion += float(boquilla.get("offsetX") or 0)
-    return "bonnet" if posicion > 0 else "bonnetLeft" if posicion < 0 else cuerpo
+    extremo = "bonnet" if posicion > 0 else "bonnetLeft" if posicion < 0 else cuerpo
+    if dimensiones.get("verticalUpperEnd" if extremo == "bonnet" else "verticalLowerEnd", "bonnet") == "channel":
+        return "CHANNEL SUPERIOR" if extremo == "bonnet" else "CHANNEL INFERIOR"
+    return extremo
 
 
 def nombre_cuerpo(valor, modelo=None):
@@ -1270,7 +1276,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v79"]
+    datos = [normalizar(tag), config, "report-v80"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -2008,7 +2014,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v79"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v80"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2154,7 +2160,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v79"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v80"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
