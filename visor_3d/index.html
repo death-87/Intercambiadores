@@ -110,7 +110,7 @@
     <small>Elige si el equipo actual va arriba o abajo. Al activar se crea una copia editable para el otro nivel. Cada nivel tiene sus propias boquillas y dimensiones. Con TAG independientes, el informe usa las boquillas del equipo elegido. Si ambos niveles pertenecen al mismo equipo, comparten un TAG de registro y sus conexiones se incluyen juntas en el informe; los identificadores del dibujo pueden ser distintos.</small>
   </div>
 </div>
-<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option><option value="F">Dos bonetes apernados · uno en cada extremo</option><option value="J">Vertical · dos bonetes apernados</option><option value="G">Channel en ambos extremos · tapas partidas y cuerpo inferior</option><option value="I">Channel doble · tapas partidas y cuerpo inferior longitudinal en U</option><option value="H">Horquilla · charretes y bonete común apernado</option></select></div>
+<div class="input-group"><label for="equipment-model">Modelo del intercambiador:</label><select id="equipment-model"><option value="A">Tipo A · Channel con tapa removible + bonete apernado</option><option value="B">Transición excéntrica</option><option value="C">Tipo A / Tipo U · Channel removible + cabezal soldado al shell</option><option value="E">Tipo B · Channel tapa integral + cabezal elíptico soldado al shell</option><option value="F">Dos bonetes apernados · uno en cada extremo</option><option value="J">Vertical · bonetes o channels apernados</option><option value="G">Channel en ambos extremos · tapas partidas y cuerpo inferior</option><option value="I">Channel doble · tapas partidas y cuerpo inferior longitudinal en U</option><option value="H">Horquilla · charretes y bonete común apernado</option></select></div>
 <div id="equipment-dimensions" style="background:rgba(255,255,255,.035);padding:7px;border:1px solid #334155;border-radius:4px;margin-bottom:8px">
   <strong style="display:block;font-size:10px;color:#38bdf8;margin-bottom:6px">DIÁMETROS / ALTURAS</strong>
   <div class="input-group"><label>Shell: <output id="shell-diameter-value">1.10</output> m</label><input type="range" id="shell-diameter" min="0.20" max="2.00" step="0.02" value="1.10"></div>
@@ -234,6 +234,11 @@
     <div class="input-group"><label>Channel: <output id="channel-length-value">1.20</output> m</label><input type="range" id="channel-length" min="0.20" max="2.00" step="0.05" value="1.20"></div>
     <div class="input-group" style="margin-bottom:0"><label>Bonete: <output id="bonnet-length-value">0.80</output> m</label><input type="range" id="bonnet-length" min="0.20" max="2.00" step="0.05" value="0.80"></div>
   </div>
+</div>
+<div class="input-group" id="vertical-end-controls" hidden>
+<label>Extremo superior:</label><select id="vertical-upper-end"><option value="bonnet">Bonete apernado</option><option value="channel">Channel con tapa apernada</option></select>
+<label>Extremo inferior:</label><select id="vertical-lower-end"><option value="bonnet">Bonete apernado</option><option value="channel">Channel con tapa apernada</option></select>
+<small>El diámetro y largo de «Extremos» se aplican a ambos. Se conservan las boquillas al cambiar el cierre.</small>
 </div>
 <div class="input-group" id="channel-cover-control" hidden>
 <label>Cierre del channel:</label><select id="channel-cover-style"><option value="bolted">Tapa apernada · desmontable</option><option value="welded">Cabezal soldado · sin tapa desmontable</option></select>
@@ -2242,6 +2247,8 @@
       currentDimensions.eccentricChannelJoint=dimensions.eccentricChannelJoint==='welded'?'welded':'flanged';
       currentDimensions.channelCoverStyle=dimensions.channelCoverStyle==='welded'?'welded':'bolted';
       currentDimensions.channelHeadShape=dimensions.channelHeadShape==='flat'?'flat':'rounded';
+      currentDimensions.verticalUpperEnd=dimensions.verticalUpperEnd==='channel'?'channel':'bonnet';
+      currentDimensions.verticalLowerEnd=dimensions.verticalLowerEnd==='channel'?'channel':'bonnet';
       loadDualChannelDimensions(dimensions);
       updateDimensionControls();
       buildModelB();
@@ -2291,6 +2298,27 @@
       partition.position.x = bodyCenter;
       channelGroup.add(partition);
     }
+    const verticalChannels=new THREE.Group();heatExchanger.add(verticalChannels);
+    function isVerticalChannel(body){return currentModel==='J'&&currentDimensions[body==='bonnetLeft'?'verticalLowerEnd':'verticalUpperEnd']==='channel';}
+    function buildVerticalChannels(){
+      verticalChannels.visible=currentModel==='J';
+      const key=JSON.stringify([currentModel,currentDimensions.shellLength,currentDimensions.bonnetLength,currentDimensions.bonnetDiameter,currentDimensions.verticalUpperEnd,currentDimensions.verticalLowerEnd]);
+      if(verticalChannels.userData.key===key)return;
+      verticalChannels.traverse(o=>o.geometry?.dispose());verticalChannels.clear();verticalChannels.userData.key=key;
+      for(const [body,sign] of [['bonnet',1],['bonnetLeft',-1]]){
+        if(!isVerticalChannel(body))continue;
+        const g=new THREE.Group();g.name=sign>0?'Channel superior con tapa apernada':'Channel inferior con tapa apernada';verticalChannels.add(g);
+        g.position.x=sign*(currentDimensions.shellLength/2+.132);if(sign<0)g.rotation.y=Math.PI;
+        const r=currentDimensions.bonnetDiameter/2,L=currentDimensions.bonnetLength,scale=r/R;g.scale.set(1,scale,scale);
+        cylinderX(g,T_FLANGE/2,R_FLANGE,T_FLANGE,flangeMatBase);
+        cylinderX(g,L/2,R,Math.max(.05,L-.20),shellMat);
+        const outer=L-.12;
+        cylinderX(g,outer-.05,R_FLANGE,.10,flangeMatBase);
+        cylinderX(g,L-.045,R_FLANGE,.09,flangeMatBase);
+        spiralGasket(g,outer+.004);studCircle(g,outer-.10,L);
+        studCircle(g,-T_FLANGE-GASKET_T,T_FLANGE);spiralGasket(g,-GASKET_T/2);
+      }
+    }
     function applyModelADimensions() {
       const shellScale = currentDimensions.shellDiameter / (2 * R);
       const channelScale = currentDimensions.channelDiameter / (2 * R);
@@ -2323,6 +2351,7 @@
       leftBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
       weldedBonnetGroup.position.x = currentDimensions.shellLength / 2;
       weldedBonnetBody.scale.y = bonnetLengthScale;
+      buildVerticalChannels();
       weldedBonnetGroup.scale.set(1, bonnetScale, bonnetScale);
     }
     function updateBodyPositionLabels(prefix) {
@@ -2511,7 +2540,7 @@
       orientSubNozzlesGlobally(nozzle, rotation ? THREE.MathUtils.radToDeg(rotation[0]) : radialAngle);
     }
     function ellipticalHeadFrame(bodyPart, curveAngle, perimeterAngle) {
-      if (currentModel === 'H' || !['bonnet', 'bonnetLeft'].includes(bodyPart)) return null;
+      if (isVerticalChannel(bodyPart)||currentModel === 'H' || !['bonnet', 'bonnetLeft'].includes(bodyPart)) return null;
       const left = bodyPart === 'bonnetLeft';
       if (left && !['D', 'E', 'F', 'J'].includes(currentModel)) return null;
       const sign = left ? -1 : 1;
@@ -2636,11 +2665,14 @@
       document.getElementById('channel-cover-style').value=currentDimensions.channelCoverStyle||'bolted';
       document.getElementById('channel-head-shape').value=currentDimensions.channelHeadShape||'rounded';
       document.getElementById('channel-head-shape').disabled=readOnly||currentDimensions.channelCoverStyle!=='welded';
+      document.getElementById('vertical-end-controls').hidden=currentModel!=='J';
+      document.getElementById('vertical-upper-end').value=currentDimensions.verticalUpperEnd||'bonnet';
+      document.getElementById('vertical-lower-end').value=currentDimensions.verticalLowerEnd||'bonnet';
       heatExchanger.rotation.z=currentModel==='J'?Math.PI/2:0;
       modelAShellGroup.visible = !['B','H'].includes(currentModel);
       channelGroup.visible = currentModel === 'A' || currentModel === 'C';
-      rearBonnetGroup.visible = ['A', 'E', 'F', 'J'].includes(currentModel);
-      leftBoltedBonnetGroup.visible = ['F','J'].includes(currentModel);
+      rearBonnetGroup.visible = ['A', 'E', 'F', 'J'].includes(currentModel)&&!isVerticalChannel('bonnet');
+      leftBoltedBonnetGroup.visible = ['F','J'].includes(currentModel)&&!isVerticalChannel('bonnetLeft');
       leftBonnetGroup.visible = currentModel === 'D' || currentModel === 'E';
       weldedBonnetGroup.visible = currentModel === 'C' || currentModel === 'D';
       modelB.visible = currentModel === 'B';
@@ -2678,21 +2710,21 @@
       document.getElementById('model-d-note').style.display = currentModel === 'D' ? 'block' : 'none';
       document.getElementById('model-e-note').style.display = currentModel === 'E' ? 'block' : 'none';
       document.getElementById('model-f-note').style.display = ['F','J'].includes(currentModel) ? 'block' : 'none';
-      document.getElementById('model-f-note').textContent=currentModel==='J'?'Equipo vertical con bonete superior e inferior apernados. El nameplate se mantiene horizontal para su lectura.':'Bonete apernado en cada extremo del shell. El diámetro y largo de bonete se aplican a ambos extremos. Izquierdo y derecho solo identifican su ubicación en el editor.';
+      document.getElementById('model-f-note').textContent=currentModel==='J'?'Equipo vertical: elige bonete o channel en cada extremo. El nameplate se mantiene horizontal para su lectura.':'Bonete apernado en cada extremo del shell. El diámetro y largo de bonete se aplican a ambos extremos. Izquierdo y derecho solo identifican su ubicación en el editor.';
       for (const prefix of ['edit', 'new']) {
         const bonnet = document.querySelector(`#${prefix}-nz-body option[value="bonnet"]`);
         const left = document.querySelector(`#${prefix}-nz-body option[value="bonnetLeft"]`);
         if (bonnet) bonnet.textContent = ['C', 'D'].includes(currentModel)
-          ? 'Shell · cabezal elíptico soldado (+X)' : currentModel === 'E' ? 'Channel · Tipo B (tapa integral)' : currentModel==='J'?'Bonete superior': ['F','J'].includes(currentModel) ? 'Bonete derecho (+X)' : 'Bonete';
+          ? 'Shell · cabezal elíptico soldado (+X)' : currentModel === 'E' ? 'Channel · Tipo B (tapa integral)' : currentModel==='J'?(isVerticalChannel('bonnet')?'Channel superior':'Bonete superior'): ['F','J'].includes(currentModel) ? 'Bonete derecho (+X)' : 'Bonete';
         if (left) left.textContent = ['D', 'E'].includes(currentModel)
-          ? 'Shell · cabezal elíptico soldado (−X)' : currentModel==='J'?'Bonete inferior': ['F','J'].includes(currentModel) ? 'Bonete izquierdo (−X)' : 'Bonete izquierdo';
+          ? 'Shell · cabezal elíptico soldado (−X)' : currentModel==='J'?(isVerticalChannel('bonnetLeft')?'Channel inferior':'Bonete inferior'): ['F','J'].includes(currentModel) ? 'Bonete izquierdo (−X)' : 'Bonete izquierdo';
         const channel = document.querySelector(`#${prefix}-nz-body option[value="channel"]`);
         if (channel) channel.textContent = ['A', 'C'].includes(currentModel) ? 'Channel · Tipo A (tapa removible)' : 'Channel';
       }
       for (const id of ['bonnet-diameter', 'bonnet-length']) {
         document.getElementById(id).parentElement.querySelector('label').firstChild.textContent =
           ['C', 'D'].includes(currentModel) ? 'Cabezal elíptico del shell: ' :
-          currentModel === 'E' ? 'Channel tipo B / cabezal del shell: ' : currentModel==='H' ? (id==='bonnet-length'?'Charrete: ':'Diámetro de bonete (no aplica): ') : 'Bonete: ';
+          currentModel === 'E' ? 'Channel tipo B / cabezal del shell: ' : currentModel==='H' ? (id==='bonnet-length'?'Charrete: ':'Diámetro de bonete (no aplica): ') : currentModel==='J'?'Extremos: ':'Bonete: ';
       }
       document.getElementById('channel-diameter').disabled = ['D', 'E', 'F', 'H', 'J'].includes(currentModel);
       document.getElementById('channel-length').disabled = ['D', 'E', 'F', 'J'].includes(currentModel);
@@ -3572,7 +3604,7 @@
       document.getElementById('edit-head-mount').checked = !!data.headMount;
       document.getElementById('edit-head-angle').value = data.headAngle ?? 45;
       document.getElementById('edit-head-angle-value').value = (data.headAngle ?? 45) + '°';
-      document.getElementById('edit-head-mount').disabled = !['bonnet','bonnetLeft'].includes(data.bodyPart);
+      document.getElementById('edit-head-mount').disabled = isVerticalChannel(data.bodyPart)||!['bonnet','bonnetLeft'].includes(data.bodyPart);
       document.getElementById('edit-offset-x').value = data.offsetX || 0;
       document.getElementById('edit-offset-y').value = data.offsetY || 0;
       document.getElementById('edit-offset-z').value = data.offsetZ || 0;
@@ -4335,6 +4367,7 @@
     for(const [id,field] of [['eccentric-shell-joint','eccentricShellJoint'],['eccentric-channel-joint','eccentricChannelJoint']])document.getElementById(id).addEventListener('change',event=>{
       if(readOnly)return;currentDimensions[field]=event.target.value;buildModelB();applyModel(currentModel,true);syncStateToParent();
     });
+    for(const [id,key] of [['vertical-upper-end','verticalUpperEnd'],['vertical-lower-end','verticalLowerEnd']])document.getElementById(id).addEventListener('change',event=>{if(readOnly)return;currentDimensions[key]=event.target.value;applyModel(currentModel,true);syncStateToParent();});
     document.getElementById('channel-head-shape').addEventListener('change',event=>{if(readOnly)return;currentDimensions.channelHeadShape=event.target.value;rebuildModelAChannel();buildModelB();applyModel(currentModel,true);syncStateToParent();});
     document.getElementById('channel-cover-style').addEventListener('change',event=>{
       if(readOnly)return;currentDimensions.channelCoverStyle=event.target.value;
