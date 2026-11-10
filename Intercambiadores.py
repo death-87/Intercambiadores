@@ -1237,6 +1237,8 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
     if solo_vistas_45:
         imagen_modelo = imagen_posterior = None
     solo_near_side = not cuatro_vistas and (estado_roscas == "Sin conexiones roscadas" or solo_venteo_drenaje)
+    if (config or {}).get("model") == "J":
+        solo_near_side = False  # En vertical, mantener NS y FS incluso sin roscas.
     cantidad_vistas = sum(bool(v) for v in (imagen_modelo, imagen_posterior if not solo_near_side else None, imagen_angular if cuatro_vistas else None, imagen_angular_posterior if cuatro_vistas else None))
     ancho_vista = 156 if cantidad_vistas > 1 else 180
     vista_style = ParagraphStyle("hx_vista", parent=section_style, spaceBefore=0, spaceAfter=1, leading=12)
@@ -1253,8 +1255,12 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
                                    Image(BytesIO(contenido), width=84*mm, height=140*mm)])
         for inicio in range(0,len(vistas),2):
             fila=vistas[inicio:inicio+2]
-            tabla_vistas=Table([fila], colWidths=[90*mm]*len(fila))
-            tabla_vistas.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
+            tabla_vistas=Table([fila], colWidths=[85*mm]*len(fila), hAlign="CENTER")
+            tabla_vistas.setStyle(TableStyle([
+                ("VALIGN",(0,0),(-1,-1),"TOP"),
+                ("LEFTPADDING",(0,0),(-1,-1),.5*mm), ("RIGHTPADDING",(0,0),(-1,-1),.5*mm),
+                ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),0),
+            ]))
             elementos.append(KeepTogether([Spacer(1,1.5*mm),tabla_vistas]))
     else:
         if imagen_modelo:
