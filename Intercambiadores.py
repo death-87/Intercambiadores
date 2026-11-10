@@ -377,6 +377,11 @@ def validar_diseno(data, _nivel=0):
             raise ValueError("forma de flange del extremo lejano del carrete inválida")
         if dimensions.get("hairpinSpool" + nivel + "Shape", "round") not in {"round", "square"}:
             raise ValueError("forma de brida de carrete inválida")
+        if not isinstance(dimensions.get("hairpinSpool" + nivel + "Spacer", False), bool):
+            raise ValueError("opción de espaciador inválida")
+        espesor = dimensions.get("hairpinSpool" + nivel + "SpacerThicknessMM",25.4)
+        if type(espesor) not in (int,float) or not math.isfinite(espesor) or not 1 <= espesor <= 1000:
+            raise ValueError("espesor del espaciador fuera de rango")
         if not isinstance(dimensions.get("hairpinSpool" + nivel + "NippleOnly", False), bool):
             raise ValueError("la opción de niple simple debe ser booleana")
         if not isinstance(dimensions.get("hairpinSpool" + nivel + "Enabled", True), bool):
@@ -1285,7 +1290,7 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
 
 
 def clave_captura(tag, config, todas_vistas_45=False):
-    datos = [normalizar(tag), config, "report-v82"]
+    datos = [normalizar(tag), config, "report-v83"]
     if todas_vistas_45:
         datos.append("todas_45")
     return hashlib.sha256(json.dumps(datos, sort_keys=True).encode()).hexdigest()[:20]
@@ -2023,7 +2028,7 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v82"], sort_keys=True).encode()).hexdigest()[:20]
+        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v83"], sort_keys=True).encode()).hexdigest()[:20]
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2169,7 +2174,7 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v82"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v83"], sort_keys=True).encode()).hexdigest()[:20]
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
                                       capture_key=digest, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
