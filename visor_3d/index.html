@@ -592,6 +592,7 @@
     <div class="input-group"><label for="component-search">Buscar TAG, conexión NS/FS o cuerpo:</label><input id="component-search" type="text" placeholder="Ejemplo: N1, PI2, channel…"></div>
     <div class="input-group"><label for="nozzle-picker">Boquillas y conexiones del nivel seleccionado:</label><select id="nozzle-picker" size="6"><option value="">Seleccionar…</option></select></div>
     <button id="component-edit-equipment" type="button">Editar equipo</button>
+    <button id="component-fit" type="button">Ver equipo completo · NS</button>
     <button id="component-clear" type="button">Quitar selección</button>
     <div class="input-group"><label for="component-pick-radius">Tolerancia del mouse: <output id="component-pick-radius-value">12 px</output></label><input id="component-pick-radius" type="range" min="4" max="24" step="2" value="12"><small>Aumenta el área para seleccionar componentes pequeños.</small></div>
     <div id="component-status" role="status">Selecciona un componente para abrir sus opciones.</div>
@@ -1173,7 +1174,10 @@
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.enablePan = true;
-    controls.panSpeed = 1.0;
+    controls.panSpeed = .65;
+    controls.zoomSpeed = .65;
+    controls.minDistance = .04;
+    controls.maxDistance = 250;
     controls.target.set(0, 0, 0);
 
     controls.mouseButtons = {
@@ -3531,9 +3535,10 @@
     picker.addEventListener('change',()=>{
       if(readOnly||saving)return;
       const nozzle=nozzlesList.find(n=>n.userData.idName===picker.value);
-      if(nozzle)selectNozzle(nozzle);else deselectNozzle();
+      if(nozzle){selectNozzle(nozzle);focusSelectedComponent(nozzle);}else deselectNozzle();
     });
     document.getElementById('component-search').addEventListener('input',refreshNozzlePicker);
+    document.getElementById('component-fit').addEventListener('click',()=>{if(!saving)faceNearSide();});
     document.getElementById('component-clear').addEventListener('click',()=>{if(!saving)deselectNozzle();});
     document.getElementById('component-edit-equipment').addEventListener('click',()=>{if(saving)return;deselectNozzle();window.exchangerBridge.setPanelCollapsed(false);});
     document.getElementById('component-level').addEventListener('change',event=>{if(saving)return;document.getElementById('component-search').value='';selectEditingLevel(event.target.value);});
@@ -4631,11 +4636,36 @@
       });
       return box;
     }
+    function updateCameraLimits(box) {
+      const extent=Math.max(box.getSize(new THREE.Vector3()).length(),1);
+      controls.minDistance=Math.max(.04,.6*Math.max(currentDimensions.shellDiameter||0,currentDimensions.channelDiameter||0,currentDimensions.bonnetDiameter||0));controls.maxDistance=Math.max(50,extent*15);
+      camera.near=.005;camera.far=Math.max(1000,controls.maxDistance+extent*3);camera.updateProjectionMatrix();
+    }
+    function focusSelectedComponent(nozzle) {
+      if(readOnly||!nozzle)return;
+      assemblyGroup.updateMatrixWorld(true);
+      const box=new THREE.Box3();nozzle.traverseVisible(node=>{
+        if(!node.geometry||node.isSprite||node.isLine)return;
+        if(!node.geometry.boundingBox)node.geometry.computeBoundingBox();
+        box.union(node.geometry.boundingBox.clone().applyMatrix4(node.matrixWorld));
+      });
+      if(box.isEmpty())return;
+      updateCameraLimits(visibleEquipmentBounds());controls.minDistance=.04;
+      const center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
+      const direction=new THREE.Vector3(0,1,0).applyQuaternion(nozzle.getWorldQuaternion(new THREE.Quaternion())).normalize();
+      // Mirar desde el exterior de la conexión evita que el shell oculte la selección.
+      direction.add(new THREE.Vector3(.15,.15,.15)).normalize();
+      const distance=Math.max(size.y,size.x/camera.aspect,size.z,.25)/Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*1.2;
+      const damping=controls.enableDamping;controls.enableDamping=false;controls.update();controls.enableDamping=damping;
+      controls.target.copy(center);camera.position.copy(center).addScaledVector(direction,distance);camera.up.set(0,1,0);camera.lookAt(center);controls.update();
+    }
     function faceNearSide() {
       const box=visibleEquipmentBounds();if(box.isEmpty())return;
+      updateCameraLimits(box);
       const center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
       const side=currentNameplateSide==='rear'?-1:1;
       const distance=Math.max(size.y/2,size.x/(2*camera.aspect),.5)/Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*1.18+size.z/2;
+      const damping=controls.enableDamping;controls.enableDamping=false;controls.update();controls.enableDamping=damping;
       controls.target.copy(center);camera.up.set(0,1,0);
       camera.position.set(center.x,center.y,center.z+side*distance);
       camera.lookAt(center);controls.update();
