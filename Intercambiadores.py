@@ -1052,7 +1052,7 @@ def pie_informe_planta(canvas, numero, mostrar_autor=True, revision=0):
     canvas.restoreState()
 
 
-def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None, todas_vistas_45=False, solo_vistas_45=False):
+def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro_operacional=None, imagen_modelo=None, imagen_posterior=None, pagina_inicial=0, informe_planta=False, documento=None, imagen_angular=None, imagen_angular_posterior=None, todas_vistas_45=False, solo_vistas_45=False, lados_45="ambas"):
     salida = BytesIO()
     doc = SimpleDocTemplate(
         salida, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
@@ -1241,6 +1241,10 @@ def generar_pdf(registro, tag, config, estado_diseno, cantidad, origen, registro
         re.match(r"^(VENTEO|DRENAJE)\b", normalizar(fila.get("LADO", ""))) for fila in conexiones)
     solo_venteo_drenaje = (solo_venteo_drenaje and estado_roscas != "Revisar discrepancia"
                           and (cantidad is None or cantidad == len(conexiones)))
+    if lados_45 == "ns":
+        imagen_angular_posterior = None
+    elif lados_45 == "fs":
+        imagen_angular = None
     cuatro_vistas = solo_vistas_45 or todas_vistas_45 or (config or {}).get("model") in {"G", "I"}
     if solo_vistas_45:
         imagen_modelo = imagen_posterior = None
@@ -1614,7 +1618,7 @@ def generar_pdf_planta(equipos, imagenes, planta=None, agrupar_sin_roscas=False,
                           imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
                           imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave),
                           informe_planta=True, documento=documento, todas_vistas_45=equipo.get("vistas_45",False),
-                          solo_vistas_45=equipo.get("solo_45",False))
+                          solo_vistas_45=equipo.get("solo_45",False), lados_45=equipo.get("lados_45","ambas"))
         bloques.append((PdfReader(BytesIO(pdf)), {indice:0}))
     paginas_previas = 2
     for intento in range(5):
@@ -1672,7 +1676,7 @@ def generar_zip_fichas(equipos, imagenes, documento=None):
                 imagen_angular=imagenes.get("captura_angular_pdf_" + clave),
                 imagen_angular_posterior=imagenes.get("captura_angular_posterior_pdf_" + clave), documento=documento,
                 todas_vistas_45=equipo.get("vistas_45",False),
-                solo_vistas_45=equipo.get("solo_45",False))
+                solo_vistas_45=equipo.get("solo_45",False), lados_45=equipo.get("lados_45","ambas"))
             nombre = re.sub(r"[^\w.-]+", "_", equipo["tag"]).strip(".") or "Equipo"
             base = f"Ficha_{nombre}"
             nombre_archivo, indice = base + ".pdf", 2
@@ -1708,7 +1712,9 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                               key="informe_planta_modo_vistas", disabled=not con_imagenes)
         solo_45 = modo_vistas == "Solo vistas a 45°"
         todas_45 = solo_45 or modo_vistas == "NS, FS y vistas a 45° para todos"
-        st.caption("Normal conserva las cuatro vistas de los modelos de tapas partidas. La segunda opción agrega NS y FS a 45° a todos los equipos con modelo 3D. Solo vistas a 45° incluye únicamente esas dos vistas. Aplica al ZIP y al informe general.")
+        st.caption("Normal conserva las cuatro vistas de los modelos de tapas partidas. La segunda opción agrega NS y FS a 45° a todos los equipos con modelo 3D. Solo vistas a 45° incluye únicamente los lados elegidos en el selector inferior. Aplica al ZIP y al informe general.")
+        seleccion_45 = st.selectbox("Vistas a 45° a incluir", ["NS y FS", "Solo NS", "Solo FS"], key="informe_planta_lados_45", disabled=not con_imagenes or not todas_45)
+        lados_45 = {"NS y FS":"ambas", "Solo NS":"ns", "Solo FS":"fs"}[seleccion_45]
         if st.button("Preparar informe de la planta", disabled=bool(tarea) or not plantas, key="preparar_planta"):
             equipos = []
             for registro in sorted(df[df[col_unidad] == planta].to_dict("records"),
@@ -1720,14 +1726,14 @@ def informe_por_planta(df, col_unidad, col_equipo, col_roscadas, db, operacional
                 cantidad, origen = contar_conexiones(registro, col_roscadas, config, incluir_bonete)
                 equipos.append({"registro": registro, "tag": tag, "config": config,
                     "estado": estado(tag), "cantidad": cantidad, "origen": origen,
-                    "operacion": operacionales.get(normalizar(tag)), "vistas_45": todas_45, "solo_45": solo_45,
+                    "operacion": operacionales.get(normalizar(tag)), "vistas_45": todas_45, "solo_45": solo_45, "lados_45": lados_45,
                     "captura_key": clave_captura(tag, config, todas_45)})
             if not equipos:
                 st.warning("No hay equipos válidos en esta planta.")
             else:
                 st.session_state.pop("informe_planta_resultado", None)
                 st.session_state["informe_planta_tarea"] = {"id": uuid.uuid4().hex, "planta": planta,
-                    "equipos": equipos, "con_imagenes": con_imagenes, "vistas_45": todas_45, "solo_45": solo_45, "omitidas": [], "formato": formato, "documento": documento}
+                    "equipos": equipos, "con_imagenes": con_imagenes, "vistas_45": todas_45, "solo_45": solo_45, "lados_45": lados_45, "omitidas": [], "formato": formato, "documento": documento}
                 st.rerun()
         if tarea:
             if st.button("Cancelar preparación", key="cancelar_planta"):
@@ -2031,7 +2037,8 @@ def main():
         if aviso_roscas:
             st.warning(aviso_roscas)
 
-        captura_key = hashlib.sha256(json.dumps([normalizar(tag), config, "report-v84"], sort_keys=True).encode()).hexdigest()[:20]
+        ficha_solo_45 = st.session_state.get("ficha_modo_vistas") == "Solo vistas a 45°"
+        captura_key = clave_captura(tag, config, ficha_solo_45)
         imagen_modelo = st.session_state.get("captura_pdf_" + captura_key)
         imagen_posterior = st.session_state.get("captura_posterior_pdf_" + captura_key)
         imagen_angular = st.session_state.get("captura_angular_pdf_" + captura_key)
@@ -2136,6 +2143,8 @@ def main():
                 st.link_button("Abrir INTERCAMBIADORES en SharePoint", carpeta_sp, use_container_width=True)
                 if informado(termino):
                     st.caption(f"Dentro de la carpeta abierta, busca el TAG {termino} para localizar sus informes y fotos.")
+            st.radio("Vistas de la ficha PDF", ["Normal · configuración actual", "Solo vistas a 45°"], key="ficha_modo_vistas")
+            lados_ficha = st.selectbox("Lados a 45° de la ficha", ["NS y FS", "Solo NS", "Solo FS"], key="ficha_lados_45", disabled=not ficha_solo_45)
             revision_ficha = st.number_input("Revisión de la ficha PDF", min_value=0,
                 value=int(st.session_state.get("informe_planta_documento_revision", 0)), step=1, key="revision_ficha_pdf")
             try:
@@ -2143,7 +2152,8 @@ def main():
                                   registro_operacional=operacionales.get(normalizar(tag)),
                                   imagen_modelo=imagen_modelo, imagen_posterior=imagen_posterior,
                                   imagen_angular=imagen_angular, imagen_angular_posterior=imagen_angular_posterior,
-                                  documento={"revision":str(revision_ficha)})
+                                  documento={"revision":str(revision_ficha)}, solo_vistas_45=ficha_solo_45,
+                                  lados_45={"NS y FS":"ambas","Solo NS":"ns","Solo FS":"fs"}[lados_ficha])
                 nombre = re.sub(r'[^\w.-]+', '_', tag)[:100] or "equipo"
                 st.download_button("Descargar ficha técnica · PDF", data=pdf, file_name=f"Ficha_{nombre}.pdf",
                                    mime="application/pdf", use_container_width=True)
@@ -2177,9 +2187,9 @@ def main():
             st.error("Falta visor_3d/index.html en el repositorio.")
         else:
             cfg = db[clave]["data"]
-            digest = hashlib.sha256(json.dumps([clave, cfg, "report-v84"], sort_keys=True).encode()).hexdigest()[:20]
+            digest = clave_captura(clave, cfg, ficha_solo_45)
             captura = declarar_visor()(initial_data=cfg, readonly=True, ack=None, height=650,
-                                      capture_key=digest, key="preview_" + digest, default=None)
+                                      capture_key=digest, capture_all_angles=ficha_solo_45, key="preview_" + digest, default=None)
             if (isinstance(captura, dict) and captura.get("action") == "report_capture"
                     and captura.get("capture_key") == digest
                     and "captura_pdf_" + digest not in st.session_state):
