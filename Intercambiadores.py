@@ -1584,8 +1584,7 @@ def preliminares_planta(equipos, planta, inicios, documento=None):
     elementos += [texto("RESUMEN DE LA PLANTA", seccion), Spacer(1,2*mm),
         tabla([["INDICADOR", "CANTIDAD"], ["Equipos incluidos", resumen["equipos"]],
                ["Total de conexiones roscadas · conteos disponibles", resumen["total"]],
-               ["Conexiones con descripción detallada", resumen["detalladas"]],
-               ["Equipos sin conteo disponible", resumen["sin_conteo"]]], [140*mm,40*mm]),
+               ["Conexiones con descripción detallada", resumen["detalladas"]]], [140*mm,40*mm]),
         Spacer(1,4*mm), texto("CONEXIONES POR MEDIDA Y CLASE", seccion), Spacer(1,2*mm)]
     if resumen["distribucion"]:
         elementos.append(tabla([["MEDIDA", "CLASE / RATING", "CONEXIONES"]] +
