@@ -11,7 +11,6 @@ SOLUCIONES = (
     ("04", "Inspección y mantenimiento", "Nuevas herramientas para organizar tareas, observaciones de terreno e historial de los activos.", "Tareas · Hallazgos · Historial", "proximamente"),
 )
 ENLACES_SOLUCIONES = {
-    "02": "https://inspectores.streamlit.app/",
     "03": "https://reparacionestemp.streamlit.app/",
 }
 
@@ -20,6 +19,11 @@ ENLACES_SOLUCIONES = {
 def ir_solucion():
     st.session_state["jn_section"] = "intercambiadores"
     st.query_params["solucion"] = "intercambiadores"
+
+
+def ir_informes():
+    st.session_state["jn_section"] = "informes"
+    st.query_params["solucion"] = "informes"
 
 
 def ir_inicio():
@@ -31,6 +35,10 @@ def ir_inicio():
 def mostrar_inicio():
     """Devuelve True si se mostró la portada; el módulo no debe cargar datos aún."""
     section = st.session_state.get("jn_section", st.query_params.get("solucion", "inicio"))
+    if section == "informes":
+        from inspecciones import mostrar_informes
+        mostrar_informes()
+        return True
     if section == "intercambiadores":
         st.button("← Inicio de Jndigital", key="jn_back_home", on_click=ir_inicio, use_container_width=True)
         st.sidebar.markdown('<div class="jn-module-label">SOLUCIÓN / INTERCAMBIADORES</div><style>[data-testid="stSidebarNav"]{display:none}.jn-module-label{font-size:10px;letter-spacing:.12em;color:#64748b;margin:12px 0}</style>', unsafe_allow_html=True)
@@ -88,7 +96,7 @@ def mostrar_inicio():
                     st.link_button("Abrir herramienta ↗", ENLACES_SOLUCIONES[number], use_container_width=True)
                     st.markdown('<div class="jn-external-note">Se abre en una pestaña nueva</div>', unsafe_allow_html=True)
                 else:
-                    st.button("Abrir solución ↗" if available else "En preparación", key="jn_open_" + number, disabled=not available, on_click=ir_solucion if available else None, use_container_width=True, type="primary" if available else "secondary")
+                    st.button("Abrir solución ↗" if available else "En preparación", key="jn_open_" + number, disabled=not available, on_click=(ir_informes if number == "02" else ir_solucion) if available else None, use_container_width=True, type="primary" if available else "secondary")
 
     st.markdown('''<section id="enfoque" class="jn-approach"><div><div class="jn-eyebrow">NUESTROS SERVICIOS DIGITALES</div><h2>Menos dispersión.<br>Más criterio técnico.</h2><p>Un portal pensado para acompañar el trabajo de terreno y la preparación de información técnica.</p></div><div class="jn-steps"><div><span>01</span><section><h3>Organiza</h3><p>Consulta equipos, antecedentes y datos operacionales.</p></section></div><div><span>02</span><section><h3>Visualiza</h3><p>Revisa modelos 3D y ubica las conexiones del equipo.</p></section></div><div><span>03</span><section><h3>Documenta</h3><p>Genera fichas e informes con la información disponible.</p></section></div></div></section>''', unsafe_allow_html=True)
     with st.container(key="jn_bottom_cta"):

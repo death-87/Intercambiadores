@@ -1,0 +1,23 @@
+/* Apariencia corporativa del módulo; no cambia los formatos de informes. */
+[data-testid="stAppViewContainer"]{background:#f7f9fb;color:#173346}
+[data-testid="stSidebarNav"]{display:none}
+[data-testid="stSidebar"]{background:#f1f5f8;border-right:1px solid #dce6ec}
+.block-container{max-width:1320px;padding-top:2rem;padding-bottom:3rem}
+.jn-report-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:23px 27px;margin:10px 0 25px;background:#102a3b;border-radius:15px;border:1px solid #25495d}
+.jn-report-brand{display:flex;align-items:center;gap:14px}
+.jn-report-brand>b{font-size:29px;letter-spacing:-2px;color:#fff;background:#1c4052;padding:8px 12px;border-radius:10px}
+.jn-report-brand>b span{color:#3bd1b7}
+.jn-report-brand strong{font-size:23px;color:#f4f9fb;letter-spacing:-.7px}
+.jn-report-brand small{display:block;margin-top:4px;font-size:8px;letter-spacing:1.5px;color:#aac4d0}
+.jn-report-category{font-size:9px;letter-spacing:1.3px;color:#80cbbb;text-align:right}
+.jn-access-intro{padding:28px 0 12px}
+.jn-access-intro h2{font-size:28px;color:#173346}
+.jn-access-intro p{font-size:14px;line-height:1.8;color:#667f8e;max-width:720px}
+[data-testid="stButton"] button,[data-testid="stDownloadButton"] button{border-radius:8px;font-weight:600}
+button[kind^="primary"]{background:#117f70!important;border-color:#117f70!important;color:white!important}
+[data-testid="stExpander"]{border-radius:10px;border-color:#dae5eb;background:#fff}
+[data-testid="stForm"]{border-radius:12px;border-color:#d8e4eb;background:#fff}
+h1,h2,h3{letter-spacing:-.025em}
+@media(max-width:700px){.block-container{padding:1.2rem 1rem}.jn-report-header{padding:18px;align-items:flex-start;flex-direction:column;gap:16px}.jn-report-category{text-align:left;font-size:8px}.jn-report-brand small{font-size:7px}.jn-access-intro h2{font-size:24px}}
+
+[data-testid="stMarkdownContainer"] h3{font-size:1.2rem}[data-testid="stMarkdownContainer"] h4{font-size:1.05rem}

@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/death-87/app-inspecciones",
+  "revision": "f86f4f6ebcb4814470bd2fd625b464ac2ededb3d",
+  "integrated_files": [
+    "app.py",
+    "pages/2_Informe_Visual.py",
+    "pages/3_Intercambiadores.py",
+    "pages/4_Checklist_IV.py",
+    "pages/Checklist Piping.py"
+  ],
+  "note": "Integración nativa en Jndigital. Se conservan formularios, roles y generadores. Credenciales de Google por configuración privada."
+}
