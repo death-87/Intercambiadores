@@ -148,6 +148,13 @@ def guardar_db(tag, data, original_tag=None):
     raise ValueError("No se pudo confirmar el contenido en Sheets. El borrador se conserva; descarga su respaldo antes de cerrar.")
 
 
+st.markdown('<style>[data-testid="stSidebarNav"]{display:none}</style>', unsafe_allow_html=True)
+if st.button("← Inicio de Jndigital", key="jn_editor_home", use_container_width=True):
+    ss["jn_section"] = "inicio"
+    st.switch_page("Intercambiadores.py")
+if st.button("← Volver a Intercambiadores", key="jn_editor_module", use_container_width=True):
+    ss["jn_section"] = "intercambiadores"
+    st.switch_page("Intercambiadores.py")
 st.title("🛠️ Editor 3D de Intercambiadores de Calor")
 if "ex_db" not in ss:
     try:

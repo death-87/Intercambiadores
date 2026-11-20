@@ -26,6 +26,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, KeepTogether
 from visor_3d import declarar_visor
+from portal import mostrar_inicio
 
 st.set_page_config(page_title="Jndigital · Gestión de Inspección y Mantenimiento", layout="wide")
 ROOT = Path(__file__).resolve().parent
@@ -1843,6 +1844,8 @@ def configurar_sharepoint():
 
 def main():
     aplicar_diseno()
+    if mostrar_inicio():
+        return
     st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">JN</div>'
                         '<div><strong>Jndigital</strong><small>INSPECCIÓN Y MANTENIMIENTO</small></div></div>',
                         unsafe_allow_html=True)
