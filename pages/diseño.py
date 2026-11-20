@@ -11,7 +11,7 @@ import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Editor 3D de Equipos", layout="wide")
+st.set_page_config(page_title="Jndigital · Editor 3D de Equipos", layout="wide")
 WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxPmdGXS7i61XrwRDWc9rRJAceBByb4AmXt1Fzyrbuf2sEvvWMTuOw1iltTdXJ2mfhdSQ/exec'
 SHEET_ID = '1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4'
 HOJA_3D = 'Diseño3D'

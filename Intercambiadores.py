@@ -27,7 +27,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, KeepTogether
 from visor_3d import declarar_visor
 
-st.set_page_config(page_title="Gestión de Inspección y Mantenimiento", layout="wide")
+st.set_page_config(page_title="Jndigital · Gestión de Inspección y Mantenimiento", layout="wide")
 ROOT = Path(__file__).resolve().parent
 SHEET_ID = "1lhpb211bqPyDAxxnBFgKaN7nY-WImR961xJ3mrIGYZ4"
 NOMBRE_HOJA = "Hoja 1"
@@ -1843,11 +1843,11 @@ def configurar_sharepoint():
 
 def main():
     aplicar_diseno()
-    st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">GIM</div>'
-                        '<div><strong>Gestión de Inspección</strong><small>Y MANTENIMIENTO</small></div></div>',
+    st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">JN</div>'
+                        '<div><strong>Jndigital</strong><small>INSPECCIÓN Y MANTENIMIENTO</small></div></div>',
                         unsafe_allow_html=True)
-    st.markdown('''<div class="hx-hero"><div><div class="hx-eyebrow">INGEMARS · Módulo de intercambiadores de calor</div>
-    <h1>Gestión de Inspección<br>y Mantenimiento</h1>
+    st.markdown('''<div class="hx-hero"><div><div class="hx-eyebrow">Gestión de Inspección y Mantenimiento · Intercambiadores</div>
+    <h1>Jndigital</h1>
     <p>Intercambiadores de calor: consulta el estado de los equipos, revisa sus conexiones y accede a la documentación técnica y al modelo 3D.</p></div>
     <svg viewBox="0 0 240 140" fill="none" aria-hidden="true">
       <g stroke="#88b2c8" stroke-width="1.5"><rect x="46" y="45" width="141" height="54" rx="4"/>
