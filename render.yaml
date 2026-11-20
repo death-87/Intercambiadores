@@ -1,0 +1,19 @@
+# Render Blueprint: revisar el precio del plan antes de crear el servicio.
+# El plan Standard es pagado; no crear el servicio hasta confirmar su costo.
+services:
+  - type: web
+    name: ingemars-intercambiadores
+    runtime: python
+    branch: codex/boquillas-sw
+    plan: standard
+    region: oregon
+    numInstances: 1
+    autoDeploy: false
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python -m streamlit run Intercambiadores.py --server.address 0.0.0.0 --server.port $PORT --server.headless true
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
