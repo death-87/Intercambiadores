@@ -4507,7 +4507,8 @@
         if(d.flangePlate)port(d.flangePlate,d,d.pipingId,d.tagName||'Boquilla');
       }
       if(!ports.length)throw Error('Agrega al menos una boquilla circular enflanchada libre para conectar piping.');
-      return {id:pipingEquipmentId,tag:currentNameplate||'EQUIPO',position:[0,0,0],rotationDeg:0,ports,warnings,sourceDesign:collectAssemblyDesign(),asset:equipmentAsset(THREE,assemblyGroup,nameplate)};
+      const nameplateMatrix=new THREE.Matrix4().makeRotationX(Math.PI/2).multiply(new THREE.Matrix4().makeScale(1000,1000,1000)).multiply(nameplate.matrixWorld);
+      return {id:pipingEquipmentId,nameplate:{matrix:nameplateMatrix.toArray()},tag:currentNameplate||'EQUIPO',position:[0,0,0],rotationDeg:0,ports,warnings,sourceDesign:collectAssemblyDesign(),asset:equipmentAsset(THREE,assemblyGroup,nameplate)};
     }
     window.exportPipingEquipment=exportPipingEquipment;
     document.getElementById('export-piping').onclick=()=>{try{clearTimeout(changeTimer);queuedChange=null;const equipment=exportPipingEquipment();send('streamlit:setComponentValue',{dataType:'json',value:{action:'piping_equipment',builder_token:pipingSelectionToken,event_id:sessionId+':'+(++revision),equipment}});document.getElementById('save-status').textContent='Equipo preparado para el ensamblaje de piping.';}catch(error){document.getElementById('save-status').textContent=error.message;}};

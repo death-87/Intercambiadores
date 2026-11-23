@@ -55,3 +55,9 @@ PSV y RV también tienen accesos directos en la lista de elementos. Mantienen en
 La tee identifica sus bocas como **lado A**, **lado B** y **derivación**. Si es el primer componente del dibujo, sus tres bocas quedan disponibles para continuar, incluso hacia atrás desde el lado A. Al incorporarla a una línea, el selector de entrada permite unirla por A, por B o por la derivación; esa boca queda ocupada y las otras dos disponibles. El panel muestra siempre sus tres bocas e indica las ocupadas.
 
 Para entrar por la derivación de una tee reducida, la medida de entrada se hereda de la línea y se elige aparte la medida principal de A/B. Por ejemplo, una línea de 2 pulgadas puede entrar por la derivación de una tee 6 × 2; ambos lados rectos continúan con 6 pulgadas. Los largos y las terminaciones de los dos extremos libres conservan su edición automática. Los diseños anteriores usan entrada por A de forma predeterminada.
+
+## Editar un equipo incorporado
+
+Selecciona el equipo en el dibujo o en la lista del ensamblaje y pulsa **Editar forma y componentes**. Se abre **Herramientas de equipo** con el diseño editable de ese mismo equipo. También puedes elegir otro equipo desde el selector de nameplate / TAG, visible en esa sección. El encabezado indica cuál estás editando.
+
+Al pulsar **Usar este equipo en Piping**, se actualiza el equipo existente: mantiene X, Y, Z, giro e identidad, y el piping conectado acompaña a sus boquillas. Si eliminas una boquilla con una línea conectada, la actualización se rechaza y el ensamblaje anterior se conserva; primero hay que desacoplar esa línea. El nameplate se muestra sobre el cuerpo y sigue la posición configurada en el editor; los respaldos anteriores reciben una placa visible a partir del TAG.

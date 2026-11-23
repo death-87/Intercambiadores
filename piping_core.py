@@ -25,6 +25,10 @@ def validar_equipos(diseno):
         if not isinstance(e.get('tag'),str) or not e['tag'].strip() or len(e['tag'])>80:raise ValueError('TAG de equipo inválido.')
         rotation=e.get('rotationDeg')
         if not vector(e.get('position')) or type(rotation) not in (int,float) or not math.isfinite(rotation) or abs(rotation)>3600:raise ValueError('Posición de equipo inválida.')
+        if e.get('nameplate') is not None:
+            if not isinstance(e['nameplate'],dict):raise ValueError('Nameplate inválido.')
+            matrix=e['nameplate'].get('matrix')
+            if not isinstance(matrix,list) or len(matrix)!=16 or any(type(x) not in (int,float) or not math.isfinite(x) or abs(x)>1e6 for x in matrix):raise ValueError('Posición de nameplate inválida.')
         asset=e.get('asset',{});data=asset.get('data',{})
         if asset.get('format')!='three-buffer-v1' or not isinstance(data.get('object'),dict) or len(json.dumps(asset))>16_000_000 or data.get('images') or data.get('textures'):raise ValueError('Geometría de equipo inválida.')
         if any(g.get('type')!='BufferGeometry' for g in data.get('geometries',[])) or any(m.get('type')!='MeshStandardMaterial' for m in data.get('materials',[])):raise ValueError('Geometría de equipo no admitida.')

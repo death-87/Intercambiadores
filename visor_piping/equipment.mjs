@@ -14,6 +14,7 @@ export function validateEquipmentList(design,catalog){
  for(const e of equipments){
   if(!e||typeof e.id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(e.id)||ids.has(e.id)||typeof e.tag!=='string'||!e.tag.trim()||e.tag.length>80)throw Error('Identificación de equipo inválida.');ids.add(e.id);
   if(!Array.isArray(e.position)||e.position.length!==3||e.position.some(v=>typeof v!=='number'||!Number.isFinite(v)||Math.abs(v)>1e6)||typeof e.rotationDeg!=='number'||!Number.isFinite(e.rotationDeg)||Math.abs(e.rotationDeg)>3600)throw Error('Posición de equipo inválida.');
+  if(e.nameplate&&(!Array.isArray(e.nameplate.matrix)||e.nameplate.matrix.length!==16||e.nameplate.matrix.some(x=>typeof x!=='number'||!Number.isFinite(x)||Math.abs(x)>1e6)))throw Error('Posición de nameplate inválida.');
   if(!e.asset||e.asset.format!=='three-buffer-v1'||!e.asset.data?.object||JSON.stringify(e.asset).length>16000000)throw Error('Geometría del equipo inválida o demasiado grande.');
   if(!Array.isArray(e.ports)||e.ports.length>200)throw Error('Puertos de equipo inválidos.');const ports=new Set();
   for(const p of e.ports){if(typeof p.id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(p.id)||ports.has(p.id)||typeof p.tag!=='string'||p.tag.length>80||!RATINGS.includes(p.rating))throw Error('Boquilla de equipo inválida.');ports.add(p.id);item(catalog,p.nps);

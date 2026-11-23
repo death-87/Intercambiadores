@@ -55,6 +55,7 @@ def mostrar_piping(validar_equipo=None):
     st.button('← Inicio de Jndigital',key='jn_piping_inicio',on_click=ir_inicio)
     st.markdown('''<header class="jn-piping-head"><small>JNDIGITAL / SOLUCIONES</small><h1>Piping e isométricos</h1><p>Conecta líneas, válvulas y boquillas de equipos en un mismo ensamblaje.</p></header>''',unsafe_allow_html=True)
     if st.session_state.pop('jn_piping_go_assembly',False):st.session_state['jn_piping_mode']='Ensamblaje de piping'
+    if st.session_state.pop('jn_piping_go_equipment',False):st.session_state['jn_piping_mode']='Herramientas de equipo'
     mode=st.radio('Área de trabajo',['Ensamblaje de piping','Herramientas de equipo'],horizontal=True,key='jn_piping_mode')
     if mode=='Herramientas de equipo':
         from piping_equipment import mostrar_herramientas_equipo
@@ -71,9 +72,18 @@ def mostrar_piping(validar_equipo=None):
             except (ValueError,TypeError,KeyError) as e:st.error(str(e))
     value=declarar_piping()(initial_data=st.session_state.get('jn_piping_design'),load_token=st.session_state['jn_piping_load_token'],imported=st.session_state.get('jn_piping_imported',False),equipment_import=st.session_state.get('jn_piping_pending_equipment'),equipment_import_token=st.session_state.get('jn_piping_equipment_import_token'),height=940,key='jn_piping_editor',default=None)
     st.session_state['jn_piping_imported']=False
-    if isinstance(value,dict) and value.get('token') == st.session_state['jn_piping_load_token'] and value.get('action') in ('update','export_pdf','equipment_applied','equipment_error'):
+    if isinstance(value,dict) and value.get('token') == st.session_state['jn_piping_load_token'] and value.get('action') in ('update','export_pdf','equipment_applied','equipment_error','edit_equipment'):
         try:
             design=validar_piping(value.get('design'));st.session_state['jn_piping_design']=design
+            if value['action']=='edit_equipment' and value.get('eventId')!=st.session_state.get('jn_piping_edit_event'):
+                equipment=next((e for e in design.get('equipments',[]) if e['id']==value.get('equipmentId')),None)
+                if equipment is None:raise ValueError('Selecciona un equipo existente.')
+                from piping_equipment import abrir_equipo
+                abrir_equipo(equipment)
+                st.session_state['piping_equipment_existing']=equipment['id']
+                st.session_state['jn_piping_edit_event']=value['eventId']
+                st.session_state['jn_piping_go_equipment']=True
+                st.rerun()
             if value.get('equipmentApplied')==st.session_state.get('jn_piping_equipment_import_token') and value.get('equipmentApplied'):
                 st.session_state.pop('jn_piping_pending_equipment',None);st.session_state.pop('jn_piping_equipment_import_token',None)
                 if value['action']=='equipment_error':st.error('No se actualizó el equipo. Verifica que sus boquillas conectadas sigan existiendo; el ensamblaje anterior se conserva.')

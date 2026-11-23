@@ -70,6 +70,11 @@ class PipingTests(unittest.TestCase):
         broken=copy.deepcopy(result['socketDesign']);broken['components'][1]['tapOffsetMM']=2100
         with self.assertRaises(ValueError):validar_piping(broken)
         self.assertEqual(sum(r['quantity'] for r in result['endMaterials'] if r['description']=='Brida WN'),5)
+        plate_design=copy.deepcopy(design);plate_design['equipments'][0]['nameplate']={'matrix':[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}
+        validar_piping(plate_design)
+        for plate in ({'matrix':[1]},'invalid',{'matrix':[float('nan')]*16}):
+            plate_design['equipments'][0]['nameplate']=plate
+            with self.assertRaises(ValueError):validar_piping(plate_design)
         broken=copy.deepcopy(design);broken['equipments'][0]['ports']=[]
         with self.assertRaises(ValueError):validar_piping(broken)
         broken=copy.deepcopy(design);broken['equipments'][0]['asset']['data']['images']=[{'url':'https://example.com/image'}]
