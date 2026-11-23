@@ -49,3 +49,9 @@ Los diseños anteriores que identificaban como `latrolet` una conexión sobre un
 El elbolet se dibuja hueco, con una base recortada que asienta sobre la superficie curva del codo. La posición del asiento se calcula contra esa curva; el cordón sigue su perímetro y la boca de salida comparte eje con el piping de continuación. La representación del codo abre el paso bajo la derivación.
 
 PSV y RV también tienen accesos directos en la lista de elementos. Mantienen entrada y salida enflanchadas independientes, resorte visible, vástago, columnas y palanca lateral.
+
+## Las tres bocas de una tee
+
+La tee identifica sus bocas como **lado A**, **lado B** y **derivación**. Si es el primer componente del dibujo, sus tres bocas quedan disponibles para continuar, incluso hacia atrás desde el lado A. Al incorporarla a una línea, el selector de entrada permite unirla por A, por B o por la derivación; esa boca queda ocupada y las otras dos disponibles. El panel muestra siempre sus tres bocas e indica las ocupadas.
+
+Para entrar por la derivación de una tee reducida, la medida de entrada se hereda de la línea y se elige aparte la medida principal de A/B. Por ejemplo, una línea de 2 pulgadas puede entrar por la derivación de una tee 6 × 2; ambos lados rectos continúan con 6 pulgadas. Los largos y las terminaciones de los dos extremos libres conservan su edición automática. Los diseños anteriores usan entrada por A de forma predeterminada.

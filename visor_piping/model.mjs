@@ -36,6 +36,7 @@ export function validateDesign(d,catalog){
   if(c.kind==='elbolet'&&c.branchAngle!==undefined&&![45,90].includes(c.branchAngle))throw Error('Ángulo de derivación inválido.');
   if(isOlet(c)&&(typeof c.tapOffsetMM!=='number'||!Number.isFinite(c.tapOffsetMM)||c.tapOffsetMM<0))throw Error('Posición de sockolet inválida.');
   if(c.kind==='pipe'||c.kind==='elbow')ports.add(c.id+':tap');
+  if(c.kind==='tee'){if(!['a','b','branch'].includes(c.teeEntry??'a'))throw Error('Boca de entrada de tee inválida.');if(c.teeRunNps!==undefined)item(catalog,c.teeRunNps);if(c.parentPort==='origin')ports.add(c.id+':in');}
   ids.add(c.id);used.add(c.parentPort);if(c.kind!=='cap')ports.add(c.id+':out');if(c.kind==='tee')ports.add(c.id+':branch');
  }
  return d;
@@ -45,7 +46,7 @@ export function compute(d,catalog){
  const directions={'+X':[1,0,0],'-X':[-1,0,0],'+Y':[0,1,0],'-Y':[0,-1,0],'+Z':[0,0,1],'-Z':[0,0,-1]};
  const ports=new Map([['origin',{id:'origin',position:[0,0,0],axis:directions[d.direction],nps:null,endType:'plain',rating:null,label:'Inicio de la línea'}],...equipmentPorts(d,catalog).map(p=>[p.id,p])]),used=new Set(),nodes=[];
  for(const c of d.components){
-  const origin=ports.get(c.parentPort);if(origin.endType==='threaded')throw Error('Esta salida es roscada NPT. Los componentes roscados se incorporarán en una próxima etapa.');const nps=origin.nps??c.nps,pipe=item(catalog,nps),rating=origin.endType==='flanged'?origin.rating:c.rating,flange=origin.endType==='flanged'&&origin.flangeSpec?origin.flangeSpec:pipe.flanges[rating];
+  const origin=ports.get(c.parentPort);if(origin.endType==='threaded')throw Error('Esta salida es roscada NPT. Los componentes roscados se incorporarán en una próxima etapa.');const inletNps=origin.nps??c.nps,nps=c.kind==='tee'&&c.teeEntry==='branch'?(c.teeRunNps??inletNps):inletNps,pipe=item(catalog,nps),rating=origin.endType==='flanged'?origin.rating:c.rating,flange=origin.endType==='flanged'&&origin.flangeSpec?origin.flangeSpec:item(catalog,inletNps).flanges[rating];
   if(isOlet(c)){
    if((c.kind==='elbolet')!==(origin.hostKind==='elbow')||c.tapOffsetMM>origin.runLengthMM||c.outNps>nps)throw Error('El sockolet debe quedar dentro del tramo y su salida no puede superar la línea principal.');
    const roll=c.rollDeg*Math.PI/180,radial=origin.radialAxis?add(mul(origin.radialAxis,Math.cos(roll)),mul(cross(origin.axis,origin.radialAxis),Math.sin(roll))):normal(origin.axis,c.rollDeg),direction=c.branchDirection||(c.branchAngle===45?'inlet':'outlet'),yaw=(c.branchYawDeg||0)*Math.PI/180,pitch=(c.branchPitchDeg||0)*Math.PI/180,branchAxis=c.kind==='elbolet'?(directions[direction]?[...directions[direction]]:direction==='custom'?[Math.cos(pitch)*Math.cos(yaw),Math.cos(pitch)*Math.sin(yaw),Math.sin(pitch)]:[...(direction==='inlet'?origin.inletAxis:origin.outletAxis)]):c.kind==='latrolet'?norm(add(origin.axis,radial)):radial,projection=c.kind==='elbolet'?Math.max(.1,Math.sqrt(Math.max(0,1-dot(branchAxis,origin.axis)**2))):c.kind==='latrolet'?Math.SQRT1_2:1,center=add(origin.position,mul(origin.axis,c.tapOffsetMM)),start=add(center,mul(branchAxis,c.kind==='elbolet'?elbowSeat(center,branchAxis,origin.elbowSurface):pipe.odMM/(2*projection))),end=add(start,mul(branchAxis,c.lengthMM));
@@ -55,19 +56,23 @@ export function compute(d,catalog){
   // Bridas contraparte automáticas al conectar un extremo enflanchado.
   if(c.kind==='flange'&&origin.endType==='flanged'){start=add(start,mul(axis,3));reverse=true;}
   else if(c.kind==='valve'||c.kind==='cap'){
-   if(origin.id!=='origin'&&origin.endType==='plain'){adapter={start:[...start],axis:[...axis],reverse:false,flange,nps,rating};start=add(start,mul(axis,flange.lengthMM+3));}
+   if(origin.id!=='origin'&&origin.endType==='plain'){adapter={start:[...start],axis:[...axis],reverse:false,flange,nps:inletNps,rating};start=add(start,mul(axis,flange.lengthMM+3));}
    else if(origin.endType==='flanged')start=add(start,mul(axis,3));
   }else if(origin.endType==='flanged'){
-   const seat=add(start,mul(axis,3));adapter={start:add(seat,mul(axis,flange.lengthMM)),axis:mul(axis,-1),reverse:true,flange,nps,rating};start=add(seat,mul(axis,flange.lengthMM));
+   const seat=add(start,mul(axis,3));adapter={start:add(seat,mul(axis,flange.lengthMM)),axis:mul(axis,-1),reverse:true,flange,nps:inletNps,rating};start=add(seat,mul(axis,flange.lengthMM));
   }
-  let end=add(start,mul(axis,c.lengthMM)),endAxis=axis,endNps=nps,endType='plain',branch=null,center=add(start,mul(axis,c.lengthMM/2)),length=c.lengthMM,endRating=rating,outletFlange=null;
+  let end=add(start,mul(axis,c.lengthMM)),endAxis=axis,endNps=nps,endType='plain',branch=null,center=add(start,mul(axis,c.lengthMM/2)),length=c.lengthMM,teeA=null,teeB=null,teeLegEnd=null,teeEntry=c.teeEntry||'a',effectiveBranchNps=c.branchNps,endRating=rating,outletFlange=null;
   if(c.kind==='elbow'){
    const a=c.bendAngle*Math.PI/180,R=Math.max(c.radiusMM,pipe.odMM*.6);length=R*a;
    const point=t=>add(start,add(mul(axis,R*Math.sin(a*t)),mul(n,R*(1-Math.cos(a*t)))));
    end=point(1);center=point(.5);endAxis=norm(add(mul(axis,Math.cos(a)),mul(n,Math.sin(a))));
   }else if(c.kind==='tee'){
-   if(c.branchNps>nps)throw Error('La derivación de la tee no puede superar la medida de entrada.');
-   branch={id:c.id+':branch',position:add(center,mul(n,c.branchLengthMM)),axis:n,nps:c.branchNps,endType:'plain',rating,label:c.tag+' · derivación'};
+   effectiveBranchNps=teeEntry==='branch'?inletNps:c.branchNps;
+   if(effectiveBranchNps>nps)throw Error('La derivación de la tee no puede superar la medida principal.');
+   const runAxis=teeEntry==='branch'?n:teeEntry==='b'?mul(axis,-1):axis;
+   center=add(start,mul(axis,teeEntry==='branch'?c.branchLengthMM:c.lengthMM/2));teeA=sub(center,mul(runAxis,c.lengthMM/2));teeB=add(center,mul(runAxis,c.lengthMM/2));teeLegEnd=teeEntry==='branch'?start:add(center,mul(n,c.branchLengthMM));
+   end=teeEntry==='a'?teeB:teeA;endAxis=teeEntry==='a'?runAxis:mul(runAxis,-1);endNps=nps;
+   branch={id:c.id+':branch',position:teeEntry==='branch'?teeB:teeLegEnd,axis:teeEntry==='branch'?runAxis:n,nps:teeEntry==='branch'?nps:effectiveBranchNps,endType:'plain',rating,label:c.tag+(teeEntry==='branch'?' · lado B':' · derivación')};
   }else if(c.kind==='reducer'){
    endNps=c.outNps;if(c.reduction==='eccentric')end=add(end,mul(n,(pipe.odMM-item(catalog,endNps).odMM)/2));
    center=mul(add(start,end),.5);
@@ -82,8 +87,9 @@ export function compute(d,catalog){
   }
   let outletEndFlange=null;if(['pipe','elbow','tee','reducer'].includes(c.kind)&&c.outletEnd==='flanged'){outletEndFlange=item(catalog,endNps).flanges[rating];endType='flanged';}
   if(branch&&c.branchEnd==='flanged'){branch.flangeSpec=item(catalog,branch.nps).flanges[rating];branch.bodyPosition=[...branch.position];branch.position=add(branch.position,mul(branch.axis,branch.flangeSpec.lengthMM));branch.endType='flanged';}
-  const node={...c,nps,rating,start,end,axis,endAxis,normal:n,center,length,flange,odMM:pipe.odMM,endNps,endType,endRating,outletFlange,outletEndFlange,branch,adapter,reverse,origin};nodes.push(node);used.add(c.parentPort);
-  if(c.kind!=='cap')ports.set(c.id+':out',{id:c.id+':out',position:outletEndFlange?add(end,mul(endAxis,outletEndFlange.lengthMM)):end,axis:endAxis,nps:endNps,endType,rating:endRating,flangeSpec:outletEndFlange||(c.kind==='valve'?(outletFlange||flange):undefined),label:c.tag+' · salida principal'});
+  const node={...c,nps,rating,start,end,axis,endAxis,normal:n,center,length,flange,odMM:pipe.odMM,endNps,endType,endRating,outletFlange,outletEndFlange,teeA,teeB,teeLegEnd,teeEntry,branchNps:effectiveBranchNps,branch,adapter,reverse,origin};nodes.push(node);used.add(c.parentPort);
+  if(c.kind!=='cap')ports.set(c.id+':out',{id:c.id+':out',position:outletEndFlange?add(end,mul(endAxis,outletEndFlange.lengthMM)):end,axis:endAxis,nps:endNps,endType,rating:endRating,flangeSpec:outletEndFlange||(c.kind==='valve'?(outletFlange||flange):undefined),label:c.tag+(c.kind==='tee'?(teeEntry==='a'?' · lado B':' · lado A'):' · salida principal')});
+  if(c.kind==='tee'&&origin.id==='origin')ports.set(c.id+':in',{id:c.id+':in',position:start,axis:mul(axis,-1),nps:inletNps,endType:'plain',rating,label:c.tag+(teeEntry==='branch'?' · derivación':teeEntry==='b'?' · lado B':' · lado A')});
   if(c.kind==='elbow'){const a=c.bendAngle*Math.PI/360,tangent=norm(add(mul(axis,Math.cos(a)),mul(n,Math.sin(a))));ports.set(c.id+':tap',{id:c.id+':tap',position:center,axis:tangent,inletAxis:[...axis],outletAxis:[...endAxis],radialAxis:sub(mul(axis,Math.sin(a)),mul(n,Math.cos(a))),nps,endType:'run',rating,runLengthMM:0,hostKind:'elbow',elbowSurface:{start:[...start],axis:[...axis],normal:[...n],radiusMM:Math.max(c.radiusMM,pipe.odMM*.6),angleRad:c.bendAngle*Math.PI/180,odMM:pipe.odMM},label:c.tag+' · centro del codo'});}
   if(c.kind==='pipe')ports.set(c.id+':tap',{hostKind:'pipe',id:c.id+':tap',position:start,axis,nps,endType:'run',rating,runLengthMM:c.lengthMM,label:c.tag+' · línea principal'});
   if(branch)ports.set(branch.id,branch);
@@ -96,6 +102,6 @@ export function materialRows(result,catalog){
   const label=TYPES[kind]+(kind==='elbow'?' '+detail+'°':kind==='valve'?' '+(VALVES[detail]||detail):kind==='reducer'?' '+(detail==='eccentric'?'excéntrico':'concéntrico'):''),measure=item(catalog,nps).label+(outNps?' × '+item(catalog,outNps).label:'');
   const cls=['flange','valve','cap'].includes(kind)?rating:'—',key=[label,measure,cls].join('|');if(!rows.has(key))rows.set(key,{description:label,nps:measure,rating:cls,quantity:0,lengthMM:0});const row=rows.get(key);row.quantity++;if(kind==='pipe')row.lengthMM+=length;
  }
- for(const n of result.nodes){if(n.adapter)push('flange',n.nps,n.rating);if(n.outletEndFlange)push('flange',n.endNps,n.rating);if(n.branch?.flangeSpec)push('flange',n.branch.nps,n.rating);push(n.kind,n.nps,isRelief(n)?n.rating+' / '+n.endRating:n.rating,n.kind==='reducer'||isOlet(n)||isRelief(n)?n.outNps:n.kind==='tee'&&n.branchNps!==n.nps?n.branchNps:0,n.length,n.kind==='elbow'?n.bendAngle:n.kind==='valve'?n.valveType:n.reduction);}
+ for(const n of result.nodes){if(n.adapter)push('flange',n.adapter.nps,n.rating);if(n.outletEndFlange)push('flange',n.endNps,n.rating);if(n.branch?.flangeSpec)push('flange',n.branch.nps,n.rating);push(n.kind,n.nps,isRelief(n)?n.rating+' / '+n.endRating:n.rating,n.kind==='reducer'||isOlet(n)||isRelief(n)?n.outNps:n.kind==='tee'&&n.branchNps!==n.nps?n.branchNps:0,n.length,n.kind==='elbow'?n.bendAngle:n.kind==='valve'?n.valveType:n.reduction);}
  return [...rows.values()];
 }
