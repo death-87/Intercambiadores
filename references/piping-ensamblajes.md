@@ -34,7 +34,7 @@ Válvulas disponibles: compuerta, bola, globo, retención, mariposa, PSV y RV. P
 ## Derivaciones sobre líneas y codos
 
 - **Sockolet · SW:** se suelda sobre un tramo recto. Selecciona la línea principal, NPS de salida, posición desde el inicio del tramo, altura y giro. Por ejemplo, una principal de 6 pulgadas y salida de 2 genera un sockolet 6 × 2. Su salida permite continuar con piping y válvulas.
-- **Thredolet · NPT:** montaje soldado sobre un tramo recto y salida roscada NPT. Se identifica como roscada y se representa en el dibujo. Los componentes roscados de continuación quedan pendientes de la siguiente etapa; el editor impide conectarle por error un componente para soldar.
+- **Thredolet · NPT:** montaje soldado sobre un tramo recto y salida roscada NPT. Se identifica como roscada y se representa en el dibujo. Permite continuar con un niple NPT macho y luego con válvulas roscadas NPT hembra. El editor rechaza uniones incompatibles.
 - **Latrolet · 45°:** se monta en un tramo recto y genera una salida inclinada a 45° respecto de la línea principal. Posición, diámetro y giro son configurables.
 - **Elbolet:** selecciona un codo existente. El accesorio se ubica en el centro de su recorrido. El selector permite orientar la derivación paralela a la recta de entrada o salida del codo, apuntar a +X, −X, +Y, −Y, +Z o −Z globales, o usar Giro libre. En Giro libre se ajustan el giro horizontal alrededor de Z y la elevación entre −90° y +90°. El piping conectado sigue la dirección elegida. Las direcciones de entrada y salida siguen los ejes reales del codo; los ejes globales permanecen como referencia del ensamblaje.
 
@@ -65,3 +65,9 @@ Al pulsar **Usar este equipo en Piping**, se actualiza el equipo existente: mant
 ## Apoyo inferior de un equipo vertical
 
 En el modelo J (vertical), **Extremo inferior → Faldón recto · continuación del shell hasta el piso** reemplaza el cierre inferior por un faldón cilíndrico soldado, del mismo diámetro que el shell y con borde inferior plano. Su altura se configura por separado entre 0,20 y 5 m. No lleva bonete, channel ni bridas inferiores. El extremo superior conserva su configuración y las boquillas existentes mantienen su identidad. La opción se guarda en el JSON y se exporta con el equipo al ensamblaje de piping.
+
+## Niples y válvulas roscadas
+
+Los tramos rectos pueden representar niples con entrada para soldar, NPT macho o inferida del extremo elegido, y salida para soldar, enflanchada o NPT macho. Para un niple roscado en ambos extremos, selecciona entrada NPT (o conecta desde una boca NPT hembra) y salida NPT. Las válvulas, incluidas PSV y RV, permiten elegir conexiones enflanchadas o NPT hembra en entrada y salida. Las medidas de salida de PSV/RV siguen siendo independientes.
+
+Ejemplo: thredolet NPT hembra → niple NPT macho/macho → RV NPT hembra → niple de la medida de salida. Las uniones roscadas no agregan bridas; se representan las roscas y el listado distingue niples roscados y válvulas NPT. No se unen directamente macho con macho o hembra con hembra ni una boca roscada con una terminación soldada. Para continuar desde una boca macho se requiere una válvula hembra u otra unión compatible.
