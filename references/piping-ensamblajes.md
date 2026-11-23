@@ -9,8 +9,10 @@ Desarrollo en la rama `desarrollo-jndigital`. Render continúa utilizando `codex
 3. Configura el modelo, dimensiones y boquillas con el editor existente. Pulsa **Usar este equipo en Piping** para incorporarlo al ensamblaje.
 4. En **Ensamblaje de piping**, elige el extremo `TAG del equipo · boquilla` y agrega elementos. Entrada NPS y clase se heredan de la conexión; se agrega la brida contraparte donde corresponde.
 5. Para acoplar una línea existente, selecciona su primer elemento, elige una boquilla libre y pulsa **Acoplar seleccionado al extremo elegido**. Su continuación se mueve con ella. Elegir `Inicio de la línea` permite desacoplarla del equipo si ese extremo está libre.
-6. Cambia X, Y, Z y giro del equipo para ubicarlo. Las líneas conectadas siguen sus boquillas.
+6. Cambia X, Y, Z y giro del equipo para ubicarlo. Las líneas conectadas siguen sus boquillas. Los cambios de medidas y opciones de un componente seleccionado se aplican automáticamente; Deshacer permite recuperar el valor anterior.
 7. Descarga el respaldo JSON del conjunto. PNG y PDF incluyen equipo y piping; el listado de materiales corresponde al piping.
+
+La válvula de bola muestra cuerpo fundido partido, uniones apernadas, bridas de conexión, prensaestopa, vástago y palanca elevada con aro de mando según la referencia fotográfica.
 
 Válvulas disponibles: compuerta, bola, globo, retención, mariposa, PSV y RV. PSV/RV tienen entrada y salida lateral con medida y clase independientes. El largo axial representa la altura de la válvula; el largo de derivación determina el tramo lateral hasta su salida. El giro define la orientación de esa salida. Los largos son configurables, no tablas de fabricante.
 

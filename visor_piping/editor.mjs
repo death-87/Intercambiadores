@@ -37,7 +37,7 @@ function refresh(){
  const eqid=$('equipment').value;$('equipment').replaceChildren(...(design.equipments||[]).map(e=>new Option(e.tag,e.id)));if((design.equipments||[]).some(e=>e.id===eqid))$('equipment').value=eqid;equipmentForm();
  $('component-list').replaceChildren(...result.nodes.map(n=>new Option(n.tag+' · '+TYPES[n.kind]+(n.kind==='valve'?' '+VALVES[n.valveType]:'')+' · '+item(catalog,n.nps).label,n.id)));$('component-list').value=selected||'';$('undo').disabled=!undo.length;$('redo').disabled=!redo.length;conditional();height();
 }
-function selectNode(id){selected=id;const c=design.components.find(c=>c.id===id);if(c){for(const [field,key] of [['kind','kind'],['tag','tag'],['nps','nps'],['rating','rating'],['outlet-rating','outletRating'],['length','lengthMM'],['radius','radiusMM'],['branch-length','branchLengthMM'],['roll','rollDeg'],['bend','bendAngle'],['reduction','reduction'],['valve-type','valveType']])$(field).value=c[key]??c.rating;$('out-nps').value=c.kind==='tee'?c.branchNps:c.outNps;status('Seleccionado '+c.tag+'. Modifica sus valores y pulsa Aplicar cambios.');}refresh();highlight();}
+function selectNode(id){clearTimeout(liveTimer);liveSelection=null;selected=id;const c=design.components.find(c=>c.id===id);if(c){for(const [field,key] of [['kind','kind'],['tag','tag'],['nps','nps'],['rating','rating'],['outlet-rating','outletRating'],['length','lengthMM'],['radius','radiusMM'],['branch-length','branchLengthMM'],['roll','rollDeg'],['bend','bendAngle'],['reduction','reduction'],['valve-type','valveType']])$(field).value=c[key]??c.rating;$('out-nps').value=c.kind==='tee'?c.branchNps:c.outNps;status('Seleccionado '+c.tag+'. Los cambios se actualizan automáticamente.');}refresh();highlight();}
 const wrap=$('viewport'),scene=new THREE.Scene();scene.background=new THREE.Color('#edf3f7');
 const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));wrap.append(renderer.domElement);
 const camera=new THREE.OrthographicCamera(-1000,1000,700,-700,.1,1e7);camera.up.set(0,0,1);camera.position.set(3000,-3000,3000);
@@ -84,6 +84,21 @@ function syncEquipmentModels(){
  for(const group of [...equipmentModel.children]){const e=(design.equipments||[]).find(e=>e.id===group.userData.equipmentId);if(!e||group.userData.assetKey!==e.asset.data.object.uuid){equipmentModel.remove(group);clear(group);}}
  for(const e of design.equipments||[]){let group=equipmentModel.children.find(g=>g.userData.equipmentId===e.id);if(!group){group=new THREE.Group();group.add(loadAsset(e.asset));group.userData={equipmentId:e.id,assetKey:e.asset.data.object.uuid};equipmentModel.add(group);}group.position.set(...e.position);group.rotation.z=e.rotationDeg*Math.PI/180;}
 }
+function drawBallValve(n,f,group){
+ const D=n.odMM,axis=n.axis,up=n.normal,side=norm(cross(axis,up));
+ const body=mesh(new THREE.SphereGeometry(1,40,28),metal,group);body.name='Cuerpo fundido válvula de bola';body.position.copy(v(n.center));body.scale.set(D*.84,D*.84,Math.max(D*.8,(n.length-2*f.lengthMM)*.46));body.quaternion.setFromUnitVectors(zaxis,v(axis));
+ // Uniones del cuerpo partido, con sus espárragos y tuercas visibles.
+ const half=Math.min(D*.68,(n.length-2*f.lengthMM)*.32),r=D*.88,t=D*.10;
+ for(const sign of [-1,1]){const seat=add(n.center,mul(axis,sign*half));const ring=cylinder(sub(seat,mul(axis,t/2)),add(seat,mul(axis,t/2)),r,metal,group);ring.name='Unión apernada del cuerpo de bola';
+  for(let i=0;i<8;i++){const a=(i+.5)*Math.PI/4,offset=add(mul(up,Math.cos(a)*r*.86),mul(side,Math.sin(a)*r*.86)),point=add(seat,offset);cylinder(sub(point,mul(axis,t*1.5)),add(point,mul(axis,t*1.5)),D*.035,nutMat,group);for(const end of [-1,1]){const nut=mesh(new THREE.CylinderGeometry(D*.075,D*.075,D*.075,6),nutMat,group);nut.position.copy(v(add(point,mul(axis,end*t))));nut.quaternion.setFromUnitVectors(yaxis,v(axis));}}
+ }
+ const neck=add(n.center,mul(up,D*.72)),packing=add(n.center,mul(up,D*1.25)),top=add(n.center,mul(up,D*1.65));
+ cylinder(neck,packing,D*.27,metal,group).name='Prensaestopa válvula de bola';cylinder(packing,top,D*.105,nutMat,group).name='Vástago válvula de bola';
+ // Mando de la referencia: palanca elevada que termina en un aro vertical.
+ const elbow=add(add(top,mul(axis,D*.55)),mul(up,D*.30)),tip=add(elbow,mul(axis,D*2.25));
+ cylinder(top,add(top,mul(axis,D*.32)),D*.085,nutMat,group);cylinder(add(top,mul(axis,D*.32)),elbow,D*.085,nutMat,group);cylinder(elbow,tip,D*.085,nutMat,group).name='Palanca válvula de bola';
+ const wheel=mesh(new THREE.TorusGeometry(D*.48,D*.065,12,48),nutMat,group);wheel.name='Aro de mando válvula de bola';wheel.position.copy(v(sub(tip,mul(up,D*.42))));wheel.quaternion.setFromUnitVectors(zaxis,v(side));
+}
 function drawValve(n,f,group){
  drawFlange(add(n.start,mul(n.axis,f.lengthMM)),mul(n.axis,-1),f,group);
  const out=isRelief(n)?{...n.outletFlange,rating:n.endRating}:f,finish=sub(n.end,mul(n.endAxis,out.lengthMM));drawFlange(finish,n.endAxis,out,group);
@@ -98,7 +113,8 @@ function drawValve(n,f,group){
   cylinder(top,add(n.start,mul(n.axis,n.length)),n.odMM*.4,valveMat,group);return;
  }
  tube(add(n.start,mul(n.axis,f.lengthMM)),finish,n.odMM,group,valveMat);
- const body=mesh(['ball','globe','check'].includes(n.valveType)?new THREE.SphereGeometry(n.odMM*.85,32,24):n.valveType==='butterfly'?new THREE.CylinderGeometry(n.odMM*.95,n.odMM*.95,n.odMM*.35,40):new THREE.BoxGeometry(n.odMM*1.8,n.odMM*1.4,n.odMM*1.8),valveMat,group);body.position.copy(v(n.center));body.quaternion.setFromUnitVectors(yaxis,v(n.axis));
+ if(n.valveType==='ball'){drawBallValve(n,f,group);return;}
+ const body=mesh(['globe','check'].includes(n.valveType)?new THREE.SphereGeometry(n.odMM*.85,32,24):n.valveType==='butterfly'?new THREE.CylinderGeometry(n.odMM*.95,n.odMM*.95,n.odMM*.35,40):new THREE.BoxGeometry(n.odMM*1.8,n.odMM*1.4,n.odMM*1.8),valveMat,group);body.position.copy(v(n.center));body.quaternion.setFromUnitVectors(yaxis,v(n.axis));
  if(n.valveType==='check'){cylinder(add(n.center,mul(n.normal,n.odMM*.65)),add(n.center,mul(n.normal,n.odMM)),n.odMM*.7,flangeMat,group);return;}
  const stemStart=add(n.center,mul(n.normal,n.odMM*.6)),stemEnd=add(n.center,mul(n.normal,n.odMM*2.5));cylinder(stemStart,stemEnd,n.odMM*.09,nutMat,group);
  if(['gate','globe'].includes(n.valveType)){cylinder(stemStart,add(n.center,mul(n.normal,n.odMM*1.5)),n.odMM*.35,valveMat,group);const wheel=mesh(new THREE.TorusGeometry(n.odMM*.7,n.odMM*.07,10,40),valveMat,group);wheel.position.copy(v(stemEnd));wheel.quaternion.setFromUnitVectors(zaxis,v(n.normal));for(const a of [0,Math.PI/2]){const side=add(mul(n.axis,Math.cos(a)*n.odMM*.65),mul(cross(n.normal,n.axis),Math.sin(a)*n.odMM*.65));cylinder(sub(stemEnd,side),add(stemEnd,side),n.odMM*.04,valveMat,group);}}
@@ -159,16 +175,27 @@ async function capture(){
  }
 }
 function guard(fn){return async()=>{try{await fn();}catch(e){status(e.message,true);}};}
+let liveTimer=null,liveUndoTimer=null,liveSelection=null;
+function updateSelected(){
+ clearTimeout(liveTimer);if(!selected)return;const current=design.components.find(c=>c.id===selected);if(!current)return;
+ const edited=form();if(JSON.stringify(current)===JSON.stringify(edited))return;
+ try{const next=structuredClone(design);next.components[next.components.findIndex(c=>c.id===selected)]=edited;setDesign(next,liveSelection!==selected);liveSelection=selected;clearTimeout(liveUndoTimer);liveUndoTimer=setTimeout(()=>{liveSelection=null;},800);status('Cambios actualizados en '+edited.tag+'.');}catch(error){status(error.message,true);}
+}
+for(const id of ['tag','nps','rating','out-nps','outlet-rating','length','radius','branch-length','roll','bend','reduction','valve-type']){
+ $(id).addEventListener('input',()=>{clearTimeout(liveTimer);if(selected)liveTimer=setTimeout(updateSelected,160);});
+ $(id).addEventListener('change',()=>{if(selected)updateSelected();});
+}
 $('add').onclick=guard(()=>{if(!activePort)throw Error('No hay un extremo libre.');const c=form();c.id='c'+uid().slice(0,24);c.parentPort=activePort;if(!mutate(d=>d.components.push(c)))return;selected=null;activePort=result.freePorts.find(p=>p.id===c.id+':out')?.id||result.freePorts.at(-1)?.id||'';defaults();renderModel();refresh();status('Elemento conectado. El respaldo local se actualizó.');});
 $('apply').onclick=()=>{if(!selected)return;const c=form();if(mutate(d=>{d.components[d.components.findIndex(n=>n.id===selected)]=c;}))selectNode(selected);};
 $('delete').onclick=()=>{if(!selected)return;const ids=descendants(design,selected);if(ids.size>1&&!confirm('Se eliminarán '+ids.size+' componentes, incluyendo las continuaciones. Puedes deshacerlo.'))return;mutate(d=>{d.components=d.components.filter(c=>!ids.has(c.id));});selected=null;defaults();refresh();};
-$('clear').onclick=()=>{selected=null;defaults();refresh();highlight();};$('kind').onchange=defaults;$('nps').onchange=defaults;$('rating').onchange=conditional;$('valve-type').onchange=conditional;$('port').onchange=()=>{activePort=$('port').value;if(!selected)defaults();renderModel();refresh();};$('component-list').onchange=()=>selectNode($('component-list').value);
+$('clear').onclick=()=>{selected=null;defaults();refresh();highlight();};$('kind').onchange=()=>{if(selected){conditional();updateSelected();}else defaults();};$('nps').onchange=()=>{if(selected){conditional();updateSelected();}else defaults();};$('rating').onchange=conditional;$('valve-type').onchange=conditional;$('port').onchange=()=>{activePort=$('port').value;if(!selected)defaults();renderModel();refresh();};$('component-list').onchange=()=>selectNode($('component-list').value);
 $('equipment').onchange=equipmentForm;
 $('equipment-apply').onclick=()=>mutate(d=>{const e=d.equipments.find(e=>e.id===$('equipment').value);e.position=['equipment-x','equipment-y','equipment-z'].map(id=>Number($(id).value));e.rotationDeg=Number($('equipment-rotation').value);});
+let equipmentTimer=null;for(const id of ['equipment-x','equipment-y','equipment-z','equipment-rotation'])$(id).addEventListener('input',()=>{clearTimeout(equipmentTimer);equipmentTimer=setTimeout(()=>{if(['equipment-x','equipment-y','equipment-z','equipment-rotation'].every(k=>$(k).value.trim()!==''))$('equipment-apply').click();},180);});
 $('equipment-remove').onclick=()=>mutate(d=>{const id=$('equipment').value;if(d.components.some(c=>c.parentPort.startsWith('eq-'+id+'/')))throw Error('Desacopla o elimina primero las líneas conectadas al equipo.');d.equipments=d.equipments.filter(e=>e.id!==id);});
 $('attach').onclick=()=>{if(!selected||!activePort)return;const target=activePort,id=selected;if(mutate(d=>{const c=d.components.find(c=>c.id===id);c.parentPort=target;d.components=sortComponents(d,catalog).components;}))status('Línea acoplada al extremo seleccionado, incluyendo su continuación.');};
 $('title').onchange=()=>mutate(d=>{d.title=$('title').value.trim()||'Línea de piping';});$('direction').onchange=()=>mutate(d=>{d.direction=$('direction').value;});
-$('undo').onclick=()=>{if(!undo.length)return;redo.push(structuredClone(design));const d=undo.pop();selected=null;setDesign(d,false);defaults();};$('redo').onclick=()=>{if(!redo.length)return;undo.push(structuredClone(design));const d=redo.pop();selected=null;setDesign(d,false);defaults();};
+$('undo').onclick=()=>{clearTimeout(liveTimer);liveSelection=null;if(!undo.length)return;redo.push(structuredClone(design));const d=undo.pop();selected=null;setDesign(d,false);defaults();};$('redo').onclick=()=>{clearTimeout(liveTimer);liveSelection=null;if(!redo.length)return;undo.push(structuredClone(design));const d=redo.pop();selected=null;setDesign(d,false);defaults();};
 $('save').onclick=()=>exportFile(filename()+'.json',JSON.stringify(design,null,2),'application/json');$('load').onclick=()=>$('file').click();$('file').onchange=guard(async()=>{const f=$('file').files[0];if(!f)return;if(f.size>32e6)throw Error('El JSON supera 32 MB.');setDesign(JSON.parse(await f.text()));selected=null;defaults();refresh();status('Diseño importado.');$('file').value='';});
 $('example').onclick=guard(async()=>{if((design.components.length||(design.equipments||[]).length)&&!confirm('¿Abrir el ejemplo? Podrás recuperar el diseño actual con Deshacer.'))return;selected=null;setDesign(await fetch('./ejemplo.json').then(r=>r.json()));activePort=result.freePorts.at(-1)?.id||'';defaults();refresh();fit('iso');status('Ejemplo cargado. Selecciona un elemento para editarlo o continúa desde un extremo.');});
 $('new').onclick=()=>{if((design.components.length||(design.equipments||[]).length)&&!confirm('¿Comenzar una línea nueva? Descarga antes el JSON si deseas conservar la actual.'))return;selected=null;activePort='origin';setDesign(blankDesign('p'+uid()));defaults();refresh();};
