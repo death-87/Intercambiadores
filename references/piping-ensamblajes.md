@@ -72,8 +72,14 @@ Los tramos rectos pueden representar niples con entrada para soldar, NPT macho o
 
 Ejemplo: thredolet NPT hembra → niple NPT macho/macho → RV NPT hembra → niple de la medida de salida. Las uniones roscadas no agregan bridas; se representan las roscas y el listado distingue niples roscados y válvulas NPT. No se unen directamente macho con macho o hembra con hembra ni una boca roscada con una terminación soldada. Para continuar desde una boca macho se requiere una válvula hembra u otra unión compatible.
 
-## Guardar para continuar en otro lugar
+## Guardar proyectos por nombre
 
-El botón principal **Guardar proyecto para continuar en otro lugar** descarga un JSON con el ensamblaje completo: equipos, diseños editables, nameplates, posiciones, giros, boquillas, conexiones y componentes de piping. Incluye las ediciones válidas pendientes del componente seleccionado y la posición del equipo. El nombre lleva fecha y hora para distinguir versiones. La pantalla informa cuándo se preparó la copia y avisa si se realizan cambios posteriores.
+El botón **Guardar proyecto** abre un cuadro para escribir un nombre, por ejemplo **Equipo piping**. **Guardar en este navegador** conserva el conjunto completo en una biblioteca IndexedDB, sin descargar JSON. **Mis proyectos → Abrir seleccionado** recupera esa copia, incluso después de cerrar y volver a abrir la página en el mismo navegador. Esta biblioteca local no se sincroniza con otros computadores.
 
-Conserva el archivo descargado y llévalo al otro computador (por ejemplo, en tu almacenamiento personal o pendrive). Abre la página de prueba y pulsa **Abrir proyecto guardado** para cargarlo. El botón prepara una descarga; no es almacenamiento en la nube. Si estás editando un equipo en Herramientas de equipo, primero pulsa **Usar este equipo en Piping** para incorporar esos cambios y después guarda el proyecto completo.
+Para continuar desde otros lugares se requiere activar el servicio de Google Drive descrito en [PROYECTOS_PIPING.md](../apps_script/PROYECTOS_PIPING.md). El servicio es independiente del guardado de Intercambiadores. Una vez configurado, entra con la contraseña en **Proyectos entre computadores**, utiliza **Guardar en Google Drive** y abre el conjunto desde la lista del servicio. El cliente no anuncia un guardado remoto hasta recibir la verificación del servidor. Los cambios posteriores a la solicitud se identifican como pendientes. El servicio conserva versiones y rechaza sobrescrituras de una revisión antigua.
+
+Las descargas e importaciones JSON quedan como respaldo opcional. En Herramientas de equipo, primero incorpora los cambios con **Usar este equipo en Piping** y después guarda el proyecto completo.
+
+## Cambio inmediato del tipo de válvula
+
+Al cambiar una válvula existente de enflanchada a roscada o viceversa, se actualiza el conjunto en una sola operación: se ajustan las terminaciones de los niples vecinos o se intercalan los niples necesarios cuando la conexión proviene de una brida u otro accesorio. Se conserva la medida del extremo y la continuación conectada. Los niples agregados aparecen en el dibujo y el listado de materiales; **Deshacer** recupera todo el cambio.

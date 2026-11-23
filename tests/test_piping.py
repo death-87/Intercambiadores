@@ -62,6 +62,7 @@ class PipingTests(unittest.TestCase):
         validar_piping(result['orientedDesign'])
         self.assertEqual(materiales_piping(result['teeDesign']),result['teeMaterials'])
         self.assertEqual(materiales_piping(result['threadedDesign']),result['threadedMaterials'])
+        self.assertEqual(materiales_piping(result['convertedDesign']),result['convertedMaterials'])
         bad_thread=copy.deepcopy(result['threadedDesign']);bad_thread['components'][3]['valveConnection']='flanged'
         with self.assertRaises(ValueError):validar_piping(bad_thread)
         self.assertEqual(materiales_piping(result['teeBranchDesign']),result['teeBranchMaterials'])
