@@ -8,7 +8,7 @@ SOLUCIONES = (
     ("01", "Intercambiadores", "Información técnica, modelos 3D e informes de conexiones roscadas en un mismo espacio.", "Equipos · Modelos 3D · PDF", "disponible"),
     ("02", "Informes de Inspección", "Creación de informes y organización de los antecedentes de cada inspección.", "Informes · Antecedentes · Revisiones", "disponible"),
     ("03", "Reparaciones Temporales", "Seguimiento de reparaciones temporales y sus antecedentes técnicos.", "Reparaciones · Seguimiento · Registros", "disponible"),
-    ("04", "Inspección y mantenimiento", "Nuevas herramientas para organizar tareas, observaciones de terreno e historial de los activos.", "Tareas · Hallazgos · Historial", "proximamente"),
+    ("04", "Piping e isométricos", "Arma líneas con cañerías, válvulas, codos, tees, reductores y bridas del catálogo de equipos.", "Diseño 3D · Isométricos · Materiales", "disponible"),
 )
 ENLACES_SOLUCIONES = {
     "03": "https://reparacionestemp.streamlit.app/",
@@ -26,6 +26,11 @@ def ir_informes():
     st.query_params["solucion"] = "informes"
 
 
+def ir_piping():
+    st.session_state["jn_section"] = "piping"
+    st.query_params["solucion"] = "piping"
+
+
 def ir_inicio():
     st.session_state["jn_section"] = "inicio"
     if "solucion" in st.query_params:
@@ -35,6 +40,10 @@ def ir_inicio():
 def mostrar_inicio():
     """Devuelve True si se mostró la portada; el módulo no debe cargar datos aún."""
     section = st.session_state.get("jn_section", st.query_params.get("solucion", "inicio"))
+    if section == "piping":
+        from piping import mostrar_piping
+        mostrar_piping()
+        return True
     if section == "informes":
         from inspecciones import mostrar_informes
         mostrar_informes()
@@ -96,7 +105,7 @@ def mostrar_inicio():
                     st.link_button("Abrir herramienta ↗", ENLACES_SOLUCIONES[number], use_container_width=True)
                     st.markdown('<div class="jn-external-note">Se abre en una pestaña nueva</div>', unsafe_allow_html=True)
                 else:
-                    st.button("Abrir solución ↗" if available else "En preparación", key="jn_open_" + number, disabled=not available, on_click=(ir_informes if number == "02" else ir_solucion) if available else None, use_container_width=True, type="primary" if available else "secondary")
+                    st.button("Abrir solución ↗" if available else "En preparación", key="jn_open_" + number, disabled=not available, on_click=(ir_informes if number == "02" else ir_piping if number == "04" else ir_solucion) if available else None, use_container_width=True, type="primary" if available else "secondary")
 
     st.markdown('''<section id="enfoque" class="jn-approach"><div><div class="jn-eyebrow">NUESTROS SERVICIOS DIGITALES</div><h2>Menos dispersión.<br>Más criterio técnico.</h2><p>Un portal pensado para acompañar el trabajo de terreno y la preparación de información técnica.</p></div><div class="jn-steps"><div><span>01</span><section><h3>Organiza</h3><p>Consulta equipos, antecedentes y datos operacionales.</p></section></div><div><span>02</span><section><h3>Visualiza</h3><p>Revisa modelos 3D y ubica las conexiones del equipo.</p></section></div><div><span>03</span><section><h3>Documenta</h3><p>Genera fichas e informes con la información disponible.</p></section></div></div></section>''', unsafe_allow_html=True)
     with st.container(key="jn_bottom_cta"):

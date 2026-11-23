@@ -1,0 +1,686 @@
+{
+  "version": 1,
+  "source": "Dimensiones del visor de intercambiadores: bridas WN ASME B16.5 y diámetro exterior ASME B36.10M. Unidades: mm.",
+  "items": [
+    {
+      "nps": 0.5,
+      "label": "1/2\"",
+      "odMM": 21.3,
+      "flanges": {
+        "150#": {
+          "diameterMM": 88.9,
+          "thicknessMM": 9.652,
+          "hubDiameterMM": 30.226,
+          "lengthMM": 45.974,
+          "pitchMM": 60.452,
+          "holeMM": 15.875,
+          "boltCount": 4,
+          "odMM": 21.3,
+          "raisedFaceMM": 34.925
+        },
+        "300#": {
+          "diameterMM": 95.25,
+          "thicknessMM": 12.7,
+          "hubDiameterMM": 38.1,
+          "lengthMM": 50.8,
+          "pitchMM": 66.548,
+          "holeMM": 15.875,
+          "boltCount": 4,
+          "odMM": 21.3,
+          "raisedFaceMM": 34.925
+        },
+        "600#": {
+          "diameterMM": 95.25,
+          "thicknessMM": 14.224,
+          "hubDiameterMM": 38.1,
+          "lengthMM": 52.324,
+          "pitchMM": 66.548,
+          "holeMM": 15.875,
+          "boltCount": 4,
+          "odMM": 21.3,
+          "raisedFaceMM": 34.925
+        }
+      }
+    },
+    {
+      "nps": 0.75,
+      "label": "3/4\"",
+      "odMM": 26.7,
+      "flanges": {
+        "150#": {
+          "diameterMM": 98.552,
+          "thicknessMM": 11.176,
+          "hubDiameterMM": 38.1,
+          "lengthMM": 50.8,
+          "pitchMM": 69.85,
+          "holeMM": 15.875,
+          "boltCount": 4,
+          "odMM": 26.7,
+          "raisedFaceMM": 42.8752
+        },
+        "300#": {
+          "diameterMM": 117.348,
+          "thicknessMM": 14.224,
+          "hubDiameterMM": 47.752,
+          "lengthMM": 55.626,
+          "pitchMM": 82.55,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 26.7,
+          "raisedFaceMM": 42.8752
+        },
+        "600#": {
+          "diameterMM": 117.348,
+          "thicknessMM": 15.748,
+          "hubDiameterMM": 47.752,
+          "lengthMM": 57.15,
+          "pitchMM": 82.55,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 26.7,
+          "raisedFaceMM": 42.8752
+        }
+      }
+    },
+    {
+      "nps": 1,
+      "label": "1\"",
+      "odMM": 33.4,
+      "flanges": {
+        "150#": {
+          "diameterMM": 107.95,
+          "thicknessMM": 12.7,
+          "hubDiameterMM": 49.276,
+          "lengthMM": 53.848,
+          "pitchMM": 79.248,
+          "holeMM": 15.875,
+          "boltCount": 4,
+          "odMM": 33.4,
+          "raisedFaceMM": 50.8
+        },
+        "300#": {
+          "diameterMM": 123.952,
+          "thicknessMM": 15.748,
+          "hubDiameterMM": 53.848,
+          "lengthMM": 60.452,
+          "pitchMM": 88.9,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 33.4,
+          "raisedFaceMM": 50.8
+        },
+        "600#": {
+          "diameterMM": 123.952,
+          "thicknessMM": 17.526,
+          "hubDiameterMM": 53.848,
+          "lengthMM": 61.976,
+          "pitchMM": 88.9,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 33.4,
+          "raisedFaceMM": 50.8
+        }
+      }
+    },
+    {
+      "nps": 1.5,
+      "label": "1 1/2\"",
+      "odMM": 48.3,
+      "flanges": {
+        "150#": {
+          "diameterMM": 127.0,
+          "thicknessMM": 15.748,
+          "hubDiameterMM": 65.024,
+          "lengthMM": 60.452,
+          "pitchMM": 98.552,
+          "holeMM": 15.875,
+          "boltCount": 4,
+          "odMM": 48.3,
+          "raisedFaceMM": 73.025
+        },
+        "300#": {
+          "diameterMM": 155.448,
+          "thicknessMM": 19.05,
+          "hubDiameterMM": 69.85,
+          "lengthMM": 66.802,
+          "pitchMM": 114.3,
+          "holeMM": 22.225,
+          "boltCount": 4,
+          "odMM": 48.3,
+          "raisedFaceMM": 73.025
+        },
+        "600#": {
+          "diameterMM": 155.448,
+          "thicknessMM": 22.352,
+          "hubDiameterMM": 69.85,
+          "lengthMM": 69.85,
+          "pitchMM": 114.3,
+          "holeMM": 22.225,
+          "boltCount": 4,
+          "odMM": 48.3,
+          "raisedFaceMM": 73.025
+        }
+      }
+    },
+    {
+      "nps": 2,
+      "label": "2\"",
+      "odMM": 60.3,
+      "flanges": {
+        "150#": {
+          "diameterMM": 152.4,
+          "thicknessMM": 17.526,
+          "hubDiameterMM": 77.724,
+          "lengthMM": 61.976,
+          "pitchMM": 120.65,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 60.3,
+          "raisedFaceMM": 92.075
+        },
+        "300#": {
+          "diameterMM": 165.1,
+          "thicknessMM": 20.574,
+          "hubDiameterMM": 84.074,
+          "lengthMM": 68.326,
+          "pitchMM": 127.0,
+          "holeMM": 19.05,
+          "boltCount": 8,
+          "odMM": 60.3,
+          "raisedFaceMM": 92.075
+        },
+        "600#": {
+          "diameterMM": 165.1,
+          "thicknessMM": 25.4,
+          "hubDiameterMM": 84.074,
+          "lengthMM": 73.152,
+          "pitchMM": 127.0,
+          "holeMM": 19.05,
+          "boltCount": 8,
+          "odMM": 60.3,
+          "raisedFaceMM": 92.075
+        }
+      }
+    },
+    {
+      "nps": 2.5,
+      "label": "2 1/2\"",
+      "odMM": 73.0,
+      "flanges": {
+        "150#": {
+          "diameterMM": 177.8,
+          "thicknessMM": 20.574,
+          "hubDiameterMM": 90.424,
+          "lengthMM": 68.326,
+          "pitchMM": 139.7,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 73.0,
+          "raisedFaceMM": 104.775
+        },
+        "300#": {
+          "diameterMM": 190.5,
+          "thicknessMM": 23.876,
+          "hubDiameterMM": 100.076,
+          "lengthMM": 74.676,
+          "pitchMM": 149.352,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 73.0,
+          "raisedFaceMM": 104.775
+        },
+        "600#": {
+          "diameterMM": 190.5,
+          "thicknessMM": 28.448,
+          "hubDiameterMM": 100.076,
+          "lengthMM": 79.248,
+          "pitchMM": 149.352,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 73.0,
+          "raisedFaceMM": 104.775
+        }
+      }
+    },
+    {
+      "nps": 3,
+      "label": "3\"",
+      "odMM": 88.9,
+      "flanges": {
+        "150#": {
+          "diameterMM": 190.5,
+          "thicknessMM": 22.352,
+          "hubDiameterMM": 107.95,
+          "lengthMM": 68.326,
+          "pitchMM": 152.4,
+          "holeMM": 19.05,
+          "boltCount": 4,
+          "odMM": 88.9,
+          "raisedFaceMM": 127.0
+        },
+        "300#": {
+          "diameterMM": 209.55,
+          "thicknessMM": 26.924,
+          "hubDiameterMM": 117.348,
+          "lengthMM": 77.724,
+          "pitchMM": 168.148,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 88.9,
+          "raisedFaceMM": 127.0
+        },
+        "600#": {
+          "diameterMM": 209.55,
+          "thicknessMM": 31.75,
+          "hubDiameterMM": 117.348,
+          "lengthMM": 82.55,
+          "pitchMM": 168.148,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 88.9,
+          "raisedFaceMM": 127.0
+        }
+      }
+    },
+    {
+      "nps": 4,
+      "label": "4\"",
+      "odMM": 114.3,
+      "flanges": {
+        "150#": {
+          "diameterMM": 228.6,
+          "thicknessMM": 22.352,
+          "hubDiameterMM": 134.874,
+          "lengthMM": 74.676,
+          "pitchMM": 190.5,
+          "holeMM": 19.05,
+          "boltCount": 8,
+          "odMM": 114.3,
+          "raisedFaceMM": 157.1752
+        },
+        "300#": {
+          "diameterMM": 254.0,
+          "thicknessMM": 30.226,
+          "hubDiameterMM": 146.05,
+          "lengthMM": 84.328,
+          "pitchMM": 200.152,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 114.3,
+          "raisedFaceMM": 157.1752
+        },
+        "600#": {
+          "diameterMM": 273.05,
+          "thicknessMM": 38.1,
+          "hubDiameterMM": 152.4,
+          "lengthMM": 101.6,
+          "pitchMM": 215.9,
+          "holeMM": 25.4,
+          "boltCount": 8,
+          "odMM": 114.3,
+          "raisedFaceMM": 157.1752
+        }
+      }
+    },
+    {
+      "nps": 6,
+      "label": "6\"",
+      "odMM": 168.3,
+      "flanges": {
+        "150#": {
+          "diameterMM": 279.4,
+          "thicknessMM": 23.876,
+          "hubDiameterMM": 192.024,
+          "lengthMM": 87.376,
+          "pitchMM": 241.3,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 168.3,
+          "raisedFaceMM": 215.9
+        },
+        "300#": {
+          "diameterMM": 317.5,
+          "thicknessMM": 35.052,
+          "hubDiameterMM": 206.248,
+          "lengthMM": 97.028,
+          "pitchMM": 269.748,
+          "holeMM": 22.225,
+          "boltCount": 12,
+          "odMM": 168.3,
+          "raisedFaceMM": 215.9
+        },
+        "600#": {
+          "diameterMM": 355.6,
+          "thicknessMM": 47.752,
+          "hubDiameterMM": 222.25,
+          "lengthMM": 117.348,
+          "pitchMM": 292.1,
+          "holeMM": 28.575,
+          "boltCount": 12,
+          "odMM": 168.3,
+          "raisedFaceMM": 215.9
+        }
+      }
+    },
+    {
+      "nps": 8,
+      "label": "8\"",
+      "odMM": 219.1,
+      "flanges": {
+        "150#": {
+          "diameterMM": 342.9,
+          "thicknessMM": 26.924,
+          "hubDiameterMM": 246.126,
+          "lengthMM": 100.076,
+          "pitchMM": 298.45,
+          "holeMM": 22.225,
+          "boltCount": 8,
+          "odMM": 219.1,
+          "raisedFaceMM": 269.875
+        },
+        "300#": {
+          "diameterMM": 381.0,
+          "thicknessMM": 39.624,
+          "hubDiameterMM": 260.35,
+          "lengthMM": 109.728,
+          "pitchMM": 330.2,
+          "holeMM": 25.4,
+          "boltCount": 12,
+          "odMM": 219.1,
+          "raisedFaceMM": 269.875
+        },
+        "600#": {
+          "diameterMM": 419.1,
+          "thicknessMM": 55.626,
+          "hubDiameterMM": 273.05,
+          "lengthMM": 133.35,
+          "pitchMM": 349.25,
+          "holeMM": 31.75,
+          "boltCount": 12,
+          "odMM": 219.1,
+          "raisedFaceMM": 269.875
+        }
+      }
+    },
+    {
+      "nps": 10,
+      "label": "10\"",
+      "odMM": 273.0,
+      "flanges": {
+        "150#": {
+          "diameterMM": 406.4,
+          "thicknessMM": 28.448,
+          "hubDiameterMM": 304.8,
+          "lengthMM": 100.076,
+          "pitchMM": 361.95,
+          "holeMM": 25.4,
+          "boltCount": 12,
+          "odMM": 273.0,
+          "raisedFaceMM": 323.85
+        },
+        "300#": {
+          "diameterMM": 444.5,
+          "thicknessMM": 45.974,
+          "hubDiameterMM": 320.548,
+          "lengthMM": 115.824,
+          "pitchMM": 387.35,
+          "holeMM": 28.575,
+          "boltCount": 16,
+          "odMM": 273.0,
+          "raisedFaceMM": 323.85
+        },
+        "600#": {
+          "diameterMM": 508.0,
+          "thicknessMM": 63.5,
+          "hubDiameterMM": 342.9,
+          "lengthMM": 152.4,
+          "pitchMM": 431.8,
+          "holeMM": 34.925,
+          "boltCount": 16,
+          "odMM": 273.0,
+          "raisedFaceMM": 323.85
+        }
+      }
+    },
+    {
+      "nps": 12,
+      "label": "12\"",
+      "odMM": 323.8,
+      "flanges": {
+        "150#": {
+          "diameterMM": 482.6,
+          "thicknessMM": 30.226,
+          "hubDiameterMM": 365.252,
+          "lengthMM": 112.776,
+          "pitchMM": 431.8,
+          "holeMM": 25.4,
+          "boltCount": 12,
+          "odMM": 323.8,
+          "raisedFaceMM": 381.0
+        },
+        "300#": {
+          "diameterMM": 520.7,
+          "thicknessMM": 49.276,
+          "hubDiameterMM": 374.65,
+          "lengthMM": 128.524,
+          "pitchMM": 450.85,
+          "holeMM": 31.75,
+          "boltCount": 16,
+          "odMM": 323.8,
+          "raisedFaceMM": 381.0
+        },
+        "600#": {
+          "diameterMM": 558.8,
+          "thicknessMM": 66.548,
+          "hubDiameterMM": 400.05,
+          "lengthMM": 155.448,
+          "pitchMM": 488.95,
+          "holeMM": 34.925,
+          "boltCount": 20,
+          "odMM": 323.8,
+          "raisedFaceMM": 381.0
+        }
+      }
+    },
+    {
+      "nps": 14,
+      "label": "14\"",
+      "odMM": 355.6,
+      "flanges": {
+        "150#": {
+          "diameterMM": 533.4,
+          "thicknessMM": 33.274,
+          "hubDiameterMM": 400.05,
+          "lengthMM": 125.476,
+          "pitchMM": 476.25,
+          "holeMM": 28.575,
+          "boltCount": 12,
+          "odMM": 355.6,
+          "raisedFaceMM": 412.75
+        },
+        "300#": {
+          "diameterMM": 584.2,
+          "thicknessMM": 52.324,
+          "hubDiameterMM": 425.45,
+          "lengthMM": 141.224,
+          "pitchMM": 514.35,
+          "holeMM": 31.75,
+          "boltCount": 20,
+          "odMM": 355.6,
+          "raisedFaceMM": 412.75
+        },
+        "600#": {
+          "diameterMM": 603.25,
+          "thicknessMM": 69.85,
+          "hubDiameterMM": 431.8,
+          "lengthMM": 165.1,
+          "pitchMM": 527.05,
+          "holeMM": 38.1,
+          "boltCount": 20,
+          "odMM": 355.6,
+          "raisedFaceMM": 412.75
+        }
+      }
+    },
+    {
+      "nps": 16,
+      "label": "16\"",
+      "odMM": 406.4,
+      "flanges": {
+        "150#": {
+          "diameterMM": 596.9,
+          "thicknessMM": 35.052,
+          "hubDiameterMM": 457.2,
+          "lengthMM": 125.476,
+          "pitchMM": 539.75,
+          "holeMM": 28.575,
+          "boltCount": 16,
+          "odMM": 406.4,
+          "raisedFaceMM": 469.9
+        },
+        "300#": {
+          "diameterMM": 647.7,
+          "thicknessMM": 55.626,
+          "hubDiameterMM": 482.6,
+          "lengthMM": 144.526,
+          "pitchMM": 571.5,
+          "holeMM": 34.925,
+          "boltCount": 20,
+          "odMM": 406.4,
+          "raisedFaceMM": 469.9
+        },
+        "600#": {
+          "diameterMM": 685.8,
+          "thicknessMM": 76.2,
+          "hubDiameterMM": 495.3,
+          "lengthMM": 177.8,
+          "pitchMM": 603.25,
+          "holeMM": 41.275,
+          "boltCount": 20,
+          "odMM": 406.4,
+          "raisedFaceMM": 469.9
+        }
+      }
+    },
+    {
+      "nps": 18,
+      "label": "18\"",
+      "odMM": 457.2,
+      "flanges": {
+        "150#": {
+          "diameterMM": 635.0,
+          "thicknessMM": 38.1,
+          "hubDiameterMM": 504.952,
+          "lengthMM": 138.176,
+          "pitchMM": 577.85,
+          "holeMM": 31.75,
+          "boltCount": 16,
+          "odMM": 457.2,
+          "raisedFaceMM": 533.4
+        },
+        "300#": {
+          "diameterMM": 711.2,
+          "thicknessMM": 58.674,
+          "hubDiameterMM": 533.4,
+          "lengthMM": 157.226,
+          "pitchMM": 628.65,
+          "holeMM": 34.925,
+          "boltCount": 24,
+          "odMM": 457.2,
+          "raisedFaceMM": 533.4
+        },
+        "600#": {
+          "diameterMM": 742.95,
+          "thicknessMM": 82.55,
+          "hubDiameterMM": 546.1,
+          "lengthMM": 184.15,
+          "pitchMM": 654.05,
+          "holeMM": 44.45,
+          "boltCount": 20,
+          "odMM": 457.2,
+          "raisedFaceMM": 533.4
+        }
+      }
+    },
+    {
+      "nps": 20,
+      "label": "20\"",
+      "odMM": 508.0,
+      "flanges": {
+        "150#": {
+          "diameterMM": 698.5,
+          "thicknessMM": 41.148,
+          "hubDiameterMM": 558.8,
+          "lengthMM": 142.748,
+          "pitchMM": 635.0,
+          "holeMM": 31.75,
+          "boltCount": 20,
+          "odMM": 508.0,
+          "raisedFaceMM": 584.2
+        },
+        "300#": {
+          "diameterMM": 774.7,
+          "thicknessMM": 61.976,
+          "hubDiameterMM": 587.248,
+          "lengthMM": 160.528,
+          "pitchMM": 685.8,
+          "holeMM": 34.925,
+          "boltCount": 24,
+          "odMM": 508.0,
+          "raisedFaceMM": 584.2
+        },
+        "600#": {
+          "diameterMM": 812.8,
+          "thicknessMM": 88.9,
+          "hubDiameterMM": 609.6,
+          "lengthMM": 190.5,
+          "pitchMM": 723.9,
+          "holeMM": 44.45,
+          "boltCount": 24,
+          "odMM": 508.0,
+          "raisedFaceMM": 584.2
+        }
+      }
+    },
+    {
+      "nps": 24,
+      "label": "24\"",
+      "odMM": 609.6,
+      "flanges": {
+        "150#": {
+          "diameterMM": 812.8,
+          "thicknessMM": 45.974,
+          "hubDiameterMM": 663.448,
+          "lengthMM": 150.876,
+          "pitchMM": 749.3,
+          "holeMM": 34.925,
+          "boltCount": 20,
+          "odMM": 609.6,
+          "raisedFaceMM": 692.15
+        },
+        "300#": {
+          "diameterMM": 914.4,
+          "thicknessMM": 68.326,
+          "hubDiameterMM": 701.548,
+          "lengthMM": 166.624,
+          "pitchMM": 812.8,
+          "holeMM": 41.275,
+          "boltCount": 24,
+          "odMM": 609.6,
+          "raisedFaceMM": 692.15
+        },
+        "600#": {
+          "diameterMM": 939.8,
+          "thicknessMM": 101.6,
+          "hubDiameterMM": 717.55,
+          "lengthMM": 203.2,
+          "pitchMM": 838.2,
+          "holeMM": 50.8,
+          "boltCount": 24,
+          "odMM": 609.6,
+          "raisedFaceMM": 692.15
+        }
+      }
+    }
+  ]
+}
