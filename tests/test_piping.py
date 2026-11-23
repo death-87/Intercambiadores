@@ -59,6 +59,9 @@ class PipingTests(unittest.TestCase):
         self.assertEqual(materiales_piping(result['socketDesign']),result['socketMaterials'])
         self.assertEqual(materiales_piping(result['oletDesign']),result['oletMaterials'])
         self.assertEqual(materiales_piping(result['latroletDesign']),result['latroletMaterials'])
+        validar_piping(result['orientedDesign'])
+        invalid=copy.deepcopy(result['orientedDesign']);invalid['components'][3]['branchPitchDeg']=91
+        with self.assertRaises(ValueError):validar_piping(invalid)
         legacy=copy.deepcopy(result['oletDesign']);legacy['components'][3]['kind']='latrolet'
         self.assertEqual(materiales_piping(legacy),result['oletMaterials'])
         self.assertEqual(legacy['components'][3]['kind'],'elbolet')

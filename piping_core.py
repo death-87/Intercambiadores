@@ -83,10 +83,14 @@ def validar_piping(diseno):
         rating=clase if extremo=='flanged' else c['rating']
         if c['kind']=='tee' and c['branchNps']>nps:
             raise ValueError('La derivación de la tee no puede superar la medida de entrada.')
+        if c['kind']=='elbolet':
+            for key,limit in (('branchYawDeg',3600),('branchPitchDeg',90)):
+                value=c.get(key,0)
+                if type(value) not in (int,float) or not math.isfinite(value) or abs(value)>limit:raise ValueError('Giro de elbolet inválido.')
         if c['kind'] in OLETS:
             run=next(x for x in componentes if x['id']==puerto.split(':')[0])
             offset=c.get('tapOffsetMM')
-            if (c['kind']=='elbolet')!=(run['kind']=='elbow') or c.get('branchAngle',45) not in (45,90) or c.get('branchDirection','outlet') not in ('inlet','outlet') or type(offset) not in (int,float) or not math.isfinite(offset) or not 0<=offset<=(0 if run['kind']=='elbow' else run['lengthMM']) or c['outNps']>nps:raise ValueError('Posición o medida de sockolet inválida.')
+            if (c['kind']=='elbolet')!=(run['kind']=='elbow') or c.get('branchAngle',45) not in (45,90) or c.get('branchDirection','outlet') not in ('inlet','outlet','+X','-X','+Y','-Y','+Z','-Z','custom') or type(offset) not in (int,float) or not math.isfinite(offset) or not 0<=offset<=(0 if run['kind']=='elbow' else run['lengthMM']) or c['outNps']>nps:raise ValueError('Posición o medida de sockolet inválida.')
         alivio=c['kind']=='valve' and c['valveType'] in ('psv','rv')
         salida=c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet','elbolet') or alivio else nps
         tipo_salida='threaded' if c['kind']=='thredolet' else 'flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
