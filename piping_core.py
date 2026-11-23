@@ -7,8 +7,9 @@ import re
 
 CATALOGO = json.loads((Path(__file__).parent / 'visor_piping' / 'catalogo.json').read_text())
 MEDIDAS = {row['nps']: row for row in CATALOGO['items']}
-TIPOS = {'pipe':'Tramo recto', 'elbow':'Codo', 'tee':'Tee', 'reducer':'Reductor', 'valve':'Válvula', 'flange':'Brida WN', 'cap':'Brida ciega'}
+TIPOS = {'pipe':'Tramo recto','sockolet':'Sockolet · SW','thredolet':'Thredolet · NPT','latrolet':'Derivación de codo', 'elbow':'Codo', 'tee':'Tee', 'reducer':'Reductor', 'valve':'Válvula', 'flange':'Brida WN', 'cap':'Brida ciega'}
 VALVULAS = {'gate':'compuerta','ball':'bola','globe':'globo','check':'retención','butterfly':'mariposa','psv':'PSV · seguridad','rv':'RV · alivio'}
+OLETS = {'sockolet','thredolet','latrolet'}
 CLASES = {'150#','300#','600#'}
 
 
@@ -60,7 +61,7 @@ def validar_piping(diseno):
         if not isinstance(c,dict) or not isinstance(c.get('id'),str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}',c['id']) or c['id'] in ids or c.get('kind') not in TIPOS:
             raise ValueError('Componente inválido o repetido.')
         puerto = c.get('parentPort')
-        if not isinstance(puerto,str) or puerto not in puertos or puerto in usados:
+        if not isinstance(puerto,str) or puerto not in puertos or (puerto in usados and not puerto.endswith(':tap')) or puerto.endswith(':tap')!=(c['kind'] in OLETS):
             raise ValueError('Existe una conexión ocupada o inexistente.')
         for k in ('nps','outNps','branchNps'):
             if type(c.get(k)) not in (int,float) or c[k] not in MEDIDAS:
@@ -75,15 +76,21 @@ def validar_piping(diseno):
             raise ValueError('Configuración de accesorio inválida.')
         if any(c.get(key,'welded') not in ('welded','flanged') for key in ('outletEnd','branchEnd')):raise ValueError('Terminación de extremo inválida.')
         entrada, extremo, clase=puertos[puerto]
+        if extremo=='threaded':raise ValueError('La salida NPT requiere un componente roscado, disponible en una próxima etapa.')
         nps=entrada if entrada is not None else c['nps']
         rating=clase if extremo=='flanged' else c['rating']
         if c['kind']=='tee' and c['branchNps']>nps:
             raise ValueError('La derivación de la tee no puede superar la medida de entrada.')
+        if c['kind'] in OLETS:
+            run=next(x for x in componentes if x['id']==puerto.split(':')[0])
+            offset=c.get('tapOffsetMM')
+            if (c['kind']=='latrolet')!=(run['kind']=='elbow') or c.get('branchAngle',45) not in (45,90) or type(offset) not in (int,float) or not math.isfinite(offset) or not 0<=offset<=(0 if run['kind']=='elbow' else run['lengthMM']) or c['outNps']>nps:raise ValueError('Posición o medida de sockolet inválida.')
         alivio=c['kind']=='valve' and c['valveType'] in ('psv','rv')
-        salida=c['outNps'] if c['kind']=='reducer' or alivio else nps
-        tipo_salida='flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
+        salida=c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet') or alivio else nps
+        tipo_salida='threaded' if c['kind']=='thredolet' else 'flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
         if c['kind']!='cap':puertos[c['id']+':out']=(salida,tipo_salida,c.get('outletRating',rating) if alivio else rating)
         if c['kind']=='tee':puertos[c['id']+':branch']=(c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
+        if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
         ids.add(c['id']);usados.add(puerto)
     return diseno
 
@@ -111,9 +118,10 @@ def materiales_piping(diseno):
         if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged':agregar('flange',c['outNps'] if c['kind']=='reducer' else nps,rating)
         if c['kind']=='tee' and c.get('branchEnd')=='flanged':agregar('flange',c['branchNps'],rating)
         alivio=c['kind']=='valve' and c['valveType'] in ('psv','rv')
-        salida=c['outNps'] if c['kind']=='reducer' or alivio else c['branchNps'] if c['kind']=='tee' and c['branchNps']!=nps else None
+        salida=c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet') or alivio else c['branchNps'] if c['kind']=='tee' and c['branchNps']!=nps else None
         agregar(c['kind'],nps,rating+' / '+c.get('outletRating',rating) if alivio else rating,salida,c['lengthMM'],c['bendAngle'] if c['kind']=='elbow' else c['valveType'] if c['kind']=='valve' else c['reduction'])
-        tipo='flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
-        if c['kind']!='cap':puertos[c['id']+':out']=(c['outNps'] if c['kind']=='reducer' or alivio else nps,tipo,c.get('outletRating',rating) if alivio else rating)
+        tipo='threaded' if c['kind']=='thredolet' else 'flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
+        if c['kind']!='cap':puertos[c['id']+':out']=(c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet') or alivio else nps,tipo,c.get('outletRating',rating) if alivio else rating)
         if c['kind']=='tee':puertos[c['id']+':branch']=(c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
+        if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
     return list(rows.values())
