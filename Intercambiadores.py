@@ -1844,7 +1844,7 @@ def configurar_sharepoint():
 
 def main():
     aplicar_diseno()
-    if mostrar_inicio():
+    if mostrar_inicio(validar_diseno):
         return
     st.sidebar.markdown('<div class="hx-brand"><div class="hx-brand-mark">JN</div>'
                         '<div><strong>Jndigital</strong><small>INSPECCIÓN Y MANTENIMIENTO</small></div></div>',

@@ -49,6 +49,17 @@ class PipingTests(unittest.TestCase):
         actual=json.loads(subprocess.check_output(['node','--input-type=module','-e',code],text=True))
         self.assertEqual(actual,materiales_piping(self.design))
 
+    @unittest.skipUnless(shutil.which('node'),'Node no está instalado')
+    def test_equipo_valvulas_y_acoplamiento(self):
+        result=json.loads(subprocess.check_output(['node',str(ROOT/'tests'/'piping_equipment.mjs')],text=True))
+        design=result['design']
+        self.assertEqual(validar_piping(design),design)
+        self.assertEqual(materiales_piping(design),result['materials'])
+        broken=copy.deepcopy(design);broken['equipments'][0]['ports']=[]
+        with self.assertRaises(ValueError):validar_piping(broken)
+        broken=copy.deepcopy(design);broken['equipments'][0]['asset']['data']['images']=[{'url':'https://example.com/image'}]
+        with self.assertRaises(ValueError):validar_piping(broken)
+
     def test_exportacion_pdf(self):
         from PIL import Image
         from pypdf import PdfReader

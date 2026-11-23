@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {blankDesign,compute,materialRows,descendants} from '../visor_piping/model.mjs';
+import {equipmentPorts,sortComponents} from '../visor_piping/equipment.mjs';
+const catalog=JSON.parse(fs.readFileSync(new URL('../visor_piping/catalogo.json',import.meta.url)));
+const base=JSON.parse(fs.readFileSync(new URL('../visor_piping/ejemplo.json',import.meta.url))).components[0];
+const equipment={id:'e1',tag:'E-101',position:[2000,3000,4000],rotationDeg:90,asset:{format:'three-buffer-v1',data:{object:{type:'Group',uuid:'test'}}},ports:[{id:'n1',tag:'N1',nps:4,rating:'300#',position:[1000,0,500],axis:[1,0,0]}]};
+const d={...blankDesign(),equipments:[equipment],components:[{...base,id:'p1',parentPort:'eq-e1/n1',kind:'pipe'},{...base,id:'v1',parentPort:'p1:out',kind:'valve',valveType:'psv',outNps:6,outletRating:'600#',rollDeg:90},{...base,id:'p2',parentPort:'v1:out'}]};
+let r=compute(d,catalog);assert.deepEqual(r.nodes[0].origin.position,[2000,4000,4500]);assert.equal(r.nodes[0].nps,4);assert.equal(r.nodes[0].rating,'300#');assert.equal(r.nodes[2].nps,6);assert.equal(r.nodes[2].rating,'600#');assert.ok(Math.abs(r.nodes[1].axis.reduce((sum,v,i)=>sum+v*r.nodes[1].endAxis[i],0))<1e-8);assert.equal(r.freePorts.filter(p=>p.equipmentId).length,0);
+assert.deepEqual([...descendants(d,'p1')],['p1','v1','p2']);assert.deepEqual(sortComponents({...d,components:[...d.components].reverse()},catalog).components.map(c=>c.id),['p1','v1','p2']);
+assert.throws(()=>sortComponents({...d,components:d.components.map(c=>c.id==='p1'?{...c,parentPort:'p2:out'}:c)},catalog),/ciclo/);
+assert.throws(()=>compute({...d,equipments:[{...equipment,ports:[]}]},catalog),/inexistente/);
+const moved=structuredClone(d);moved.equipments[0].position[2]+=1000;assert.equal(compute(moved,catalog).nodes[2].end[2]-r.nodes[2].end[2],1000);
+for(const valveType of ['gate','ball','globe','check','butterfly','psv','rv'])assert.equal(compute({...d,components:[{...d.components[1],parentPort:'eq-e1/n1',valveType}]},catalog).nodes.length,1);
+console.log(JSON.stringify({design:d,materials:materialRows(r,catalog)}));

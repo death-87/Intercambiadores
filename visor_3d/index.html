@@ -250,6 +250,7 @@
 <label>Cierre del channel:</label><select id="channel-cover-style"><option value="bolted">Tapa apernada · desmontable</option><option value="welded">Cabezal soldado · sin tapa desmontable</option></select>
 <label>Forma del cierre soldado:</label><select id="channel-head-shape"><option value="rounded">Redondeado</option><option value="flat">Plano · sin pernos</option></select>
 </div>
+<button id="export-piping" hidden style="width:100%;padding:12px;background:#117f70;color:white;border:0;border-radius:4px;cursor:pointer">USAR ESTE EQUIPO EN PIPING</button>
 <button id="save-equipment" disabled style="width:100%;padding:10px;background:#22c55e;border:0;border-radius:4px;cursor:pointer">GUARDAR EQUIPO EN SHEETS</button>
 <p id="save-status" role="status" style="font-size:11px;white-space:pre-wrap"></p>
     
@@ -675,6 +676,8 @@
     const THREE = await import('three');
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
+    const {equipmentAsset} = await import('./piping_bridge.mjs');
+    let pipingMode=false,pipingEquipmentId='',pipingSelectionToken=null;
     let initialized = false, loading = false, saving = false, readOnly = false;
     let revision = 0, pendingSave = null;
     const sessionId = globalThis.crypto?.randomUUID?.() ||
@@ -1004,6 +1007,7 @@
         vent: "",
         drain: "",
         nozzles: nozzlesList.map(nz => ({
+          ...(nz.userData.pipingId?{pipingId:nz.userData.pipingId}:{}),
           tagName: nz.userData.tagName || "",
           service: nz.userData.service || "process",
           elbow90: nz.userData.elbow90, elbowBendAngle:nz.userData.elbowBendAngle||90, elbowRotation: nz.userData.elbowRotation, elbowOutletLength:nz.userData.elbowOutletLength||0,
@@ -1062,9 +1066,9 @@
       if(draftPending)return;
       try {
         localStorage.setItem(draftStorageKey,JSON.stringify({version:1,updatedAt:Date.now(),data:cleanDraft(data)}));
-        document.getElementById('draft-status').textContent='Avance respaldado en este navegador · pendiente de guardar en Sheets.';
+        document.getElementById('draft-status').textContent=pipingMode?'Avance respaldado en este navegador · pendiente de incorporar al piping.':'Avance respaldado en este navegador · pendiente de guardar en Sheets.';
       } catch(error) {
-        document.getElementById('draft-status').textContent='No se pudo crear el respaldo local. Descarga el JSON o guarda en Sheets.';
+        document.getElementById('draft-status').textContent=pipingMode?'No se pudo crear el respaldo local. Incorpora el equipo y descarga el JSON del ensamblaje.':'No se pudo crear el respaldo local. Descarga el JSON o guarda en Sheets.';
       }
     }
     function setupDraftRecovery(args) {
@@ -1116,7 +1120,7 @@
         document.getElementById('stack-tag-upper').value = stackState.data.nameplate || '';
       }
       const eventId = sessionId + ':' + (++revision);
-      const event={event_id:eventId,action,data:exportData};
+      const event={event_id:eventId,action,data:exportData,...(pipingMode?{builder_token:pipingSelectionToken}:{})};
       if (action === 'save') {
         clearTimeout(changeTimer);queuedChange=null;pendingSave=eventId;
         send('streamlit:setComponentValue',{dataType:'json',value:event});
@@ -3513,6 +3517,7 @@
             n.service || 'process', n.face || 'RF', n.neckLength,
             n.subFront, n.subRear, n.angleDeg, n.ratingNS || '3000#', n.ratingFS || '3000#', n.offsetY, n.offsetZ, n.baseDiaIndex ?? n.diaIndex, n.swEnd, n.swFlangeRating, n.direction, n.elbow90, n.elbowRotation, n.angleNS, n.angleFS, n.sideMount, n.sideAxis, n.headMount, n.headAngle, n.flangeShape, n.flangeBoltCount, n.pipeDiaIndex, n.elbowOutletLength, n.inletFlange, n.outletFlange, n.flangeSquareSizeMM, n.offsetX, n.reliefValve, n.davitCover, n.rectangular, n.elbowBendAngle
           );
+          if(n.pipingId)newNz.userData.pipingId=n.pipingId;
           nozzlesList.push(newNz);
         });
       }
@@ -3866,6 +3871,7 @@
         data.service || 'process', data.face || 'RF', data.neckLength,
         data.subFront, data.subRear, data.angleDeg, data.ratingNS, data.ratingFS, data.offsetY, data.offsetZ, data.baseDiaIndex, data.swEnd, data.swFlangeRating, data.direction, data.elbow90, data.elbowRotation, data.angleNS, data.angleFS, data.sideMount, data.sideAxis, data.headMount, data.headAngle, data.flangeShape, data.flangeBoltCount, data.pipeDiaIndex, data.elbowOutletLength, data.inletFlange, data.outletFlange, data.flangeSquareSizeMM, data.offsetX, data.reliefValve, data.davitCover, data.rectangular, data.elbowBendAngle
       );
+      if(data.pipingId)replacement.userData.pipingId=data.pipingId;
       const index = nozzlesList.indexOf(old);
       if (index >= 0) nozzlesList[index] = replacement;
       heatExchanger.remove(old);
@@ -4483,6 +4489,28 @@
       }
       syncStateToParent();
     });
+    function exportPipingEquipment(){
+      if(stackState)throw Error('Incorpora los equipos por separado al ensamblaje de piping para disponer de todas sus boquillas.');
+      const ports=[],warnings=[];assemblyGroup.updateMatrixWorld(true);
+      const mm=p=>[p.x*1000,-p.z*1000,p.y*1000];
+      function port(plate,data,id,tag,rf=true){
+        const dim=flangeDimensions(data.diaIndex,data.rating),settings=nozzleFlangeSettings(data);
+        if(data.diaIndex===17||settings.form!=='round'){warnings.push(tag+': conexión no circular o fuera del catálogo de piping.');return;}
+        const face=data.face==='FF'?'FF':'RF',height=rf&&face==='RF'?raisedFaceHeight(data.rating):0;
+        const point=plate.localToWorld(new THREE.Vector3(0,0,dim.B+height));
+        const direction=new THREE.Vector3(0,0,1).transformDirection(plate.matrixWorld);
+        ports.push({id,tag,nps:DIAMETER_INCHES[data.diaIndex],rating:data.rating,position:mm(point),axis:[direction.x,-direction.z,direction.y],flangeSpec:{diameterMM:settings.D*1000,thicknessMM:dim.B*1000,hubDiameterMM:dim.A*1000,lengthMM:dim.H*1000,pitchMM:settings.K*1000,holeMM:dim.L*1000,boltCount:settings.count,odMM:dim.OD*1000,raisedFaceMM:dim.R*1000,face,rating:data.rating}});
+      }
+      for(const nozzle of nozzlesList){const d=nozzle.userData;d.pipingId ||= 'p'+THREE.MathUtils.generateUUID().replaceAll('-','');
+        if(d.reliefValve?.enabled){const outlet=nozzle.getObjectByName('Brida salida RV independiente');if(outlet)port(outlet,{diaIndex:outlet.userData.diaIndex,rating:d.reliefValve.outletRating,face:'FF'},d.pipingId+'_rv',(d.reliefValve.tag||d.tagName)+' · salida RV',false);continue;}
+        if(d.connectionType!=='flanged'||d.outletFlange===false||d.davitCover?.enabled){warnings.push((d.tagName||'Boquilla')+': extremo sin brida circular libre.');continue;}
+        if(d.flangePlate)port(d.flangePlate,d,d.pipingId,d.tagName||'Boquilla');
+      }
+      if(!ports.length)throw Error('Agrega al menos una boquilla circular enflanchada libre para conectar piping.');
+      return {id:pipingEquipmentId,tag:currentNameplate||'EQUIPO',position:[0,0,0],rotationDeg:0,ports,warnings,sourceDesign:collectAssemblyDesign(),asset:equipmentAsset(THREE,assemblyGroup,nameplate)};
+    }
+    window.exportPipingEquipment=exportPipingEquipment;
+    document.getElementById('export-piping').onclick=()=>{try{clearTimeout(changeTimer);queuedChange=null;const equipment=exportPipingEquipment();send('streamlit:setComponentValue',{dataType:'json',value:{action:'piping_equipment',builder_token:pipingSelectionToken,event_id:sessionId+':'+(++revision),equipment}});document.getElementById('save-status').textContent='Equipo preparado para el ensamblaje de piping.';}catch(error){document.getElementById('save-status').textContent=error.message;}};
     document.getElementById('save-equipment').addEventListener('click', () => {
       if (saving || !initialized) return;
       if (!currentNameplate.trim()) {
@@ -4976,6 +5004,8 @@
       }
     }
     window.exchangerBridge.attach(args => {
+      pipingMode=Boolean(args.piping_mode);pipingSelectionToken=args.selection_token;pipingEquipmentId=args.piping_equipment_id||'equipo';
+      document.getElementById('export-piping').hidden=!pipingMode;document.getElementById('stack-controls').hidden=pipingMode;
       readOnly = Boolean(args.readonly);
       availableStackModels = args.stack_models || {};
       const importSelect = document.getElementById('stack-import');
@@ -4984,7 +5014,7 @@
         ...Object.keys(availableStackModels).sort().map(tag => new Option(tag, tag)));
       importSelect.value = previousImport;
       window.exchangerBridge.setReadOnly(readOnly);
-      document.getElementById('save-equipment').style.display = args.demo ? 'none' : '';
+      document.getElementById('save-equipment').style.display = args.demo || pipingMode ? 'none' : '';
       const selectionToken = args.selection_token || args.initial_data?._editorSelection?.token || null;
       if (!initialized || (selectionToken && selectionToken !== loadedSelectionToken)) {
         loading = true;

@@ -37,12 +37,12 @@ def ir_inicio():
         del st.query_params["solucion"]
 
 
-def mostrar_inicio():
+def mostrar_inicio(validar_equipo=None):
     """Devuelve True si se mostró la portada; el módulo no debe cargar datos aún."""
     section = st.session_state.get("jn_section", st.query_params.get("solucion", "inicio"))
     if section == "piping":
         from piping import mostrar_piping
-        mostrar_piping()
+        mostrar_piping(validar_equipo=validar_equipo)
         return True
     if section == "informes":
         from inspecciones import mostrar_informes
