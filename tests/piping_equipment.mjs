@@ -12,4 +12,6 @@ assert.throws(()=>sortComponents({...d,components:d.components.map(c=>c.id==='p1
 assert.throws(()=>compute({...d,equipments:[{...equipment,ports:[]}]},catalog),/inexistente/);
 const moved=structuredClone(d);moved.equipments[0].position[2]+=1000;assert.equal(compute(moved,catalog).nodes[2].end[2]-r.nodes[2].end[2],1000);
 for(const valveType of ['gate','ball','globe','check','butterfly','psv','rv'])assert.equal(compute({...d,components:[{...d.components[1],parentPort:'eq-e1/n1',valveType}]},catalog).nodes.length,1);
-console.log(JSON.stringify({design:d,materials:materialRows(r,catalog)}));
+const endDesign={...blankDesign(),components:[{...base,id:'pipe',parentPort:'origin',outletEnd:'flanged'},{...base,id:'tee',kind:'tee',parentPort:'pipe:out',outletEnd:'flanged',branchEnd:'flanged',branchNps:1},{...base,id:'branch',parentPort:'tee:branch',outletEnd:'welded'}]};
+const ends=compute(endDesign,catalog);assert.equal(ends.ports.get('pipe:out').endType,'flanged');assert.equal(ends.ports.get('tee:out').endType,'flanged');assert.equal(ends.ports.get('tee:branch').endType,'flanged');assert.equal(ends.ports.get('branch:out').endType,'plain');assert.equal(ends.nodes[2].nps,1);assert.ok(ends.nodes[1].adapter);assert.ok(ends.nodes[2].adapter);assert.ok(Math.abs(ends.ports.get('tee:out').position[0]-ends.nodes[1].end[0]-ends.nodes[1].outletEndFlange.lengthMM)<1e-8);
+console.log(JSON.stringify({design:d,materials:materialRows(r,catalog),endDesign,endMaterials:materialRows(ends,catalog)}));

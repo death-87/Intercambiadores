@@ -55,6 +55,8 @@ class PipingTests(unittest.TestCase):
         design=result['design']
         self.assertEqual(validar_piping(design),design)
         self.assertEqual(materiales_piping(design),result['materials'])
+        self.assertEqual(materiales_piping(result['endDesign']),result['endMaterials'])
+        self.assertEqual(sum(r['quantity'] for r in result['endMaterials'] if r['description']=='Brida WN'),5)
         broken=copy.deepcopy(design);broken['equipments'][0]['ports']=[]
         with self.assertRaises(ValueError):validar_piping(broken)
         broken=copy.deepcopy(design);broken['equipments'][0]['asset']['data']['images']=[{'url':'https://example.com/image'}]
