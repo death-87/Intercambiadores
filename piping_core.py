@@ -84,7 +84,7 @@ def validar_piping(diseno):
         if c['kind'] in OLETS:
             run=next(x for x in componentes if x['id']==puerto.split(':')[0])
             offset=c.get('tapOffsetMM')
-            if (c['kind']=='latrolet')!=(run['kind']=='elbow') or c.get('branchAngle',45) not in (45,90) or type(offset) not in (int,float) or not math.isfinite(offset) or not 0<=offset<=(0 if run['kind']=='elbow' else run['lengthMM']) or c['outNps']>nps:raise ValueError('Posición o medida de sockolet inválida.')
+            if (c['kind']=='latrolet')!=(run['kind']=='elbow') or c.get('branchAngle',45) not in (45,90) or c.get('branchDirection','outlet') not in ('inlet','outlet') or type(offset) not in (int,float) or not math.isfinite(offset) or not 0<=offset<=(0 if run['kind']=='elbow' else run['lengthMM']) or c['outNps']>nps:raise ValueError('Posición o medida de sockolet inválida.')
         alivio=c['kind']=='valve' and c['valveType'] in ('psv','rv')
         salida=c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet') or alivio else nps
         tipo_salida='threaded' if c['kind']=='thredolet' else 'flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'

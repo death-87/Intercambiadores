@@ -35,7 +35,7 @@ Válvulas disponibles: compuerta, bola, globo, retención, mariposa, PSV y RV. P
 
 - **Sockolet · SW:** se suelda sobre un tramo recto. Selecciona la línea principal, NPS de salida, posición desde el inicio del tramo, altura y giro. Por ejemplo, una principal de 6 pulgadas y salida de 2 genera un sockolet 6 × 2. Su salida permite continuar con piping y válvulas.
 - **Thredolet · NPT:** montaje soldado sobre un tramo recto y salida roscada NPT. Se identifica como roscada y se representa en el dibujo. Los componentes roscados de continuación quedan pendientes de la siguiente etapa; el editor impide conectarle por error un componente para soldar.
-- **Derivación de codo:** selecciona un codo existente. El accesorio se ubica en el centro de su recorrido. El selector permite una salida a 90° (Elbolet) o inclinada a 45° (Latrolet), y el giro permite orientarla alrededor de la dirección local del codo.
+- **Derivación de codo:** selecciona un codo existente. El accesorio se ubica en el centro de su recorrido. El selector permite orientar la derivación paralela a la recta de entrada o a la recta de salida del codo. La dirección sigue esos ejes reales incluso al girar el codo o montar la línea vertical; no se calcula como un ángulo de 45° desde la tangente en el centro.
 
 Se pueden colocar varias derivaciones en un mismo tramo. La línea principal conserva su continuidad y su extremo libre. Las derivaciones y sus continuaciones siguen la posición del tramo o codo; una posición fuera del tramo o una salida mayor que la principal se rechaza. Las alturas y la geometría de los accesorios son configurables; no constituyen tablas de fabricante ni un cálculo de refuerzo.
 
