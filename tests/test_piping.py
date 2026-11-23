@@ -58,6 +58,10 @@ class PipingTests(unittest.TestCase):
         self.assertEqual(materiales_piping(result['endDesign']),result['endMaterials'])
         self.assertEqual(materiales_piping(result['socketDesign']),result['socketMaterials'])
         self.assertEqual(materiales_piping(result['oletDesign']),result['oletMaterials'])
+        self.assertEqual(materiales_piping(result['latroletDesign']),result['latroletMaterials'])
+        legacy=copy.deepcopy(result['oletDesign']);legacy['components'][3]['kind']='latrolet'
+        self.assertEqual(materiales_piping(legacy),result['oletMaterials'])
+        self.assertEqual(legacy['components'][3]['kind'],'elbolet')
         broken=copy.deepcopy(result['socketDesign']);broken['components'][1]['tapOffsetMM']=2100
         with self.assertRaises(ValueError):validar_piping(broken)
         self.assertEqual(sum(r['quantity'] for r in result['endMaterials'] if r['description']=='Brida WN'),5)

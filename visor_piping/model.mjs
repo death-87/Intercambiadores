@@ -6,9 +6,9 @@ export const mul=(v,s)=>v.map(x=>x*s);
 export const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 export const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export const norm=v=>mul(v,1/(Math.hypot(...v)||1));
-export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Derivación de codo',elbow:'Codo',tee:'Tee',reducer:'Reductor',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega'};
+export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega'};
 export const VALVES={gate:'compuerta',ball:'bola',globe:'globo',check:'retención',butterfly:'mariposa',psv:'PSV · seguridad',rv:'RV · alivio'};
-export const isOlet=c=>['sockolet','thredolet','latrolet'].includes(c.kind);
+export const isOlet=c=>['sockolet','thredolet','latrolet','elbolet'].includes(c.kind);
 export const isRelief=c=>c.kind==='valve'&&['psv','rv'].includes(c.valveType);
 export const RATINGS=['150#','300#','600#'];
 export function normal(axis,roll=0){let n=Math.abs(axis[1])<.85?[0,1,0]:[0,0,1];n=norm(sub(n,mul(axis,dot(n,axis))));const b=cross(axis,n),a=roll*Math.PI/180;return add(mul(n,Math.cos(a)),mul(b,Math.sin(a)));}
@@ -16,6 +16,8 @@ export function item(catalog,nps){const value=catalog.items.find(r=>r.nps===Numb
 export function blankDesign(id='piping-principal'){return {version:1,id,title:'Nueva línea de piping',direction:'+X',components:[],updatedAt:new Date().toISOString()};}
 export function validateDesign(d,catalog){
  if(!d||d.version!==1||!Array.isArray(d.components)||d.components.length>200)throw Error('El archivo no es un diseño de piping válido (máximo 200 componentes).');
+ // Los primeros diseños llamaban latrolet a la derivación de codo.
+ for(const c of d.components)if(c?.kind==='latrolet'&&typeof c.parentPort==='string'&&d.components.some(host=>host?.id===c.parentPort?.split(':')[0]&&host.kind==='elbow'))c.kind='elbolet';
  const axes=['+X','-X','+Y','-Y','+Z','-Z'];if(!axes.includes(d.direction))throw Error('Dirección inicial inválida.');
  if(typeof d.id!=='string'||d.id.length>80||typeof d.title!=='string'||d.title.length>120)throw Error('Identificación de proyecto inválida.');
  validateEquipmentList(d,catalog);const ids=new Set(),ports=new Set(['origin',...equipmentPorts(d,catalog).map(p=>p.id)]),used=new Set();
@@ -28,8 +30,8 @@ export function validateDesign(d,catalog){
   if(![45,90].includes(c.bendAngle)||!['concentric','eccentric'].includes(c.reduction)||!Object.hasOwn(VALVES,c.valveType))throw Error('Configuración de accesorio inválida.');
   if(c.outletRating!==undefined&&!RATINGS.includes(c.outletRating))throw Error('Clase de salida inválida.');
   for(const key of ['outletEnd','branchEnd'])if(c[key]!==undefined&&!['welded','flanged'].includes(c[key]))throw Error('Terminación de extremo inválida.');
-  if(c.kind==='latrolet'&&c.branchDirection!==undefined&&!['inlet','outlet'].includes(c.branchDirection))throw Error('Dirección de derivación inválida.');
-  if(c.kind==='latrolet'&&c.branchAngle!==undefined&&![45,90].includes(c.branchAngle))throw Error('Ángulo de derivación inválido.');
+  if(c.kind==='elbolet'&&c.branchDirection!==undefined&&!['inlet','outlet'].includes(c.branchDirection))throw Error('Dirección de derivación inválida.');
+  if(c.kind==='elbolet'&&c.branchAngle!==undefined&&![45,90].includes(c.branchAngle))throw Error('Ángulo de derivación inválido.');
   if(isOlet(c)&&(typeof c.tapOffsetMM!=='number'||!Number.isFinite(c.tapOffsetMM)||c.tapOffsetMM<0))throw Error('Posición de sockolet inválida.');
   if(c.kind==='pipe'||c.kind==='elbow')ports.add(c.id+':tap');
   ids.add(c.id);used.add(c.parentPort);if(c.kind!=='cap')ports.add(c.id+':out');if(c.kind==='tee')ports.add(c.id+':branch');
@@ -43,8 +45,8 @@ export function compute(d,catalog){
  for(const c of d.components){
   const origin=ports.get(c.parentPort);if(origin.endType==='threaded')throw Error('Esta salida es roscada NPT. Los componentes roscados se incorporarán en una próxima etapa.');const nps=origin.nps??c.nps,pipe=item(catalog,nps),rating=origin.endType==='flanged'?origin.rating:c.rating,flange=origin.endType==='flanged'&&origin.flangeSpec?origin.flangeSpec:pipe.flanges[rating];
   if(isOlet(c)){
-   if((c.kind==='latrolet')!==(origin.hostKind==='elbow')||c.tapOffsetMM>origin.runLengthMM||c.outNps>nps)throw Error('El sockolet debe quedar dentro del tramo y su salida no puede superar la línea principal.');
-   const roll=c.rollDeg*Math.PI/180,radial=origin.radialAxis?add(mul(origin.radialAxis,Math.cos(roll)),mul(cross(origin.axis,origin.radialAxis),Math.sin(roll))):normal(origin.axis,c.rollDeg),direction=c.branchDirection||(c.branchAngle===45?'inlet':'outlet'),branchAxis=c.kind==='latrolet'?[...(direction==='inlet'?origin.inletAxis:origin.outletAxis)]:radial,projection=c.kind==='latrolet'?Math.max(.1,Math.abs(dot(branchAxis,origin.radialAxis))):1,center=add(origin.position,mul(origin.axis,c.tapOffsetMM)),start=add(center,mul(branchAxis,pipe.odMM/(2*projection))),end=add(start,mul(branchAxis,c.lengthMM));
+   if((c.kind==='elbolet')!==(origin.hostKind==='elbow')||c.tapOffsetMM>origin.runLengthMM||c.outNps>nps)throw Error('El sockolet debe quedar dentro del tramo y su salida no puede superar la línea principal.');
+   const roll=c.rollDeg*Math.PI/180,radial=origin.radialAxis?add(mul(origin.radialAxis,Math.cos(roll)),mul(cross(origin.axis,origin.radialAxis),Math.sin(roll))):normal(origin.axis,c.rollDeg),direction=c.branchDirection||(c.branchAngle===45?'inlet':'outlet'),branchAxis=c.kind==='elbolet'?[...(direction==='inlet'?origin.inletAxis:origin.outletAxis)]:c.kind==='latrolet'?norm(add(origin.axis,radial)):radial,projection=c.kind==='elbolet'?Math.max(.1,Math.abs(dot(branchAxis,origin.radialAxis))):c.kind==='latrolet'?Math.SQRT1_2:1,center=add(origin.position,mul(origin.axis,c.tapOffsetMM)),start=add(center,mul(branchAxis,pipe.odMM/(2*projection))),end=add(start,mul(branchAxis,c.lengthMM));
    const node={...c,nps,rating,start,end,axis:branchAxis,endAxis:branchAxis,normal:normal(branchAxis),center:mul(add(start,end),.5),length:c.lengthMM,flange,odMM:pipe.odMM,endNps:c.outNps,endType:c.kind==='thredolet'?'threaded':'plain',endRating:rating,origin,runCenter:center};nodes.push(node);ports.set(c.id+':out',{id:c.id+':out',position:end,axis:branchAxis,nps:c.outNps,endType:c.kind==='thredolet'?'threaded':'plain',rating,label:c.tag+(c.kind==='thredolet'?' · salida roscada NPT':' · salida soldada')});continue;
   }
   const axis=origin.axis,n=normal(axis,c.rollDeg);let start=[...origin.position],adapter=null,reverse=false;

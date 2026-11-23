@@ -35,10 +35,13 @@ Válvulas disponibles: compuerta, bola, globo, retención, mariposa, PSV y RV. P
 
 - **Sockolet · SW:** se suelda sobre un tramo recto. Selecciona la línea principal, NPS de salida, posición desde el inicio del tramo, altura y giro. Por ejemplo, una principal de 6 pulgadas y salida de 2 genera un sockolet 6 × 2. Su salida permite continuar con piping y válvulas.
 - **Thredolet · NPT:** montaje soldado sobre un tramo recto y salida roscada NPT. Se identifica como roscada y se representa en el dibujo. Los componentes roscados de continuación quedan pendientes de la siguiente etapa; el editor impide conectarle por error un componente para soldar.
-- **Derivación de codo:** selecciona un codo existente. El accesorio se ubica en el centro de su recorrido. El selector permite orientar la derivación paralela a la recta de entrada o a la recta de salida del codo. La dirección sigue esos ejes reales incluso al girar el codo o montar la línea vertical; no se calcula como un ángulo de 45° desde la tangente en el centro.
+- **Latrolet · 45°:** se monta en un tramo recto y genera una salida inclinada a 45° respecto de la línea principal. Posición, diámetro y giro son configurables.
+- **Elbolet:** selecciona un codo existente. El accesorio se ubica en el centro de su recorrido. El selector permite orientar la derivación paralela a la recta de entrada o a la recta de salida del codo. La dirección sigue esos ejes reales incluso al girar el codo o montar la línea vertical; no se calcula como un ángulo de 45° desde la tangente en el centro.
 
 Se pueden colocar varias derivaciones en un mismo tramo. La línea principal conserva su continuidad y su extremo libre. Las derivaciones y sus continuaciones siguen la posición del tramo o codo; una posición fuera del tramo o una salida mayor que la principal se rechaza. Las alturas y la geometría de los accesorios son configurables; no constituyen tablas de fabricante ni un cálculo de refuerzo.
 
 Selecciona un tramo o codo y utiliza **Agregar derivación sobre este tramo** o **Agregar derivación al centro del codo**, o elige el accesorio en la lista de elementos. Las salidas creadas aparecen entre los extremos de continuación.
 
 Para desplazar el conjunto, mantén presionado el botón central de la rueda y arrastra. Girar la rueda mantiene el zoom; el botón izquierdo gira la vista y el derecho también desplaza.
+
+Los diseños anteriores que identificaban como `latrolet` una conexión sobre un codo se convierten automáticamente a `elbolet`, conservando sus IDs, dirección y continuaciones. Los nuevos elbolets se eligen sobre codos de 90°; los diseños anteriores con codos de 45° siguen siendo legibles.
