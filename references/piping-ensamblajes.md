@@ -61,3 +61,7 @@ Para entrar por la derivación de una tee reducida, la medida de entrada se here
 Selecciona el equipo en el dibujo o en la lista del ensamblaje y pulsa **Editar forma y componentes**. Se abre **Herramientas de equipo** con el diseño editable de ese mismo equipo. También puedes elegir otro equipo desde el selector de nameplate / TAG, visible en esa sección. El encabezado indica cuál estás editando.
 
 Al pulsar **Usar este equipo en Piping**, se actualiza el equipo existente: mantiene X, Y, Z, giro e identidad, y el piping conectado acompaña a sus boquillas. Si eliminas una boquilla con una línea conectada, la actualización se rechaza y el ensamblaje anterior se conserva; primero hay que desacoplar esa línea. El nameplate se muestra sobre el cuerpo y sigue la posición configurada en el editor; los respaldos anteriores reciben una placa visible a partir del TAG.
+
+## Apoyo inferior de un equipo vertical
+
+En el modelo J (vertical), **Extremo inferior → Faldón recto · continuación del shell hasta el piso** reemplaza el cierre inferior por un faldón cilíndrico soldado, del mismo diámetro que el shell y con borde inferior plano. Su altura se configura por separado entre 0,20 y 5 m. No lleva bonete, channel ni bridas inferiores. El extremo superior conserva su configuración y las boquillas existentes mantienen su identidad. La opción se guarda en el JSON y se exporta con el equipo al ensamblaje de piping.

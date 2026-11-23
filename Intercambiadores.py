@@ -299,7 +299,7 @@ def validar_diseno(data, _nivel=0):
         raise ValueError("dimensions debe ser un objeto")
     limits = {
         "shellLength": (0.5, 7.0), "reducerLength": (0.2, 2.0),
-        "channelLength": (0.2, 2.0), "bonnetLength": (0.2, 2.0),
+        "channelLength": (0.2, 2.0), "bonnetLength": (0.2, 2.0), "verticalSkirtLength": (0.2, 5.0),
         "shellDiameter": (0.2, 2.0), "channelDiameter": (0.2, 2.0),
         "bonnetDiameter": (0.2, 2.0), "hairpinGap": (0.05, 2.0),
         "hairpinTubeDiameter": (0.02, 1.4), "hairpinBonnetDepth": (0.05, 5.0), "hairpinBonnetStraightLength": (0, 5.0),
@@ -326,7 +326,7 @@ def validar_diseno(data, _nivel=0):
         if dimensions.get(campo,"flanged") not in {"flanged","welded"}:
             raise ValueError("unión al shell del extremo vertical inválida")
     for campo in ("verticalUpperEnd","verticalLowerEnd"):
-        if dimensions.get(campo,"bonnet") not in {"bonnet","channel"}:
+        if dimensions.get(campo,"bonnet") not in ({"bonnet","channel","skirt"} if campo=="verticalLowerEnd" else {"bonnet","channel"}):
             raise ValueError("tipo de extremo vertical inválido")
     if dimensions.get("channelHeadShape","rounded") not in {"rounded","flat"}:
         raise ValueError("forma del cierre del channel inválida")
@@ -644,7 +644,7 @@ def cuerpo_tecnico_boquilla(boquilla, config):
     cuerpo = boquilla.get("bodyPart")
     if config.get("model") != "J" or cuerpo not in {"bonnet", "bonnetLeft"}:
         return cuerpo
-    if boquilla.get("headMount") and config.get("dimensions", {}).get("verticalLowerEnd" if cuerpo == "bonnetLeft" else "verticalUpperEnd", "bonnet") != "channel":
+    if boquilla.get("headMount") and config.get("dimensions", {}).get("verticalLowerEnd" if cuerpo == "bonnetLeft" else "verticalUpperEnd", "bonnet") not in {"channel","skirt"}:
         return cuerpo  # El montaje sobre la curva no aplica desplazamientos libres.
     dimensiones = config.get("dimensions", {})
     posicion = float(boquilla.get("valX") or 0)
@@ -656,6 +656,8 @@ def cuerpo_tecnico_boquilla(boquilla, config):
     extremo = "bonnet" if posicion > 0 else "bonnetLeft" if posicion < 0 else cuerpo
     if dimensiones.get("verticalUpperEnd" if extremo == "bonnet" else "verticalLowerEnd", "bonnet") == "channel":
         return "CHANNEL SUPERIOR" if extremo == "bonnet" else "CHANNEL INFERIOR"
+    if extremo == "bonnetLeft" and dimensiones.get("verticalLowerEnd") == "skirt":
+        return "FALDON DE APOYO"
     return extremo
 
 

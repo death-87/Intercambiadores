@@ -241,10 +241,10 @@
 <label>Extremo superior:</label><select id="vertical-upper-end"><option value="bonnet">Bonete apernado</option><option value="channel">Channel con tapa apernada</option></select>
 <div id="vertical-upper-cover-controls"><label>Tapa del channel superior:</label><select id="vertical-upper-cover"><option value="bolted">Con tapa apernada</option><option value="open">Sin tapa · abierto</option><option value="welded">Sin tapa desmontable · cierre soldado plano</option></select></div>
 <label>Unión superior al shell:</label><select id="vertical-upper-joint"><option value="flanged">Bridas apernadas</option><option value="welded">Soldada · sin bridas</option></select>
-<label>Extremo inferior:</label><select id="vertical-lower-end"><option value="bonnet">Bonete apernado</option><option value="channel">Channel con tapa apernada</option></select>
+<label>Extremo inferior:</label><select id="vertical-lower-end"><option value="bonnet">Bonete apernado</option><option value="channel">Channel con tapa apernada</option><option value="skirt">Faldón recto · continuación del shell hasta el piso</option></select><div id="vertical-skirt-controls" hidden><label for="vertical-skirt-length">Altura del faldón de apoyo (m):</label><input id="vertical-skirt-length" type="number" min="0.2" max="5" step="0.05" value="0.8"><small>Mismo diámetro del shell, unión soldada y borde inferior plano, sin bonete ni channel.</small></div>
 <div id="vertical-lower-cover-controls"><label>Tapa del channel inferior:</label><select id="vertical-lower-cover"><option value="bolted">Con tapa apernada</option><option value="open">Sin tapa · abierto</option><option value="welded">Sin tapa desmontable · cierre soldado plano</option></select></div>
 <label>Unión inferior al shell:</label><select id="vertical-lower-joint"><option value="flanged">Bridas apernadas</option><option value="welded">Soldada · sin bridas</option></select>
-<small>El diámetro y largo de «Extremos» se aplican a ambos. Se conservan las boquillas al cambiar el cierre.</small>
+<small>El diámetro y largo de «Extremos» se aplican a bonetes y channels. El faldón usa el diámetro del shell y su propia altura. Se conservan las boquillas al cambiar el cierre.</small>
 </div>
 <div class="input-group" id="channel-cover-control" hidden>
 <label>Cierre del channel:</label><select id="channel-cover-style"><option value="bolted">Tapa apernada · desmontable</option><option value="welded">Cabezal soldado · sin tapa desmontable</option></select>
@@ -2290,7 +2290,8 @@
       currentDimensions.channelCoverStyle=dimensions.channelCoverStyle==='welded'?'welded':'bolted';
       currentDimensions.channelHeadShape=dimensions.channelHeadShape==='flat'?'flat':'rounded';
       currentDimensions.verticalUpperEnd=dimensions.verticalUpperEnd==='channel'?'channel':'bonnet';
-      currentDimensions.verticalLowerEnd=dimensions.verticalLowerEnd==='channel'?'channel':'bonnet';
+      currentDimensions.verticalLowerEnd=['channel','skirt'].includes(dimensions.verticalLowerEnd)?dimensions.verticalLowerEnd:'bonnet';
+      currentDimensions.verticalSkirtLength=Math.max(.2,Math.min(5,Number(dimensions.verticalSkirtLength)||.8));
       currentDimensions.verticalUpperJoint=dimensions.verticalUpperJoint==='welded'?'welded':'flanged';
       currentDimensions.verticalLowerJoint=dimensions.verticalLowerJoint==='welded'?'welded':'flanged';
       for(const key of ['verticalUpperCover','verticalLowerCover'])currentDimensions[key]=['bolted','open','welded'].includes(dimensions[key])?dimensions[key]:'bolted';
@@ -2344,14 +2345,22 @@
       channelGroup.add(partition);
     }
     const verticalChannels=new THREE.Group();heatExchanger.add(verticalChannels);
+    const skirtInnerMat=new THREE.MeshStandardMaterial({color:0x596773,metalness:.5,roughness:.5,side:THREE.BackSide});
     function isVerticalChannel(body){return currentModel==='J'&&currentDimensions[body==='bonnetLeft'?'verticalLowerEnd':'verticalUpperEnd']==='channel';}
-    function isVerticalWelded(body){return currentModel==='J'&&currentDimensions[body==='bonnetLeft'?'verticalLowerJoint':'verticalUpperJoint']==='welded';}
+    function isVerticalSkirt(body){return currentModel==='J'&&body==='bonnetLeft'&&currentDimensions.verticalLowerEnd==='skirt';}
+    function isVerticalWelded(body){return isVerticalSkirt(body)||currentModel==='J'&&currentDimensions[body==='bonnetLeft'?'verticalLowerJoint':'verticalUpperJoint']==='welded';}
     function buildVerticalChannels(){
       verticalChannels.visible=currentModel==='J';
-      const key=JSON.stringify([currentModel,currentDimensions.shellLength,currentDimensions.bonnetLength,currentDimensions.bonnetDiameter,currentDimensions.verticalUpperEnd,currentDimensions.verticalLowerEnd,currentDimensions.verticalUpperJoint,currentDimensions.verticalLowerJoint,currentDimensions.shellDiameter,currentDimensions.verticalUpperCover,currentDimensions.verticalLowerCover]);
+      const key=JSON.stringify([currentModel,currentDimensions.shellLength,currentDimensions.bonnetLength,currentDimensions.bonnetDiameter,currentDimensions.verticalUpperEnd,currentDimensions.verticalLowerEnd,currentDimensions.verticalUpperJoint,currentDimensions.verticalLowerJoint,currentDimensions.shellDiameter,currentDimensions.verticalUpperCover,currentDimensions.verticalLowerCover,currentDimensions.verticalSkirtLength]);
       if(verticalChannels.userData.key===key)return;
       verticalChannels.traverse(o=>o.geometry?.dispose());verticalChannels.clear();verticalChannels.userData.key=key;
       for(const [body,sign] of [['bonnet',1],['bonnetLeft',-1]]){
+        if(isVerticalSkirt(body)){
+          const skirt=new THREE.Group();skirt.name='Faldón cilíndrico inferior de apoyo';skirt.position.x=-currentDimensions.shellLength/2;verticalChannels.add(skirt);
+          const radius=currentDimensions.shellDiameter/2,L=currentDimensions.verticalSkirtLength,wall=Math.min(.014,radius*.06),skin=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,L,96,1,true),shellMat);skin.rotation.z=Math.PI/2;skin.position.x=-L/2;skin.name='Continuación recta del shell';skirt.add(skin);
+          const inner=new THREE.Mesh(new THREE.CylinderGeometry(radius-wall,radius-wall,L,96,1,true),skirtInnerMat);inner.rotation.z=Math.PI/2;inner.position.x=-L/2;skirt.add(inner);
+          const bottom=new THREE.Mesh(new THREE.RingGeometry(radius-wall,radius,96),shellMat);bottom.rotation.y=-Math.PI/2;bottom.position.x=-L;bottom.name='Borde inferior plano de apoyo';skirt.add(bottom);ringX(skirt,0,radius,.006,weldMat);continue;
+        }
         if(!isVerticalChannel(body)&&!isVerticalWelded(body))continue;
         const g=new THREE.Group();g.name=(isVerticalChannel(body)?'Channel':'Bonete')+(sign>0?' superior':' inferior')+(isVerticalWelded(body)?' soldado al shell':' con tapa apernada');verticalChannels.add(g);
         g.position.x=sign*(currentDimensions.shellLength/2+.132);if(sign<0)g.rotation.y=Math.PI;
@@ -2434,6 +2443,7 @@
         const p=hairpinLayout();
         return bodyPart==='shellLower'?p.lowerRadius:bodyPart==='shell'?p.upperRadius:p.radius;
       }
+      if(isVerticalSkirt(bodyPart))return currentDimensions.shellDiameter/2;
       if (bodyPart === 'channel') return currentDimensions.channelDiameter / 2;
       if (bodyPart === 'bonnet' || bodyPart === 'bonnetLeft') return currentDimensions.bonnetDiameter / 2;
       return currentDimensions.shellDiameter / 2;
@@ -2603,7 +2613,7 @@
       orientSubNozzlesGlobally(nozzle, rotation ? THREE.MathUtils.radToDeg(rotation[0]) : radialAngle);
     }
     function ellipticalHeadFrame(bodyPart, curveAngle, perimeterAngle) {
-      if (isVerticalChannel(bodyPart)||currentModel === 'H' || !['bonnet', 'bonnetLeft'].includes(bodyPart)) return null;
+      if (isVerticalSkirt(bodyPart)||isVerticalChannel(bodyPart)||currentModel === 'H' || !['bonnet', 'bonnetLeft'].includes(bodyPart)) return null;
       const left = bodyPart === 'bonnetLeft';
       if (left && !['D', 'E', 'F', 'J'].includes(currentModel)) return null;
       const sign = left ? -1 : 1;
@@ -2733,6 +2743,7 @@
       document.getElementById('vertical-upper-joint').value=currentDimensions.verticalUpperJoint||'flanged';
       document.getElementById('vertical-lower-joint').value=currentDimensions.verticalLowerJoint||'flanged';
       for(const [side,key,body] of [['upper','verticalUpperCover','bonnet'],['lower','verticalLowerCover','bonnetLeft']]){document.getElementById('vertical-'+side+'-cover-controls').hidden=!isVerticalChannel(body);document.getElementById('vertical-'+side+'-cover').value=currentDimensions[key]||'bolted';}
+      document.getElementById('vertical-skirt-controls').hidden=!isVerticalSkirt('bonnetLeft');document.getElementById('vertical-skirt-length').value=currentDimensions.verticalSkirtLength||.8;document.getElementById('vertical-lower-joint').disabled=readOnly||isVerticalSkirt('bonnetLeft');if(isVerticalSkirt('bonnetLeft'))document.getElementById('vertical-lower-joint').value='welded';
       document.getElementById('vertical-lower-end').value=currentDimensions.verticalLowerEnd||'bonnet';
       heatExchanger.rotation.z=currentModel==='J'?Math.PI/2:0;
       modelAShellGroup.visible = !['B','H'].includes(currentModel);
@@ -2783,7 +2794,7 @@
         if (bonnet) bonnet.textContent = ['C', 'D'].includes(currentModel)
           ? 'Shell · cabezal elíptico soldado (+X)' : currentModel === 'E' ? 'Channel · Tipo B (tapa integral)' : currentModel==='J'?(isVerticalChannel('bonnet')?'Channel superior':'Bonete superior'): ['F','J'].includes(currentModel) ? 'Bonete derecho (+X)' : 'Bonete';
         if (left) left.textContent = ['D', 'E'].includes(currentModel)
-          ? 'Shell · cabezal elíptico soldado (−X)' : currentModel==='J'?(isVerticalChannel('bonnetLeft')?'Channel inferior':'Bonete inferior'): ['F','J'].includes(currentModel) ? 'Bonete izquierdo (−X)' : 'Bonete izquierdo';
+          ? 'Shell · cabezal elíptico soldado (−X)' : currentModel==='J'?(isVerticalSkirt('bonnetLeft')?'Faldón de apoyo':isVerticalChannel('bonnetLeft')?'Channel inferior':'Bonete inferior'): ['F','J'].includes(currentModel) ? 'Bonete izquierdo (−X)' : 'Bonete izquierdo';
         const channel = document.querySelector(`#${prefix}-nz-body option[value="channel"]`);
         if (channel) channel.textContent = ['A', 'C'].includes(currentModel) ? 'Channel · Tipo A (tapa removible)' : 'Channel';
       }
@@ -2810,6 +2821,7 @@
         max: leftHead.position.x - 0.05,
         center: leftHead.position.x - currentDimensions.bonnetLength * 0.45
       };
+      if(isVerticalSkirt('bonnetLeft'))BODY_BOUNDS.bonnetLeft={min:-currentDimensions.shellLength/2-currentDimensions.verticalSkirtLength+.02,max:-currentDimensions.shellLength/2-.02,center:-currentDimensions.shellLength/2-currentDimensions.verticalSkirtLength/2};
       BODY_BOUNDS.channel = ['D', 'E', 'F', 'J'].includes(currentModel)
         ? {...BODY_BOUNDS.bonnetLeft}
         : currentModel === 'B'
@@ -3672,7 +3684,7 @@
       document.getElementById('edit-head-mount').checked = !!data.headMount;
       document.getElementById('edit-head-angle').value = data.headAngle ?? 45;
       document.getElementById('edit-head-angle-value').value = (data.headAngle ?? 45) + '°';
-      document.getElementById('edit-head-mount').disabled = isVerticalChannel(data.bodyPart)||!['bonnet','bonnetLeft'].includes(data.bodyPart);
+      document.getElementById('edit-head-mount').disabled = isVerticalSkirt(data.bodyPart)||isVerticalChannel(data.bodyPart)||!['bonnet','bonnetLeft'].includes(data.bodyPart);
       document.getElementById('edit-offset-x').value = data.offsetX || 0;
       document.getElementById('edit-offset-y').value = data.offsetY || 0;
       document.getElementById('edit-offset-z').value = data.offsetZ || 0;
@@ -4437,6 +4449,7 @@
     for(const [id,field] of [['eccentric-shell-joint','eccentricShellJoint'],['eccentric-channel-joint','eccentricChannelJoint']])document.getElementById(id).addEventListener('change',event=>{
       if(readOnly)return;currentDimensions[field]=event.target.value;buildModelB();applyModel(currentModel,true);syncStateToParent();
     });
+    document.getElementById('vertical-skirt-length').addEventListener('input',event=>{const length=Number(event.target.value);if(readOnly||!Number.isFinite(length)||length<.2||length>5)return;currentDimensions.verticalSkirtLength=length;applyModel(currentModel,true);syncStateToParent();});
     for(const [id,key] of [['vertical-upper-end','verticalUpperEnd'],['vertical-lower-end','verticalLowerEnd'],['vertical-upper-joint','verticalUpperJoint'],['vertical-lower-joint','verticalLowerJoint'],['vertical-upper-cover','verticalUpperCover'],['vertical-lower-cover','verticalLowerCover']])document.getElementById(id).addEventListener('change',event=>{if(readOnly)return;currentDimensions[key]=event.target.value;applyModel(currentModel,true);syncStateToParent();});
     document.getElementById('channel-head-shape').addEventListener('change',event=>{if(readOnly)return;currentDimensions.channelHeadShape=event.target.value;rebuildModelAChannel();buildModelB();applyModel(currentModel,true);syncStateToParent();});
     document.getElementById('channel-cover-style').addEventListener('change',event=>{
