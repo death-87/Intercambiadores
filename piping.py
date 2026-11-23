@@ -62,7 +62,7 @@ def mostrar_piping(validar_equipo=None):
         mostrar_herramientas_equipo(validar_equipo)
         return
     if 'jn_piping_load_token' not in st.session_state:st.session_state['jn_piping_load_token']='inicio'
-    with st.expander('Abrir un diseño JSON respaldado'):
+    with st.expander('Continuar un proyecto guardado en otro equipo'):
         upload=st.file_uploader('Diseño de piping',type=['json'],key='jn_piping_import')
         if st.button('Cargar este diseño',key='jn_piping_import_apply',disabled=upload is None):
             try:
@@ -110,4 +110,4 @@ def mostrar_piping(validar_equipo=None):
             st.dataframe(frame,hide_index=True,use_container_width=True)
             st.download_button('Descargar materiales CSV',frame.to_csv(index=False).encode('utf-8-sig'),name+'_materiales.csv','text/csv',key='jn_piping_csv')
         st.download_button('Descargar respaldo JSON',json.dumps(design,ensure_ascii=False,indent=2).encode(),name+'.json','application/json',key='jn_piping_json')
-    st.caption('El editor conserva un respaldo local en este navegador. Descarga el JSON para abrir el diseño en otro equipo. Los largos de accesorios y válvulas son configurables; bridas y diámetros usan el catálogo existente de Intercambiadores.')
+    st.caption('Guardar proyecto descarga un archivo JSON para trasladarlo a otro computador. El editor conserva además un respaldo local en este navegador. Descarga el JSON para abrir el diseño en otro equipo. Los largos de accesorios y válvulas son configurables; bridas y diámetros usan el catálogo existente de Intercambiadores.')

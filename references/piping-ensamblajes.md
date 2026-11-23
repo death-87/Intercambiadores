@@ -71,3 +71,9 @@ En el modelo J (vertical), **Extremo inferior → Faldón recto · continuación
 Los tramos rectos pueden representar niples con entrada para soldar, NPT macho o inferida del extremo elegido, y salida para soldar, enflanchada o NPT macho. Para un niple roscado en ambos extremos, selecciona entrada NPT (o conecta desde una boca NPT hembra) y salida NPT. Las válvulas, incluidas PSV y RV, permiten elegir conexiones enflanchadas o NPT hembra en entrada y salida. Las medidas de salida de PSV/RV siguen siendo independientes.
 
 Ejemplo: thredolet NPT hembra → niple NPT macho/macho → RV NPT hembra → niple de la medida de salida. Las uniones roscadas no agregan bridas; se representan las roscas y el listado distingue niples roscados y válvulas NPT. No se unen directamente macho con macho o hembra con hembra ni una boca roscada con una terminación soldada. Para continuar desde una boca macho se requiere una válvula hembra u otra unión compatible.
+
+## Guardar para continuar en otro lugar
+
+El botón principal **Guardar proyecto para continuar en otro lugar** descarga un JSON con el ensamblaje completo: equipos, diseños editables, nameplates, posiciones, giros, boquillas, conexiones y componentes de piping. Incluye las ediciones válidas pendientes del componente seleccionado y la posición del equipo. El nombre lleva fecha y hora para distinguir versiones. La pantalla informa cuándo se preparó la copia y avisa si se realizan cambios posteriores.
+
+Conserva el archivo descargado y llévalo al otro computador (por ejemplo, en tu almacenamiento personal o pendrive). Abre la página de prueba y pulsa **Abrir proyecto guardado** para cargarlo. El botón prepara una descarga; no es almacenamiento en la nube. Si estás editando un equipo en Herramientas de equipo, primero pulsa **Usar este equipo en Piping** para incorporar esos cambios y después guarda el proyecto completo.

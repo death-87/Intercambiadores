@@ -52,7 +52,7 @@ def mostrar_herramientas_equipo(validar_equipo):
     draft=st.session_state.get('jn_piping_equipment_draft')
     if not draft:return
     st.subheader('Equipo en edición: '+(draft.get('nameplate') or 'Sin nameplate'))
-    st.caption('Edita forma, tapas y boquillas. «Usar este equipo en Piping» actualiza el mismo equipo y conserva su ubicación y giro en el ensamblaje.')
+    st.caption('Para respaldar el conjunto completo, primero incorpora los cambios con «Usar este equipo en Piping» y después pulsa «Guardar proyecto» en el ensamblaje. Edita forma, tapas y boquillas. «Usar este equipo en Piping» actualiza el mismo equipo y conserva su ubicación y giro en el ensamblaje.')
     value=declarar_visor()(initial_data=draft,selected_tag=draft.get('nameplate'),selection_token=st.session_state['jn_piping_equipment_selection'],draft_key='PIPING_'+st.session_state['jn_piping_equipment_id'],piping_mode=True,piping_equipment_id=st.session_state['jn_piping_equipment_id'],readonly=False,height=1100,key='piping_equipment_builder',default=None)
     if not isinstance(value,dict) or value.get('builder_token')!=st.session_state['jn_piping_equipment_selection']:return
     if value.get('action')=='change' and value.get('data'):
