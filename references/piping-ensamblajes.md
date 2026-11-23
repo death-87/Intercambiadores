@@ -45,3 +45,7 @@ Selecciona un tramo o codo y utiliza **Agregar derivación sobre este tramo** o 
 Para desplazar el conjunto, mantén presionado el botón central de la rueda y arrastra. Girar la rueda mantiene el zoom; el botón izquierdo gira la vista y el derecho también desplaza.
 
 Los diseños anteriores que identificaban como `latrolet` una conexión sobre un codo se convierten automáticamente a `elbolet`, conservando sus IDs, dirección y continuaciones. Los nuevos elbolets se eligen sobre codos de 90°; los diseños anteriores con codos de 45° siguen siendo legibles.
+
+El elbolet se dibuja hueco, con una base recortada que asienta sobre la superficie curva del codo. La posición del asiento se calcula contra esa curva; el cordón sigue su perímetro y la boca de salida comparte eje con el piping de continuación. La representación del codo abre el paso bajo la derivación.
+
+PSV y RV también tienen accesos directos en la lista de elementos. Mantienen entrada y salida enflanchadas independientes, resorte visible, vástago, columnas y palanca lateral.

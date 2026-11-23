@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {add,sub,mul,norm,normal,cross,blankDesign,compute,validateDesign,descendants,item,materialRows,TYPES,VALVES,isRelief,isOlet} from './model.mjs';
+import {add,sub,mul,dot,norm,normal,cross,blankDesign,compute,validateDesign,descendants,item,materialRows,TYPES,VALVES,isRelief,isOlet} from './model.mjs';
+import {elbowSeat} from './elbow_surface.mjs';
 import {sortComponents} from './equipment.mjs';
 import {loadAsset,validateAsset} from './assets.mjs';
 const $=id=>document.getElementById(id),catalog=await fetch('./catalogo.json').then(r=>r.json());
@@ -15,7 +16,7 @@ function setDesign(next,record=true){validateDesign(next,catalog);for(const e of
 function mutate(fn){try{const next=structuredClone(design);fn(next);setDesign(next);return true;}catch(e){status(e.message,true);return false;}}
 function exportFile(name,content,mime){const url=URL.createObjectURL(new Blob([content],{type:mime})),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function filename(){return (design.title||'Piping').replace(/[^\p{L}\p{N}_.-]+/gu,'_').slice(0,100);}
-function nextTag(kind){const prefix={pipe:'P',elbow:'C',tee:'T',sockolet:'SO',thredolet:'TH',latrolet:'LO',elbolet:'EO',reducer:'R',valve:'V',flange:'F',cap:'BC'}[kind];let n=1;while(design.components.some(c=>c.tag===prefix+String(n).padStart(2,'0')))n++;return prefix+String(n).padStart(2,'0');}
+function nextTag(kind){const prefix=kind==='valve'&&['psv','rv'].includes($('valve-type').value)?$('valve-type').value.toUpperCase():{pipe:'P',elbow:'C',tee:'T',sockolet:'SO',thredolet:'TH',latrolet:'LO',elbolet:'EO',reducer:'R',valve:'V',flange:'F',cap:'BC'}[kind];let n=1;while(design.components.some(c=>c.tag===prefix+String(n).padStart(2,'0')))n++;return prefix+String(n).padStart(2,'0');}
 for(const id of ['nps','out-nps'])for(const row of catalog.items)$(id).add(new Option(row.label,row.nps));
 function context(){if(['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))return result.ports.get($('run-pipe').value+':tap');return selected?result.nodes.find(n=>n.id===selected)?.origin:result.ports.get(activePort);}
 function defaults(){const kind=$('kind').value;let host=result.nodes.find(n=>n.id===$('run-pipe').value);if(['sockolet','thredolet','latrolet','elbolet'].includes(kind)&&(host?.kind!==(kind==='elbolet'?'elbow':'pipe')||(kind==='elbolet'&&host.bendAngle!==90))){$('run-pipe').value=result.nodes.find(n=>n.kind===(kind==='elbolet'?'elbow':'pipe')&&(kind!=='elbolet'||n.bendAngle===90))?.id||'';}const p=context(),nps=p?.nps||Number($('nps').value)||2,od=item(catalog,nps).odMM;$('nps').value=nps;$('tag').value=nextTag(kind);$('out-nps').value=nps;$('length').value=kind==='pipe'?1000:kind==='valve'?Math.max(300,od*6):Math.max(100,od*3);$('radius').value=(nps*25.4*1.5).toFixed(2);$('branch-length').value=Math.max(75,od*1.5).toFixed(1);$('roll').value=0;$('outlet-end').value='welded';$('branch-end').value='welded';if(['sockolet','thredolet','latrolet','elbolet'].includes(kind)){const run=result.nodes.find(n=>n.id===$('run-pipe').value);if(run){$('tap-offset').value=run.length/2;$('tap-offset').max=run.length;$('length').value=100;}}conditional();refreshContinuation();}
@@ -121,7 +122,7 @@ function drawValve(n,f,group){
   for(const t of [-1,1])for(const u of [-1,1]){const offset=add(mul(a,n.odMM*.52*t),mul(b,n.odMM*.52*u));cylinder(add(bottom,offset),add(top,offset),n.odMM*.045,metal,group);}
   for(const p of [bottom,top])cylinder(sub(p,mul(n.axis,10)),add(p,mul(n.axis,10)),n.odMM*.8,valveMat,group);
   const curve=new THREE.Curve();curve.getPoint=t=>v(add(add(bottom,mul(n.axis,height*t)),add(mul(a,Math.cos(t*Math.PI*18)*n.odMM*.36),mul(b,Math.sin(t*Math.PI*18)*n.odMM*.36))));mesh(new THREE.TubeGeometry(curve,144,n.odMM*.045,8,false),nutMat,group);
-  cylinder(top,add(n.start,mul(n.axis,n.length)),n.odMM*.4,valveMat,group);return;
+  cylinder(top,add(n.start,mul(n.axis,n.length)),n.odMM*.4,valveMat,group);const leverBase=add(n.center,mul(n.normal,-n.odMM*1.05)),leverTop=add(leverBase,mul(n.axis,n.length*.28));cylinder(leverBase,leverTop,n.odMM*.045,nutMat,group).name='Palanca lateral '+n.valveType.toUpperCase();return;
  }
  tube(add(n.start,mul(n.axis,f.lengthMM)),finish,n.odMM,group,valveMat);
  if(n.valveType==='ball'){drawBallValve(n,f,group);return;}
@@ -131,6 +132,28 @@ function drawValve(n,f,group){
  if(['gate','globe'].includes(n.valveType)){cylinder(stemStart,add(n.center,mul(n.normal,n.odMM*1.5)),n.odMM*.35,valveMat,group);const wheel=mesh(new THREE.TorusGeometry(n.odMM*.7,n.odMM*.07,10,40),valveMat,group);wheel.position.copy(v(stemEnd));wheel.quaternion.setFromUnitVectors(zaxis,v(n.normal));for(const a of [0,Math.PI/2]){const side=add(mul(n.axis,Math.cos(a)*n.odMM*.65),mul(cross(n.normal,n.axis),Math.sin(a)*n.odMM*.65));cylinder(sub(stemEnd,side),add(stemEnd,side),n.odMM*.04,valveMat,group);}}
  else cylinder(stemEnd,add(stemEnd,mul(n.axis,n.odMM*2)),n.odMM*.10,valveMat,group);
 }
+function drawElbolet(n,group){
+ const host=n.origin.elbowSurface,od=item(catalog,n.outNps).odMM,axis=n.axis,u=normal(axis),b=cross(axis,u),steps=64;
+ const baseR=Math.min(od*.78,host.odMM*.40),bore=Math.min(od*.42,baseR*.78),outer=od/2;
+ function direction(a){return add(mul(u,Math.cos(a)),mul(b,Math.sin(a)));}
+ const rings=[],seat=[];
+ for(let ring=0;ring<6;ring++){const points=[];for(let i=0;i<=steps;i++){const d=direction(i*2*Math.PI/steps);let point;
+  if(ring===0||ring===5){const offset=add(n.runCenter,mul(d,ring===0?baseR:bore));point=add(offset,mul(axis,elbowSeat(offset,axis,host)));if(ring===0)seat.push(v(point));}
+  else{const radius=ring===1?Math.max(outer,baseR*.82):ring===2?outer:bore,center=ring===1?add(n.start,mul(axis,n.length*.36)):ring===2||ring===3?n.end:add(n.start,mul(axis,n.length*.36));point=add(center,mul(d,radius));}
+  points.push(point);}rings.push(points);}
+ const positions=[],indices=[];for(const ring of rings)for(const point of ring)positions.push(...point);
+ for(let ring=0;ring<rings.length;ring++){const next=(ring+1)%rings.length;for(let i=0;i<steps;i++){const a=ring*(steps+1)+i,c=next*(steps+1)+i;indices.push(a,c,a+1,a+1,c,c+1);}}
+ const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setIndex(indices);geometry.computeVertexNormals();const fitting=mesh(geometry,metal,group);fitting.name='Elbolet hueco con base adaptada al codo';
+ const weldPath=new THREE.CatmullRomCurve3(seat.slice(0,-1),true);const weld=mesh(new THREE.TubeGeometry(weldPath,96,Math.max(1.5,od*.035),8,true),nutMat,group);weld.name='Soldadura siguiendo superficie del codo';
+}
+function openElboletBores(geometry,elbow){
+ const fittings=result.nodes.filter(n=>n.kind==='elbolet'&&n.parentPort===elbow.id+':tap');if(!fittings.length)return geometry;
+ const position=geometry.getAttribute('position'),index=geometry.getIndex(),kept=[];
+ for(let i=0;i<index.count;i+=3){const ids=[index.getX(i),index.getX(i+1),index.getX(i+2)],point=[0,0,0];for(const id of ids){point[0]+=position.getX(id)/3;point[1]+=position.getY(id)/3;point[2]+=position.getZ(id)/3;}
+  const cut=fittings.some(n=>{const od=item(catalog,n.outNps).odMM,bore=Math.min(od*.42,Math.min(od*.78,n.odMM*.40)*.78),q=sub(point,n.runCenter),along=dot(q,n.axis);return along>0&&Math.hypot(...sub(q,mul(n.axis,along)))<bore*.98;});if(!cut)kept.push(...ids);
+ }
+ geometry.setIndex(kept);return geometry;
+}
 function renderModel(){
  clear(pipeModel);clear(portsGroup);clear(labelsGroup);syncEquipmentModels();
  for(const n of result.nodes){const group=new THREE.Group();group.userData.id=n.id;pipeModel.add(group);const f={...n.flange,rating:n.rating};
@@ -139,9 +162,10 @@ function renderModel(){
   if(n.adapter)drawFlange(n.adapter.start,n.adapter.axis,f,group);
   if(n.origin.id!=='origin'&&n.origin.endType==='plain'){const weld=mesh(new THREE.TorusGeometry(n.odMM/2,Math.max(1.3,n.odMM*.018),8,40),nutMat,group);weld.name='Cordón de soldadura';weld.position.copy(v(n.origin.position));weld.quaternion.setFromUnitVectors(zaxis,v(n.axis));}
   if(n.origin.endType==='flanged'){bolts(add(n.origin.position,mul(n.axis,1.5)),n.axis,f,group);}else if(n.adapter&&!n.adapter.reverse){bolts(add(n.adapter.start,mul(n.axis,f.lengthMM+1.5)),n.axis,f,group);}
-  if(isOlet(n)){const od=item(catalog,n.outNps).odMM;const neck=add(n.start,mul(n.axis,n.length*.65));cylinder(n.start,neck,od*.88,metal,group,od*.57);tube(neck,n.end,od,group);if(n.kind==='thredolet'){for(let i=0;i<5;i++){const thread=mesh(new THREE.TorusGeometry(od*.43,Math.max(.8,od*.012),6,32),nutMat,group);thread.name='Rosca NPT thredolet';thread.position.copy(v(sub(n.end,mul(n.axis,2+i*2))));thread.quaternion.setFromUnitVectors(zaxis,v(n.axis));}}const weld=mesh(new THREE.TorusGeometry(od*.85,Math.max(2,od*.055),10,40),nutMat,group);weld.name='Soldadura sockolet a línea principal';weld.position.copy(v(n.start));weld.quaternion.setFromUnitVectors(zaxis,v(n.axis));}
+  if(n.kind==='elbolet')drawElbolet(n,group);
+  else if(isOlet(n)){const od=item(catalog,n.outNps).odMM;const neck=add(n.start,mul(n.axis,n.length*.65));cylinder(n.start,neck,od*.88,metal,group,od*.57);tube(neck,n.end,od,group);if(n.kind==='thredolet'){for(let i=0;i<5;i++){const thread=mesh(new THREE.TorusGeometry(od*.43,Math.max(.8,od*.012),6,32),nutMat,group);thread.name='Rosca NPT thredolet';thread.position.copy(v(sub(n.end,mul(n.axis,2+i*2))));thread.quaternion.setFromUnitVectors(zaxis,v(n.axis));}}const weld=mesh(new THREE.TorusGeometry(od*.85,Math.max(2,od*.055),10,40),nutMat,group);weld.name='Soldadura sockolet a línea principal';weld.position.copy(v(n.start));weld.quaternion.setFromUnitVectors(zaxis,v(n.axis));}
   else if(n.kind==='pipe')tube(n.start,n.end,n.odMM,group);
-  else if(n.kind==='elbow'){const R=Math.max(n.radiusMM,n.odMM*.6),angle=n.bendAngle*Math.PI/180,path=new THREE.Curve();path.getPoint=t=>v(add(n.start,add(mul(n.axis,R*Math.sin(angle*t)),mul(n.normal,R*(1-Math.cos(angle*t))))));mesh(new THREE.TubeGeometry(path,48,n.odMM/2,24,false),metal,group);}
+  else if(n.kind==='elbow'){const R=Math.max(n.radiusMM,n.odMM*.6),angle=n.bendAngle*Math.PI/180,path=new THREE.Curve();path.getPoint=t=>v(add(n.start,add(mul(n.axis,R*Math.sin(angle*t)),mul(n.normal,R*(1-Math.cos(angle*t))))));mesh(openElboletBores(new THREE.TubeGeometry(path,96,n.odMM/2,64,false),n),metal,group);}
   else if(n.kind==='tee'){tube(n.start,n.end,n.odMM,group);tube(n.center,n.branch.bodyPosition||n.branch.position,item(catalog,n.branchNps).odMM,group);}
   else if(n.kind==='reducer')reducer(n,group);
   else if(n.kind==='flange')drawFlange(n.reverse?n.end:n.start,n.reverse?mul(n.axis,-1):n.axis,f,group);
@@ -203,7 +227,7 @@ for(const id of ['branch-yaw','branch-pitch','olet-angle','run-pipe','tap-offset
 $('add').onclick=guard(()=>{if(!activePort&&!['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))throw Error('No hay un extremo libre.');const c=form();c.id='c'+uid().slice(0,24);if(!isOlet(c))c.parentPort=activePort;if(!mutate(d=>d.components.push(c)))return;selected=null;continuationId=c.id;if(isOlet(c))$('kind').value='pipe';activePort=result.freePorts.find(p=>p.id===c.id+':out')?.id||result.freePorts.at(-1)?.id||'';defaults();renderModel();refresh();status(c.kind==='cap'?'Extremo cerrado. Elige otro extremo libre para continuar.':c.kind==='tee'?'Tee agregada. Elige Salida principal o Derivación para continuar.':'Elemento conectado. Puedes continuar desde su salida o elegir otro extremo libre.');});
 $('apply').onclick=()=>{if(!selected)return;const c=form();if(mutate(d=>{d.components[d.components.findIndex(n=>n.id===selected)]=c;}))selectNode(selected);};
 $('delete').onclick=()=>{if(!selected)return;const ids=descendants(design,selected);if(ids.size>1&&!confirm('Se eliminarán '+ids.size+' componentes, incluyendo las continuaciones. Puedes deshacerlo.'))return;mutate(d=>{d.components=d.components.filter(c=>!ids.has(c.id));});selected=null;defaults();refresh();};
-$('clear').onclick=()=>{selected=null;defaults();refresh();highlight();};$('olet-angle').onchange=()=>{conditional();height();};$('run-pipe').onchange=()=>{const run=result.nodes.find(n=>n.id===$('run-pipe').value);if(run){$('tap-offset').max=run.length;if(!selected)$('tap-offset').value=run.length/2;}conditional();refreshContinuation();};$('kind').onchange=()=>{if(selected){conditional();updateSelected();}else defaults();};$('nps').onchange=()=>{if(selected){conditional();updateSelected();}else defaults();};$('rating').onchange=conditional;$('valve-type').onchange=conditional;$('port').onchange=()=>{activePort=$('port').value;if(!selected)defaults();renderModel();refresh();};$('component-list').onchange=()=>selectNode($('component-list').value);
+$('clear').onclick=()=>{selected=null;defaults();refresh();highlight();};$('olet-angle').onchange=()=>{conditional();height();};$('run-pipe').onchange=()=>{const run=result.nodes.find(n=>n.id===$('run-pipe').value);if(run){$('tap-offset').max=run.length;if(!selected)$('tap-offset').value=run.length/2;}conditional();refreshContinuation();};$('kind').onchange=()=>{if(['psv','rv'].includes($('kind').value)){$('valve-type').value=$('kind').value;$('kind').value='valve';}if(selected){conditional();updateSelected();}else defaults();};$('nps').onchange=()=>{if(selected){conditional();updateSelected();}else defaults();};$('rating').onchange=conditional;$('valve-type').onchange=conditional;$('port').onchange=()=>{activePort=$('port').value;if(!selected)defaults();renderModel();refresh();};$('component-list').onchange=()=>selectNode($('component-list').value);
 $('equipment').onchange=equipmentForm;
 $('equipment-apply').onclick=()=>mutate(d=>{const e=d.equipments.find(e=>e.id===$('equipment').value);e.position=['equipment-x','equipment-y','equipment-z'].map(id=>Number($(id).value));e.rotationDeg=Number($('equipment-rotation').value);});
 let equipmentTimer=null;for(const id of ['equipment-x','equipment-y','equipment-z','equipment-rotation'])$(id).addEventListener('input',()=>{clearTimeout(equipmentTimer);equipmentTimer=setTimeout(()=>{if(['equipment-x','equipment-y','equipment-z','equipment-rotation'].every(k=>$(k).value.trim()!==''))$('equipment-apply').click();},180);});
