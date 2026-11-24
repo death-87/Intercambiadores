@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import math
 import re
+from piping_details import validar_detalles,REPAIRS
 
 CATALOGO = json.loads((Path(__file__).parent / 'visor_piping' / 'catalogo.json').read_text())
 MEDIDAS = {row['nps']: row for row in CATALOGO['items']}
@@ -128,6 +129,7 @@ def validar_piping(diseno):
         if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
         if c['kind']=='tee' and puerto=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
         ids.add(c['id']);usados.add(puerto)
+    validar_detalles(diseno)
     return diseno
 
 
@@ -170,4 +172,9 @@ def materiales_piping(diseno):
         if c['kind']=='tee':puertos[c['id']+':branch']=(nps if c.get('teeEntry')=='branch' else c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
         if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
         if c['kind']=='tee' and c['parentPort']=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
-    return list(rows.values())
+    output=list(rows.values())
+    for repair in diseno.get('repairs',[]):
+        host=next(c for c in diseno['components'] if c['id']==repair['hostId'])
+        nps=puertos[host['id']+':out'][0]
+        output.append({'description':REPAIRS[repair['type']]+' · '+repair['tag'],'nps':MEDIDAS[nps]['label']+' · e '+format(repair['thicknessMM'],'g')+' mm','rating':'—','quantity':1,'lengthMM':repair['lengthMM']})
+    return output

@@ -83,3 +83,11 @@ Las descargas e importaciones JSON quedan como respaldo opcional. En Herramienta
 ## Cambio inmediato del tipo de válvula
 
 Al cambiar una válvula existente de enflanchada a roscada o viceversa, se actualiza el conjunto en una sola operación: se ajustan las terminaciones de los niples vecinos o se intercalan los niples necesarios cuando la conexión proviene de una brida u otro accesorio. Se conserva la medida del extremo y la continuación conectada. Los niples agregados aparecen en el dibujo y el listado de materiales; **Deshacer** recupera todo el cambio.
+
+## Refuerzos, parches y marcas de inspección
+
+En **Reparaciones / refuerzos**, elige un tramo recto y registra **Camisa Tipo B · soldada** o **Parche soldado**. Configura TAG, inicio desde el comienzo del tramo, largo, espesor, giro y comentario. Tipo B envuelve toda la circunferencia y muestra soldaduras longitudinales y de extremos; el parche muestra el sector angular elegido. La reparación debe quedar dentro del tramo. Usa **Nueva reparación** para agregar otra, o selecciónala en la lista para editarla automáticamente. Su diámetro sigue el del tramo.
+
+En **Marcas y comentarios**, pulsa **Elegir punto para nueva marca**, escribe número / comentario y haz clic sobre una superficie del dibujo. La marca puede ser flecha con círculo, flecha o círculo; permite cambiar color y desplazamiento del comentario. El punto se vincula al componente o equipo elegido y acompaña su ubicación. Selecciona una marca de la lista para editar o eliminarla. El texto largo se conserva completo y figura en la leyenda del PDF.
+
+Las reparaciones y marcas se guardan dentro del mismo proyecto, tanto en Mis proyectos como en JSON o Google Drive configurado. PNG y PDF incluyen las marcas visibles; el PDF agrega tablas con las reparaciones y referencias completas. Las reparaciones también aparecen en materiales. Al eliminar un componente se eliminan sus reparaciones y marcas; Deshacer recupera el conjunto. La representación no realiza cálculo estructural del refuerzo ni clasificación normativa de una ejecución real.

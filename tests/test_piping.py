@@ -63,6 +63,9 @@ class PipingTests(unittest.TestCase):
         self.assertEqual(materiales_piping(result['teeDesign']),result['teeMaterials'])
         self.assertEqual(materiales_piping(result['threadedDesign']),result['threadedMaterials'])
         self.assertEqual(materiales_piping(result['convertedDesign']),result['convertedMaterials'])
+        self.assertEqual(materiales_piping(result['detailsDesign']),result['detailsMaterials'])
+        invalid_detail=copy.deepcopy(result['detailsDesign']);invalid_detail['annotations'][0]['hostId']='missing'
+        with self.assertRaises(ValueError):validar_piping(invalid_detail)
         bad_thread=copy.deepcopy(result['threadedDesign']);bad_thread['components'][3]['valveConnection']='flanged'
         with self.assertRaises(ValueError):validar_piping(bad_thread)
         self.assertEqual(materiales_piping(result['teeBranchDesign']),result['teeBranchMaterials'])
@@ -83,6 +86,21 @@ class PipingTests(unittest.TestCase):
         with self.assertRaises(ValueError):validar_piping(broken)
         broken=copy.deepcopy(design);broken['equipments'][0]['asset']['data']['images']=[{'url':'https://example.com/image'}]
         with self.assertRaises(ValueError):validar_piping(broken)
+
+    def test_pdf_con_reparaciones_y_marcas(self):
+        from PIL import Image
+        from pypdf import PdfReader
+        from piping import pdf_piping
+        design=copy.deepcopy(self.design)
+        design['repairs']=[{'id':'r1','hostId':'p1','type':'type_b','tag':'RB-01','comment':'Refuerzo soldado','startMM':100,'lengthMM':300,'thicknessMM':6,'coverageDeg':90,'rollDeg':0}]
+        design['annotations']=[{'id':'a1','hostType':'component','hostId':'p1','coordinates':[.5,1,0],'number':'12','text':'Verificar pérdida de espesor','style':'both','color':'#c74336','offsetX':100,'offsetY':-70}]
+        buf=io.BytesIO();Image.new('RGB',(100,60),'white').save(buf,format='PNG')
+        reader=PdfReader(io.BytesIO(pdf_piping(design,buf.getvalue())))
+        text='\n'.join(page.extract_text() for page in reader.pages)
+        self.assertGreaterEqual(len(reader.pages),2)
+        self.assertIn('RB-01',text)
+        self.assertIn('Refuerzo soldado',text)
+        self.assertIn('Verificar pérdida de espesor',text)
 
     def test_exportacion_pdf(self):
         from PIL import Image

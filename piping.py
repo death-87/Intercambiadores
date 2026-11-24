@@ -47,6 +47,25 @@ def pdf_piping(diseno,imagen):
     else:
         story.extend([image,PageBreak(),Paragraph('Listado de materiales',title),table])
     story.extend([Spacer(1,3*mm),p('El listado corresponde al piping e incluye las bridas contraparte. Las válvulas se cuentan como conjuntos enflanchados; no incluye materiales internos de los equipos.')])
+    if diseno.get('repairs') or diseno.get('annotations'):
+        story.extend([PageBreak(),Paragraph('Reparaciones y marcas de inspección',title)])
+        if diseno.get('repairs'):
+            from piping_details import REPAIRS
+            hosts={c['id']:c['tag'] for c in diseno['components']}
+            detail=[[p(x) for x in ['TAG','REPARACIÓN','TRAMO','POSICIÓN / DIMENSIONES','COMENTARIO']]]
+            for repair in diseno['repairs']:
+                dims=f"Inicio {repair['startMM']:g} mm · largo {repair['lengthMM']:g} mm · espesor {repair['thicknessMM']:g} mm"
+                if repair['type']=='patch':dims+=f" · cobertura {repair['coverageDeg']:g}°"
+                detail.append([p(repair['tag']),p(REPAIRS[repair['type']]),p(hosts[repair['hostId']]),p(dims),p(repair['comment'])])
+            repairs_table=Table(detail,colWidths=[24*mm,44*mm,25*mm,76*mm,98*mm],repeatRows=1)
+            repairs_table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#e5f1ee')),('GRID',(0,0),(-1,-1),.35,colors.HexColor('#cbdde5')),('VALIGN',(0,0),(-1,-1),'TOP'),('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
+            story.extend([Paragraph('Registro de reparaciones',title),repairs_table,Spacer(1,5*mm)])
+        if diseno.get('annotations'):
+            hosts={c['id']:c['tag'] for c in diseno['components']};hosts.update({e['id']:e['tag'] for e in diseno.get('equipments',[])})
+            detail=[[p(x) for x in ['REFERENCIA','ELEMENTO','COMENTARIO']]]+[[p(a['number']),p(hosts[a['hostId']]),p(a['text'])] for a in diseno['annotations']]
+            marks_table=Table(detail,colWidths=[27*mm,45*mm,195*mm],repeatRows=1)
+            marks_table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#e5f1ee')),('GRID',(0,0),(-1,-1),.35,colors.HexColor('#cbdde5')),('VALIGN',(0,0),(-1,-1),'TOP'),('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
+            story.extend([Paragraph('Referencias del dibujo',title),marks_table])
     def pie(canvas,doc):
         canvas.saveState();canvas.setFont('Helvetica',7);canvas.setFillColor(colors.HexColor('#607c8e'));canvas.drawString(15*mm,8*mm,'Jndigital · '+datetime.now(ZoneInfo('America/Santiago')).strftime('%d-%m-%Y'));canvas.drawRightString(282*mm,8*mm,f'Página {doc.page}');canvas.restoreState()
     doc.build(story,onFirstPage=pie,onLaterPages=pie);return output.getvalue()
