@@ -1,3 +1,4 @@
+import {ponchoDimensions} from './poncho.mjs';
 import {pipeHeading,pipeFrame} from './pipe_path.mjs';
 import {validateDetails,repairRows} from './details.mjs';
 import {connection,threadDetail} from './connections.mjs';
@@ -10,9 +11,9 @@ export const mul=(v,s)=>v.map(x=>x*s);
 export const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 export const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export const norm=v=>mul(v,1/(Math.hypot(...v)||1));
-export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor BW',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega',gauge:'Manómetro'};
+export const TYPES={pipe:'Tramo recto',poncho:'Poncho de refuerzo',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor BW',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega',gauge:'Manómetro'};
 export const VALVES={gate:'compuerta',ball:'bola',globe:'globo',check:'retención',butterfly:'mariposa',psv:'PSV · seguridad',rv:'RV · alivio'};
-export const isOlet=c=>['sockolet','thredolet','latrolet','elbolet'].includes(c.kind);
+export const isOlet=c=>['sockolet','thredolet','latrolet','elbolet','poncho'].includes(c.kind);
 export const isRelief=c=>c.kind==='valve'&&['psv','rv'].includes(c.valveType);
 export const RATINGS=['150#','300#','600#'];
 export function normal(axis,roll=0){let n=Math.abs(axis[1])<.85?[0,1,0]:[0,0,1];n=norm(sub(n,mul(axis,dot(n,axis))));const b=cross(axis,n),a=roll*Math.PI/180;return add(mul(n,Math.cos(a)),mul(b,Math.sin(a)));}
@@ -62,7 +63,8 @@ export function compute(d,catalog){
   if(isOlet(c)){
    if((c.kind==='elbolet')!==(origin.hostKind==='elbow')||c.tapOffsetMM>origin.runLengthMM||c.outNps>nps)throw Error('El sockolet debe quedar dentro del tramo y su salida no puede superar la línea principal.');
    const roll=c.rollDeg*Math.PI/180,radial=origin.radialAxis?add(mul(origin.radialAxis,Math.cos(roll)),mul(cross(origin.axis,origin.radialAxis),Math.sin(roll))):normal(origin.axis,c.rollDeg),direction=c.branchDirection||(c.branchAngle===45?'inlet':'outlet'),yaw=(c.branchYawDeg||0)*Math.PI/180,pitch=(c.branchPitchDeg||0)*Math.PI/180,branchAxis=c.kind==='elbolet'?(directions[direction]?[...directions[direction]]:direction==='custom'?[Math.cos(pitch)*Math.cos(yaw),Math.cos(pitch)*Math.sin(yaw),Math.sin(pitch)]:[...(direction==='inlet'?origin.inletAxis:origin.outletAxis)]):c.kind==='latrolet'?norm(add(origin.axis,radial)):radial,projection=c.kind==='elbolet'?Math.max(.1,Math.sqrt(Math.max(0,1-dot(branchAxis,origin.axis)**2))):c.kind==='latrolet'?Math.SQRT1_2:1,center=add(origin.position,mul(origin.axis,origin.hostKind==='pipe'?0:c.tapOffsetMM)),start=add(center,mul(branchAxis,c.kind==='elbolet'?elbowSeat(center,branchAxis,origin.elbowSurface):pipe.odMM/(2*projection))),end=add(start,mul(branchAxis,c.lengthMM));
-   const node={...c,nps,rating,start,end,axis:branchAxis,endAxis:branchAxis,normal:normal(branchAxis),center:mul(add(start,end),.5),length:c.lengthMM,flange,odMM:pipe.odMM,endNps:c.outNps,endType:c.kind==='thredolet'?'threaded':'plain',endRating:rating,origin,runCenter:center};nodes.push(node);ports.set(c.id+':out',{id:c.id+':out',position:end,axis:branchAxis,nps:c.outNps,endType:c.kind==='thredolet'?'threaded':'plain',threadGender:c.kind==='thredolet'?'female':undefined,rating,label:c.tag+(c.kind==='thredolet'?' · salida roscada NPT':' · salida soldada')});continue;
+   const pad=c.kind==='poncho'?ponchoDimensions(c,pipe.odMM,item(catalog,c.outNps).odMM,origin.runLengthMM):undefined;
+   const node={...c,pad,nps,rating,start,end,axis:branchAxis,endAxis:branchAxis,normal:normal(branchAxis),center:mul(add(start,end),.5),length:c.lengthMM,flange,odMM:pipe.odMM,endNps:c.outNps,endType:c.kind==='thredolet'?'threaded':'plain',endRating:rating,origin,runCenter:center};nodes.push(node);ports.set(c.id+':out',{id:c.id+':out',position:end,axis:branchAxis,nps:c.outNps,endType:c.kind==='thredolet'?'threaded':'plain',threadGender:c.kind==='thredolet'?'female':undefined,rating,label:c.tag+(c.kind==='thredolet'?' · salida roscada NPT':' · salida soldada')});continue;
   }
   const axis=c.kind==='pipe'?pipeHeading(origin.axis,c.pipeYawDeg||0,c.pipePitchDeg||0):origin.axis,n=normal(axis,c.rollDeg);let start=[...origin.position],adapter=null,reverse=false;
   if(c.kind==='pipe'&&c.parentPort==='origin')start=add(start,[c.pipeXMM||0,c.pipeYMM||0,c.pipeZMM||0]);
@@ -128,6 +130,6 @@ export function materialRows(result,catalog){
   const label=TYPES[kind]+(kind==='elbow'?' '+detail+'°':kind==='valve'?' '+(VALVES[detail]||detail):kind==='reducer'?' '+(detail==='eccentric'?'excéntrico':'concéntrico'):'')+termination,measure=item(catalog,nps).label+(outNps?' × '+item(catalog,outNps).label:'');
   const cls=rating==='NPT'||['flange','valve','cap'].includes(kind)?rating:'—',key=[label,measure,cls].join('|');if(!rows.has(key))rows.set(key,{description:label,nps:measure,rating:cls,quantity:0,lengthMM:0});const row=rows.get(key);row.quantity++;if(kind==='pipe')row.lengthMM+=length;
  }
- for(const n of result.nodes){if(n.adapter)push('flange',n.adapter.nps,n.rating);if(n.outletEndFlange)push('flange',n.endNps,n.rating);if(n.branch?.flangeSpec)push('flange',n.branch.nps,n.rating);push(n.kind,n.nps,n.kind==='gauge'||n.endType==='threaded'&&['valve','elbow'].includes(n.kind)?'NPT':isRelief(n)?n.rating+' / '+n.endRating:n.rating,n.kind==='reducer'||isOlet(n)||isRelief(n)?n.outNps:n.kind==='tee'&&n.branchNps!==n.nps?n.branchNps:0,n.length,n.kind==='elbow'?n.bendAngle:n.kind==='valve'?n.valveType:n.reduction,threadDetail(n,n.inletType,n.endType));}
+ for(const n of result.nodes){if(n.adapter)push('flange',n.adapter.nps,n.rating);if(n.outletEndFlange)push('flange',n.endNps,n.rating);if(n.branch?.flangeSpec)push('flange',n.branch.nps,n.rating);push(n.kind,n.nps,n.kind==='gauge'||n.endType==='threaded'&&['valve','elbow'].includes(n.kind)?'NPT':isRelief(n)?n.rating+' / '+n.endRating:n.rating,n.kind==='reducer'||isOlet(n)||isRelief(n)?n.outNps:n.kind==='tee'&&n.branchNps!==n.nps?n.branchNps:0,n.length,n.kind==='elbow'?n.bendAngle:n.kind==='valve'?n.valveType:n.reduction,threadDetail(n,n.inletType,n.endType)+(n.kind==='poncho'?' · L '+n.pad.length+' mm · e '+n.pad.thickness+' mm · '+n.pad.coverage+'°':''));}
  return [...rows.values(),...repairRows(result,catalog)];
 }

@@ -27,6 +27,15 @@ class PipingTests(unittest.TestCase):
     def test_perfil_reducciones_bw(self):
         subprocess.run(['node',str(ROOT/'tests'/'reducer_profile.mjs')],check=True,capture_output=True,text=True)
 
+    def test_poncho_refuerzo(self):
+        result=json.loads(subprocess.check_output(['node',str(ROOT/'tests'/'poncho.mjs')],text=True))
+        design=result['design']
+        validar_piping(design)
+        self.assertEqual(materiales_piping(design),result['materials'])
+        for change in ({'padThicknessMM':-1},{'padCoverageDeg':1},{'padLengthMM':20},{'tapOffsetMM':40},{'outNps':8},{'outNps':6}):
+            invalid=copy.deepcopy(design);invalid['components'][1].update(change)
+            with self.subTest(change=change),self.assertRaises(ValueError):validar_piping(invalid)
+
     def test_catalogo_compartido(self):
         self.assertEqual(len(CATALOGO['items']),17)
         self.assertEqual(MEDIDAS[2]['odMM'],60.3)

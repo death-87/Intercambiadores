@@ -117,3 +117,10 @@ Ambas acciones se guardan en el proyecto y admiten **Deshacer / Rehacer**. Si lo
 El catálogo ofrece **Reducción concéntrica BW** y **Reducción excéntrica BW** directamente. Comparten el tipo `reducer` para mantener compatibles los proyectos anteriores. Las fotos de referencia representan accesorios BW (butt weld, soldadura a tope); WN corresponde a la brida welding neck que ya tiene su propia opción.
 
 Configura el diámetro de salida y el largo. La entrada hereda el NPS de la línea; la siguiente pieza hereda el NPS reducido. La excéntrica mantiene una generatriz plana: **Giro** permite orientarla arriba, abajo o lateralmente. El cambio de tipo se aplica inmediatamente al componente seleccionado. El perfil incluye cuellos rectos, transición suave, interior hueco y bordes de extremo; es una representación geométrica editable, no una tabla dimensional certificada. Los dos tipos quedan diferenciados en el listado de componentes y en los materiales exportados.
+
+
+## Poncho de refuerzo
+
+Selecciona un tubo y pulsa **Agregar poncho de refuerzo sobre este tramo**, o elige **Poncho de refuerzo · ramal soldado** en el catálogo. Define línea principal, posición desde su inicio, NPS del ramal, altura de salida y giro. La placa tiene largo axial, espesor y cobertura angular editables; abraza la superficie del tubo y muestra una abertura para el ramal, soldadura perimetral y soldadura alrededor de la derivación.
+
+La placa completa debe quedar dentro del tramo y rodear la abertura del ramal. La salida es para soldar: al agregar el siguiente tubo se usa automáticamente el diámetro del ramal. La línea principal mantiene libres sus extremos; admite varias derivaciones. El poncho sigue los cambios de posición y orientación de la línea, se conserva al guardar y reabrir el proyecto y aparece en el listado de materiales con sus medidas de placa. Al dividir el tubo por soldadura, el poncho se reasigna al segmento correspondiente; un corte que dejaría la placa fuera del segmento se rechaza sin modificar el proyecto.
