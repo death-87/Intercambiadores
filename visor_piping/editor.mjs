@@ -124,12 +124,68 @@ function drawBallValve(n,f,group){
  cylinder(top,add(top,mul(axis,D*.32)),D*.085,nutMat,group);cylinder(add(top,mul(axis,D*.32)),elbow,D*.085,nutMat,group);cylinder(elbow,tip,D*.085,nutMat,group).name='Palanca válvula de bola';
  const wheel=mesh(new THREE.TorusGeometry(D*.48,D*.065,12,48),nutMat,group);wheel.name='Aro de mando válvula de bola';wheel.position.copy(v(sub(tip,mul(up,D*.42))));wheel.quaternion.setFromUnitVectors(zaxis,v(side));
 }
+function threadDepth(od){return Math.min(25,Math.max(8,od*.3));}
 function drawThread(point,axis,od,parent,female=false){
- const length=Math.min(25,Math.max(8,od*.3)),radial=normal(axis),side=cross(axis,radial);
+ const length=threadDepth(od),radial=normal(axis),side=cross(axis,radial);
  if(female){const profile=[[od*.48,0],[od*.70,0],[od*.70,length],[od*.48,length],[od*.48,0]].map(([r,y])=>new THREE.Vector2(r,y));const socket=mesh(new THREE.LatheGeometry(profile,48),valveMat,parent);socket.position.copy(v(point));socket.quaternion.setFromUnitVectors(yaxis,v(axis));socket.name='Conexión hembra NPT';}
  const curve=new THREE.Curve();curve.getPoint=t=>v(add(add(point,mul(axis,t*length)),add(mul(radial,Math.cos(t*Math.PI*12)*od*(female?.485:.505)),mul(side,Math.sin(t*Math.PI*12)*od*(female?.485:.505)))));const thread=mesh(new THREE.TubeGeometry(curve,96,Math.max(.55,od*.012),6,false),nutMat,parent);thread.name=female?'Rosca hembra NPT':'Rosca macho NPT';
 }
+function drawThreadedRV(n,group){
+ const od=n.odMM,outOD=item(catalog,n.endNps).odMM;
+ const castMat=new THREE.MeshStandardMaterial({color:0x52595c,metalness:.52,roughness:.65});
+ const sealMat=new THREE.MeshStandardMaterial({color:0xc54427,roughness:.58});
+ const atHeight=h=>add(n.start,mul(n.axis,h));
+ const bodyStart=threadDepth(od),shoulder=n.length*.53,collarTop=n.length*.58;
+ const outline=[[0,bodyStart],[od*.68,bodyStart],[od*.85,bodyStart+od*.18],
+  [od*.94,bodyStart+od*.42],[od*.94,shoulder-od*.28],[od*.9,shoulder-od*.12],
+  [od*.77,shoulder],[od*.60,shoulder+od*.08],[0,shoulder+od*.08]];
+ const body=mesh(new THREE.LatheGeometry(outline.map(([r,h])=>new THREE.Vector2(r,h)),48),castMat,group);
+ body.name='Cuerpo fundido RV';
+ body.position.copy(v(n.start));
+ body.quaternion.setFromUnitVectors(yaxis,v(n.axis));
+
+ function hexSection(bottom,top,bottomRadius,topRadius,name){
+  const part=mesh(new THREE.CylinderGeometry(topRadius,bottomRadius,top-bottom,6),castMat,group);
+  part.position.copy(v(atHeight((bottom+top)/2)));
+  part.quaternion.copy(body.quaternion);
+  part.name=name;
+ }
+ hexSection(shoulder,collarTop,od*.64,od*.64,'Contratuerca hexagonal RV');
+ hexSection(collarTop,n.length-od*.10,od*.59,od*.59,'Tapa hexagonal RV');
+ hexSection(n.length-od*.10,n.length,od*.59,od*.52,'Bisel de la tapa RV');
+
+ const outletSocketBack=sub(n.end,mul(n.endAxis,threadDepth(outOD)));
+ const outletRoot=add(n.center,mul(n.endAxis,Math.min(od*.60,Math.hypot(...sub(outletSocketBack,n.center))*.7)));
+ cylinder(outletRoot,outletSocketBack,outOD*.76,castMat,group,outOD*.70).name='Cuello de salida lateral RV';
+ drawThread(n.start,n.axis,od,group,true);
+ drawThread(n.end,mul(n.endAxis,-1),outOD,group,true);
+
+ const front=norm(cross(n.axis,n.endAxis));
+ const plugCenter=add(atHeight(bodyStart+od*.55),mul(front,od*.92));
+ const plugRing=mesh(new THREE.TorusGeometry(od*.19,od*.044,8,32),castMat,group);
+ plugRing.name='Alojamiento del tapón frontal RV';
+ plugRing.position.copy(v(plugCenter));
+ plugRing.quaternion.setFromUnitVectors(zaxis,v(front));
+ const recess=mesh(new THREE.CircleGeometry(od*.13,6),nutMat,group);
+ recess.name='Hueco hexagonal del tapón RV';
+ recess.position.copy(v(add(plugCenter,mul(front,od*.015))));
+ recess.quaternion.copy(plugRing.quaternion);
+
+ const wireCenter=atHeight(collarTop-od*.07);
+ const wire=mesh(new THREE.TorusGeometry(od*.59,od*.016,8,48),nutMat,group);
+ wire.name='Alambre de precinto RV';
+ wire.position.copy(v(wireCenter));
+ wire.quaternion.setFromUnitVectors(zaxis,v(n.axis));
+ const sealStart=add(wireCenter,mul(n.endAxis,od*.56));
+ const sealEnd=add(add(sealStart,mul(n.endAxis,od*.43)),mul(n.axis,-od*.73));
+ cylinder(sealStart,sealEnd,od*.017,nutMat,group);
+ const seal=mesh(new THREE.BoxGeometry(od*.16,od*.53,od*.08),sealMat,group);
+ seal.name='Precinto RV';
+ seal.position.copy(v(sealEnd));
+ seal.quaternion.setFromUnitVectors(yaxis,v(norm(sub(sealEnd,sealStart))));
+}
 function drawValve(n,f,group){
+ if(n.valveType==='rv'&&n.valveConnection==='threaded'){drawThreadedRV(n,group);return;}
  const threaded=n.valveConnection==='threaded';if(threaded)f={...f,lengthMM:n.odMM*.4};
  if(threaded)drawThread(n.start,n.axis,n.odMM,group,true);else drawFlange(add(n.start,mul(n.axis,f.lengthMM)),mul(n.axis,-1),f,group);
  const out=threaded?{...f,lengthMM:item(catalog,n.endNps).odMM*.4}:isRelief(n)?{...n.outletFlange,rating:n.endRating}:f,finish=sub(n.end,mul(n.endAxis,out.lengthMM));if(threaded)drawThread(n.end,mul(n.endAxis,-1),item(catalog,n.endNps).odMM,group,true);else drawFlange(finish,n.endAxis,out,group);
