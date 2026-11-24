@@ -1,0 +1,2 @@
+[secrets]
+files = ["~/.streamlit/secrets.toml", ".streamlit/secrets.toml", "/etc/secrets/jndigital-streamlit-secrets.toml"]

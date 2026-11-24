@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {compute} from '../visor_piping/model.mjs';
+import {replaceComponent} from '../visor_piping/replace_component.mjs';
+const catalog=JSON.parse(fs.readFileSync(new URL('../visor_piping/catalogo.json',import.meta.url))),example=JSON.parse(fs.readFileSync(new URL('../visor_piping/ejemplo.json',import.meta.url)));
+const base=example.components[0],d={...example,components:[{...base,id:'main',tag:'L01',nps:6,lengthMM:2000},{...base,id:'so',tag:'SO01',kind:'sockolet',parentPort:'main:tap',nps:6,outNps:2,tapOffsetMM:1000,lengthMM:100,rollDeg:90},{...base,id:'next',tag:'P02',parentPort:'so:out',nps:2,lengthMM:500}]};
+const original=JSON.stringify(d),before=compute(d,catalog),changed=replaceComponent(d,'so','poncho',catalog),after=compute(changed,catalog);
+assert.equal(JSON.stringify(d),original);assert.equal(changed.components[1].id,'so');assert.equal(changed.components[1].tag,'SO01');assert.equal(changed.components[1].parentPort,'main:tap');assert.equal(changed.components[2].parentPort,'so:out');assert.equal(after.nodes[2].nps,2);assert.ok(Math.hypot(...after.nodes[2].end.map((x,i)=>x-before.nodes[2].end[i]))<1e-8);assert.equal(changed.components[1].padThicknessMM,6);
+assert.equal(replaceComponent(changed,'so','sockolet',catalog).components[1].kind,'sockolet');assert.throws(()=>replaceComponent(d,'so','pipe',catalog),/derivación/);assert.throws(()=>replaceComponent(d,'so','elbolet',catalog));
+const edge=structuredClone(d);edge.components[1].tapOffsetMM=5;assert.throws(()=>replaceComponent(edge,'so','poncho',catalog));assert.equal(edge.components[1].kind,'sockolet');
+const tee={...example,components:[{...base,id:'tee',kind:'tee',branchNps:2},{...base,id:'child',parentPort:'tee:branch'}]};assert.throws(()=>replaceComponent(tee,'tee','elbow',catalog),/conexiones actuales/);assert.equal(tee.components[0].kind,'tee');
+const inline={...example,components:[{...base,id:'a',nps:6},{...base,id:'b',parentPort:'a:out',nps:6}]};assert.equal(replaceComponent(inline,'a','elbow',catalog).components[1].parentPort,'a:out');assert.equal(replaceComponent(inline,'a','reducer-concentric',catalog).components[0].kind,'reducer');
+console.log('Reemplazo compatible: sockolet ↔ poncho, continuidad, inmutabilidad y rechazo sin pérdida de conexiones OK');
