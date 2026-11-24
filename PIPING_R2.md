@@ -1,6 +1,6 @@
 # Cuenta del propietario y almacenamiento de Piping
 
-El modo invitado funciona sin iniciar sesión e incluye diseño, importación y descarga de JSON. Guardar en R2 crea una copia nueva. El propietario puede abrir las copias desde «Cuenta de Piping · Mis diseños».
+El modo invitado funciona sin iniciar sesión e incluye diseño, importación y descarga de JSON. El propietario puede abrir archivos desde «Cuenta de Piping · Mis diseños» y elegir «Sobrescribir archivo» o «Guardar como copia». Si el archivo cambió desde que se abrió, hay que volver a abrirlo o guardar una copia.
 
 ## Configuración del despliegue
 

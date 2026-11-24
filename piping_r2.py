@@ -33,7 +33,7 @@ def _client(config):
     )
 
 
-def guardar_proyecto(config, event_id, name, design):
+def guardar_proyecto(config, event_id, name, design, target=None):
     if not isinstance(event_id, str) or not 1 <= len(event_id) <= 100:
         raise ValueError("Identificador de guardado inválido.")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 120:
@@ -43,24 +43,32 @@ def guardar_proyecto(config, event_id, name, design):
     if len(payload) > MAX_BYTES:
         raise ValueError("El diseño supera 32 MB.")
     digest = hashlib.sha256(event_id.encode() + b"\x00" + payload).hexdigest()
-    key = f"{PREFIX}{quote(name, safe='')}/{digest}.json"
+    if target:
+        key = target["id"]
+        condition = {"IfMatch": target["etag"]}
+    else:
+        key = f"{PREFIX}{quote(name, safe='')}/{digest}.json"
+        condition = {"IfNoneMatch": "*"}
     try:
         with closing(_client(config)) as client:
             try:
-                client.put_object(
+                saved = client.put_object(
                     Bucket=config["bucket"], Key=key, Body=payload,
-                    ContentType="application/json", IfNoneMatch="*",
-                    Metadata={"save-digest": digest},
+                    ContentType="application/json",
+                    Metadata={"save-digest": digest}, **condition,
                 )
             except ClientError as error:
                 if error.response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 412:
                     raise
-                existing = client.head_object(Bucket=config["bucket"], Key=key)
-                if existing.get("Metadata", {}).get("save-digest") != digest:
-                    raise ValueError("Ya existe un archivo con ese identificador.") from error
+                saved = client.head_object(Bucket=config["bucket"], Key=key)
+                if saved.get("Metadata", {}).get("save-digest") != digest:
+                    raise ValueError(
+                        "El archivo cambió desde que lo abriste. Vuelve a abrirlo o guarda una copia."
+                        if target else "Ya existe un archivo con ese identificador."
+                    ) from error
     except (BotoCoreError, ClientError) as error:
         raise ValueError("No se pudo confirmar el guardado en R2.") from error
-    return {"id": key, "name": name}
+    return {"id": key, "name": name, "etag": saved["ETag"], "design_id": design["id"]}
 
 
 def mostrar_cuenta():
@@ -76,6 +84,7 @@ def mostrar_cuenta():
     )
     with st.expander("Cuenta de Piping · Mis diseños"):
         if not owner:
+            st.session_state.pop("jn_r2_target", None)
             st.caption("Modo invitado. Puedes diseñar, descargar el JSON y volver a importarlo.")
             if ready and not logged_in and st.button("Entrar como propietario"):
                 st.login()
@@ -120,6 +129,10 @@ def mostrar_cuenta():
                 if len(raw) > MAX_BYTES:
                     raise ValueError("El diseño supera 32 MB.")
                 design = validar_piping(json.loads(raw))
+                st.session_state["jn_r2_target"] = {
+                    "id": selected, "name": unquote(selected.split("/")[1]),
+                    "etag": response["ETag"], "design_id": design["id"],
+                }
                 st.session_state["jn_piping_design"] = design
                 st.session_state["jn_piping_load_token"] = uuid.uuid4().hex
                 st.session_state["jn_piping_imported"] = True
