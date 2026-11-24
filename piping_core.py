@@ -63,6 +63,39 @@ def conexion_piping(c,extremo,parent_kind=None):
     return entrada,roscada
 
 
+def validar_elementos_externos(objetos):
+    if not isinstance(objetos, list) or len(objetos) > 30:
+        raise ValueError("Se admiten hasta 30 elementos externos.")
+    ids = set()
+    for objeto in objetos:
+        if not isinstance(objeto, dict):
+            raise ValueError("Elemento externo inválido.")
+        identificador = objeto.get("id")
+        tag = objeto.get("tag")
+        if (
+            not isinstance(identificador, str)
+            or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", identificador)
+            or identificador in ids
+            or objeto.get("kind") not in ("support", "tank")
+            or not isinstance(tag, str)
+            or not tag.strip()
+            or len(tag) > 60
+        ):
+            raise ValueError("Identificación de elemento externo inválida.")
+        ids.add(identificador)
+        for campo, limite in (("position", 10_000_000), ("rotation", 360)):
+            valores = objeto.get(campo)
+            if not isinstance(valores, list) or len(valores) != 3 or any(
+                type(valor) not in (int, float) or not -limite <= valor <= limite
+                for valor in valores
+            ):
+                raise ValueError("Posición o rotación de elemento externo inválida.")
+        for campo in ("a", "b", "height"):
+            valor = objeto.get(campo)
+            if type(valor) not in (int, float) or not 10 <= valor <= 100_000:
+                raise ValueError("Las dimensiones del elemento externo deben estar entre 10 y 100.000 mm.")
+
+
 def validar_piping(diseno):
     if not isinstance(diseno, dict) or type(diseno.get('version')) is not int or diseno['version'] != 1:
         raise ValueError('El archivo no es un diseño de piping versión 1.')
@@ -146,6 +179,7 @@ def validar_piping(diseno):
         if c['kind'] in ('tee','pipe') and puerto=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
         ids.add(c['id']);usados.add(puerto)
     validar_detalles(diseno)
+    validar_elementos_externos(diseno.get('externalObjects', []))
     return diseno
 
 
