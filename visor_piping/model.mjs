@@ -8,7 +8,7 @@ export const mul=(v,s)=>v.map(x=>x*s);
 export const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 export const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export const norm=v=>mul(v,1/(Math.hypot(...v)||1));
-export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega'};
+export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega',gauge:'Manómetro'};
 export const VALVES={gate:'compuerta',ball:'bola',globe:'globo',check:'retención',butterfly:'mariposa',psv:'PSV · seguridad',rv:'RV · alivio'};
 export const isOlet=c=>['sockolet','thredolet','latrolet','elbolet'].includes(c.kind);
 export const isRelief=c=>c.kind==='valve'&&['psv','rv'].includes(c.valveType);
@@ -41,7 +41,7 @@ export function validateDesign(d,catalog){
   if(c.outletEnd==='threaded'&&!['pipe','elbow'].includes(c.kind)||c.branchEnd==='threaded')throw Error('La terminación NPT está disponible para niples, codos y válvulas.');
   if(c.outletEnd==='vent45'&&c.kind!=='pipe'||c.branchEnd==='vent45')throw Error('El corte de venteo solo se admite en la salida de un niple.');
   if(c.kind==='tee'){if(!['a','b','branch'].includes(c.teeEntry??'a'))throw Error('Boca de entrada de tee inválida.');if(c.teeRunNps!==undefined)item(catalog,c.teeRunNps);if(c.parentPort==='origin')ports.add(c.id+':in');}
-  ids.add(c.id);used.add(c.parentPort);if(c.kind!=='cap'&&c.outletEnd!=='vent45')ports.add(c.id+':out');if(c.kind==='tee')ports.add(c.id+':branch');
+  ids.add(c.id);used.add(c.parentPort);if(!['cap','gauge'].includes(c.kind)&&c.outletEnd!=='vent45')ports.add(c.id+':out');if(c.kind==='tee')ports.add(c.id+':branch');
  }
  return d;
 }
@@ -87,6 +87,12 @@ export function compute(d,catalog){
    if(isRelief(c)){
     length=Math.max(c.lengthMM,flange.lengthMM+pipe.odMM*4.5);const bodyHeight=Math.max(flange.lengthMM+pipe.odMM*.8,length*.27);center=add(start,mul(axis,bodyHeight));endNps=c.outNps;endRating=c.outletRating||rating;outletFlange=item(catalog,endNps).flanges[endRating];const sideLength=Math.max(c.branchLengthMM,outletFlange.lengthMM+pipe.odMM*.9);end=add(center,mul(n,sideLength));endAxis=n;
    }else{length=Math.max(c.lengthMM,flange.lengthMM*2+pipe.odMM*1.3);end=add(start,mul(axis,length));center=mul(add(start,end),.5);}endType=femaleThreaded?'threaded':'flanged';
+  }else if(c.kind==='gauge'){
+   const dialRadius=Math.max(32,pipe.odMM*.9);
+   length=dialRadius*2+pipe.odMM*.85;
+   center=add(start,mul(axis,length-dialRadius));
+   end=add(start,mul(axis,length));
+   endType='closed';
   }else if(c.kind==='cap'){
    length=flange.thicknessMM;end=add(start,mul(axis,length));center=mul(add(start,end),.5);endType='closed';
   }
@@ -98,7 +104,7 @@ export function compute(d,catalog){
   let outletEndFlange=null;if(['pipe','elbow','tee','reducer'].includes(c.kind)&&c.outletEnd==='flanged'){outletEndFlange=item(catalog,endNps).flanges[rating];endType='flanged';}
   if(branch&&c.branchEnd==='flanged'){branch.flangeSpec=item(catalog,branch.nps).flanges[rating];branch.bodyPosition=[...branch.position];branch.position=add(branch.position,mul(branch.axis,branch.flangeSpec.lengthMM));branch.endType='flanged';}
   const node={...c,nps,rating,start,end,axis,endAxis,inletType,normal:n,center,length,flange,odMM:pipe.odMM,endNps,endType,endRating,outletFlange,outletEndFlange,teeA,teeB,teeLegEnd,teeEntry,branchNps:effectiveBranchNps,branch,adapter,reverse,origin};nodes.push(node);used.add(c.parentPort);
-  if(c.kind!=='cap'&&c.outletEnd!=='vent45')ports.set(c.id+':out',{id:c.id+':out',position:outletEndFlange?add(end,mul(endAxis,outletEndFlange.lengthMM)):end,axis:endAxis,nps:endNps,endType,threadGender:endType==='threaded'?(c.kind==='pipe'?'male':'female'):undefined,rating:endRating,flangeSpec:outletEndFlange||(c.kind==='valve'?(outletFlange||flange):undefined),label:c.tag+(c.kind==='tee'?(teeEntry==='a'?' · lado B':' · lado A'):' · salida principal')});
+  if(!['cap','gauge'].includes(c.kind)&&c.outletEnd!=='vent45')ports.set(c.id+':out',{id:c.id+':out',position:outletEndFlange?add(end,mul(endAxis,outletEndFlange.lengthMM)):end,axis:endAxis,nps:endNps,endType,threadGender:endType==='threaded'?(c.kind==='pipe'?'male':'female'):undefined,rating:endRating,flangeSpec:outletEndFlange||(c.kind==='valve'?(outletFlange||flange):undefined),label:c.tag+(c.kind==='tee'?(teeEntry==='a'?' · lado B':' · lado A'):' · salida principal')});
   if(c.kind==='tee'&&origin.id==='origin')ports.set(c.id+':in',{id:c.id+':in',position:start,axis:mul(axis,-1),nps:inletNps,endType:'plain',rating,label:c.tag+(teeEntry==='branch'?' · derivación':teeEntry==='b'?' · lado B':' · lado A')});
   if(c.kind==='elbow'){const a=c.bendAngle*Math.PI/360,tangent=norm(add(mul(axis,Math.cos(a)),mul(n,Math.sin(a))));ports.set(c.id+':tap',{id:c.id+':tap',position:center,axis:tangent,inletAxis:[...axis],outletAxis:[...endAxis],radialAxis:sub(mul(axis,Math.sin(a)),mul(n,Math.cos(a))),nps,endType:'run',rating,runLengthMM:0,hostKind:'elbow',elbowSurface:{start:[...start],axis:[...axis],normal:[...n],radiusMM:Math.max(c.radiusMM,pipe.odMM*.6),angleRad:c.bendAngle*Math.PI/180,odMM:pipe.odMM},label:c.tag+' · centro del codo'});}
   if(c.kind==='pipe')ports.set(c.id+':tap',{hostKind:'pipe',id:c.id+':tap',position:start,axis,nps,endType:'run',rating,runLengthMM:c.lengthMM,label:c.tag+' · línea principal'});
@@ -112,6 +118,6 @@ export function materialRows(result,catalog){
   const label=TYPES[kind]+(kind==='elbow'?' '+detail+'°':kind==='valve'?' '+(VALVES[detail]||detail):kind==='reducer'?' '+(detail==='eccentric'?'excéntrico':'concéntrico'):'')+termination,measure=item(catalog,nps).label+(outNps?' × '+item(catalog,outNps).label:'');
   const cls=rating==='NPT'||['flange','valve','cap'].includes(kind)?rating:'—',key=[label,measure,cls].join('|');if(!rows.has(key))rows.set(key,{description:label,nps:measure,rating:cls,quantity:0,lengthMM:0});const row=rows.get(key);row.quantity++;if(kind==='pipe')row.lengthMM+=length;
  }
- for(const n of result.nodes){if(n.adapter)push('flange',n.adapter.nps,n.rating);if(n.outletEndFlange)push('flange',n.endNps,n.rating);if(n.branch?.flangeSpec)push('flange',n.branch.nps,n.rating);push(n.kind,n.nps,n.endType==='threaded'&&['valve','elbow'].includes(n.kind)?'NPT':isRelief(n)?n.rating+' / '+n.endRating:n.rating,n.kind==='reducer'||isOlet(n)||isRelief(n)?n.outNps:n.kind==='tee'&&n.branchNps!==n.nps?n.branchNps:0,n.length,n.kind==='elbow'?n.bendAngle:n.kind==='valve'?n.valveType:n.reduction,threadDetail(n,n.inletType,n.endType));}
+ for(const n of result.nodes){if(n.adapter)push('flange',n.adapter.nps,n.rating);if(n.outletEndFlange)push('flange',n.endNps,n.rating);if(n.branch?.flangeSpec)push('flange',n.branch.nps,n.rating);push(n.kind,n.nps,n.kind==='gauge'||n.endType==='threaded'&&['valve','elbow'].includes(n.kind)?'NPT':isRelief(n)?n.rating+' / '+n.endRating:n.rating,n.kind==='reducer'||isOlet(n)||isRelief(n)?n.outNps:n.kind==='tee'&&n.branchNps!==n.nps?n.branchNps:0,n.length,n.kind==='elbow'?n.bendAngle:n.kind==='valve'?n.valveType:n.reduction,threadDetail(n,n.inletType,n.endType));}
  return [...rows.values()];
 }

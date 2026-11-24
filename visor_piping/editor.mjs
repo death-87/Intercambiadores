@@ -19,13 +19,13 @@ function setDesign(next,record=true,reframe=false){const wasEmpty=!design.compon
 function mutate(fn){try{const next=structuredClone(design);fn(next);setDesign(next);return true;}catch(e){status(e.message,true);return false;}}
 function exportFile(name,content,mime){const url=URL.createObjectURL(new Blob([content],{type:mime})),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function filename(){return (design.title||'Piping').replace(/[^\p{L}\p{N}_.-]+/gu,'_').slice(0,100);}
-function nextTag(kind){const prefix=kind==='valve'&&['psv','rv'].includes($('valve-type').value)?$('valve-type').value.toUpperCase():{pipe:'P',elbow:'C',tee:'T',sockolet:'SO',thredolet:'TH',latrolet:'LO',elbolet:'EO',reducer:'R',valve:'V',flange:'F',cap:'BC'}[kind];let n=1;while(design.components.some(c=>c.tag===prefix+String(n).padStart(2,'0')))n++;return prefix+String(n).padStart(2,'0');}
+function nextTag(kind){const prefix=kind==='valve'&&['psv','rv'].includes($('valve-type').value)?$('valve-type').value.toUpperCase():{pipe:'P',elbow:'C',tee:'T',sockolet:'SO',thredolet:'TH',latrolet:'LO',elbolet:'EO',reducer:'R',valve:'V',flange:'F',cap:'BC',gauge:'PI'}[kind];let n=1;while(design.components.some(c=>c.tag===prefix+String(n).padStart(2,'0')))n++;return prefix+String(n).padStart(2,'0');}
 for(const id of ['nps','out-nps','tee-run-nps'])for(const row of catalog.items)$(id).add(new Option(row.label,row.nps));
 function context(){if(['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))return result.ports.get($('run-pipe').value+':tap');return selected?result.nodes.find(n=>n.id===selected)?.origin:result.ports.get(activePort);}
 function defaults(){const kind=$('kind').value;let host=result.nodes.find(n=>n.id===$('run-pipe').value);if(['sockolet','thredolet','latrolet','elbolet'].includes(kind)&&(host?.kind!==(kind==='elbolet'?'elbow':'pipe')||(kind==='elbolet'&&host.bendAngle!==90))){$('run-pipe').value=result.nodes.find(n=>n.kind===(kind==='elbolet'?'elbow':'pipe')&&(kind!=='elbolet'||n.bendAngle===90))?.id||'';}const p=context(),nps=p?.nps||Number($('nps').value)||2,od=item(catalog,nps).odMM;$('nps').value=nps;$('tag').value=nextTag(kind);$('out-nps').value=nps;$('length').value=kind==='pipe'?1000:kind==='valve'?Math.max(300,od*6):Math.max(100,od*3);$('radius').value=(nps*25.4*1.5).toFixed(2);$('branch-length').value=Math.max(75,od*1.5).toFixed(1);$('roll').value=0;$('tee-entry').value='a';$('tee-run-nps').value=nps;$('outlet-end').value=kind==='elbow'&&p?.threadGender==='male'?'threaded':'welded';$('branch-end').value='welded';$('inlet-end').value='auto';$('valve-connection').value=p?.endType==='threaded'?'threaded':'flanged';if(['sockolet','thredolet','latrolet','elbolet'].includes(kind)){const run=result.nodes.find(n=>n.id===$('run-pipe').value);if(run){$('tap-offset').value=run.length/2;$('tap-offset').max=run.length;$('length').value=100;}}conditional();refreshContinuation();}
 function conditional(){const kind=$('kind').value,relief=kind==='valve'&&['psv','rv'].includes($('valve-type').value),p=context(),nps=p?.nps??Number($('nps').value);$('nps').disabled=p?.nps!==null&&p?.nps!==undefined;if(p?.nps)$('nps').value=p.nps;
- $('rating').disabled=p?.endType==='flanged'||kind==='valve'&&$('valve-connection').value==='threaded';if(p?.endType==='flanged')$('rating').value=p.rating;
- for(const [id,on] of [['tee-entry-row',kind==='tee'],['tee-run-row',kind==='tee'&&$('tee-entry').value==='branch'],['out-row',['reducer','tee','sockolet','thredolet','latrolet','elbolet'].includes(kind)||relief],['length-row',!['elbow','flange','cap'].includes(kind)],['elbow-row',kind==='elbow'],['branch-row',kind==='tee'||relief],['outlet-rating-row',relief&&$('valve-connection').value!=='threaded'],['sockolet-row',['sockolet','thredolet','latrolet','elbolet'].includes(kind)],['olet-angle-row',kind==='elbolet'],['elbolet-rotation-row',kind==='elbolet'&&$('olet-angle').value==='custom'],['ends-row',['pipe','elbow','tee','reducer'].includes(kind)],['branch-end-row',kind==='tee'],['reducer-row',kind==='reducer'],['valve-row',kind==='valve'],['pipe-inlet-row',kind==='pipe']])$(id).hidden=!on;
+ $('rating').disabled=kind==='gauge'||p?.endType==='flanged'||kind==='valve'&&$('valve-connection').value==='threaded';if(p?.endType==='flanged')$('rating').value=p.rating;
+ for(const [id,on] of [['tee-entry-row',kind==='tee'],['tee-run-row',kind==='tee'&&$('tee-entry').value==='branch'],['out-row',['reducer','tee','sockolet','thredolet','latrolet','elbolet'].includes(kind)||relief],['length-row',!['elbow','flange','cap','gauge'].includes(kind)],['elbow-row',kind==='elbow'],['branch-row',kind==='tee'||relief],['outlet-rating-row',relief&&$('valve-connection').value!=='threaded'],['sockolet-row',['sockolet','thredolet','latrolet','elbolet'].includes(kind)],['olet-angle-row',kind==='elbolet'],['elbolet-rotation-row',kind==='elbolet'&&$('olet-angle').value==='custom'],['ends-row',['pipe','elbow','tee','reducer'].includes(kind)],['branch-end-row',kind==='tee'],['reducer-row',kind==='reducer'],['valve-row',kind==='valve'],['pipe-inlet-row',kind==='pipe']])$(id).hidden=!on;
  $('length-row').querySelector('label').textContent=['sockolet','thredolet','latrolet','elbolet'].includes(kind)?'Altura de la derivación sobre la línea (mm)':relief?'Altura total PSV / RV (mm)':'Largo axial / entre caras (mm)';$('branch-row').querySelector('label').textContent=relief?'Largo de salida lateral al eje (mm)':'Largo al eje de derivación (mm)';
  $('tap-offset').disabled=kind==='elbolet';if(kind==='elbolet')$('tap-offset').value=0;for(const option of $('run-pipe').options){const run=result.nodes.find(n=>n.id===option.value);option.disabled=kind==='elbolet'?run?.kind!=='elbow'||(run.bendAngle!==90&&run.id!==design.components.find(c=>c.id===selected)?.parentPort.split(':')[0]):run?.kind!=='pipe';}
  const threadOption=$('outlet-end').querySelector('option[value=threaded]');
@@ -40,9 +40,10 @@ function conditional(){const kind=$('kind').value,relief=kind==='valve'&&['psv',
  for(const option of $('out-nps').options)option.disabled=['tee','sockolet','thredolet','latrolet','elbolet'].includes(kind)&&Number(option.value)>nps;
  if(['tee','sockolet','thredolet','latrolet','elbolet'].includes(kind)&&Number($('out-nps').value)>nps)$('out-nps').value=nps;
  const spec=item(catalog,nps),f=spec.flanges[$('rating').value];$('dim-info').textContent=`DE cañería: ${spec.odMM} mm · Brida ${$('rating').value}: Ø ${f.diameterMM.toFixed(1)} mm · espesor ${f.thicknessMM.toFixed(1)} mm · ${f.boltCount} pernos.`;
+ if(kind==='gauge')$('dim-info').textContent=p?.threadGender==='male'?'Entrada NPT hembra de '+spec.label+' · instrumento terminal.':'Selecciona un niple con salida NPT macho para conectar el manómetro.';
  if(kind==='valve'&&$('valve-connection').value==='threaded')$('dim-info').textContent='Entrada y salida NPT hembra. Para conectarlas se utiliza un niple con rosca macho; las medidas se heredan del extremo elegido.';if(['sockolet','thredolet','latrolet','elbolet'].includes(kind))$('dim-info').textContent='Principal: '+item(catalog,nps).label+' · Salida: '+item(catalog,Number($('out-nps').value)).label+' · '+(kind==='thredolet'?'Rosca NPT':kind==='sockolet'?'Soldadura socket · SW':kind==='latrolet'?'Derivación soldada a 45°':'Derivación soldada en codo');
  $('attach').disabled=!selected||!activePort;$('apply').disabled=!selected;$('delete').disabled=!selected;
- $('add').disabled=Boolean(selected)||(['sockolet','thredolet','latrolet','elbolet'].includes(kind)?!$('run-pipe').value:!activePort);
+ $('add').disabled=Boolean(selected)||kind==='gauge'&&p?.threadGender!=='male'||(['sockolet','thredolet','latrolet','elbolet'].includes(kind)?!$('run-pipe').value:!activePort);
 }
 function form(){const source=selected?design.components.find(c=>c.id===selected):null;return {id:source?.id||'c'+uid().slice(0,24),parentPort:['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value)?$('run-pipe').value+':tap':source?.parentPort||activePort,branchYawDeg:Number($('branch-yaw').value),branchPitchDeg:Number($('branch-pitch').value),branchDirection:$('olet-angle').value,tapOffsetMM:$('kind').value==='elbolet'?0:Number($('tap-offset').value),teeEntry:$('tee-entry').value,teeRunNps:Number($('tee-run-nps').value),kind:$('kind').value,tag:$('tag').value.trim()||nextTag($('kind').value),nps:Number($('nps').value),outNps:Number($('out-nps').value),branchNps:Number($('out-nps').value),rating:$('rating').value,outletEnd:$('outlet-end').value,branchEnd:$('branch-end').value,outletRating:$('outlet-rating').value,lengthMM:Number($('length').value),radiusMM:Number($('radius').value),branchLengthMM:Number($('branch-length').value),rollDeg:Number($('roll').value),bendAngle:Number($('bend').value),reduction:$('reduction').value,inletEnd:$('inlet-end').value,valveConnection:$('valve-connection').value,valveType:$('valve-type').value};}
 function refresh(){
@@ -58,7 +59,7 @@ function refreshContinuation(){
  const source=[selected,continuationId].find(id=>design.components.some(c=>c.id===id)),ports=result.freePorts.filter(p=>source?p.id.startsWith(source+':'):p.id===activePort);
  $('continuation').replaceChildren(...ports.map(p=>{const button=document.createElement('button');button.type='button';button.textContent=(selected?'Agregar después de ':'Continuar desde ')+p.label+' · '+(p.endType==='flanged'?'enflanchado':p.endType==='threaded'?'roscado NPT':'para soldar');button.className=p.id===activePort?'primary':'';button.onclick=()=>continueFrom(p.id);return button;}));
  const host=result.nodes.find(n=>n.id===source);if(host?.kind==='tee'){const free=new Set(result.freePorts.map(p=>p.id));$('continuation').replaceChildren(...['in','out','branch'].map(suffix=>{const id=host.id+':'+suffix,port=result.ports.get(id),entryName=host.teeEntry==='branch'?'derivación':host.teeEntry==='b'?'lado B':'lado A',button=document.createElement('button');button.textContent=(free.has(id)?(selected?'Agregar después de ':'Continuar desde '):'Ocupada: ')+(port?.label||host.tag+' · '+entryName);button.disabled=!free.has(id);button.className=id===activePort?'primary':'';button.onclick=()=>continueFrom(id);return button;}));}if(host&&(host.kind==='pipe'||host.kind==='elbow'&&host.bendAngle===90)){const button=document.createElement('button');button.textContent=host.kind==='pipe'?'Agregar derivación sobre este tramo':'Agregar derivación al centro del codo';button.onclick=()=>{selected=null;$('kind').value=host.kind==='pipe'?'sockolet':'elbolet';$('run-pipe').value=host.id;defaults();refresh();};$('continuation').append(button);}
- const port=result.ports.get(activePort);$('connection-help').textContent=port?.endType==='threaded'?'Salida NPT '+(port.threadGender==='male'?'macho: conecta un codo o una válvula roscada hembra.':'hembra: continúa con un niple de rosca macho.'):port?'Siguiente conexión: '+port.label+'. '+(port.endType==='flanged'?'Se agrega la contraparte enflanchada al continuar con piping.':'La continuación se une por soldadura.'):'Selecciona otro extremo libre para continuar.';
+ const port=result.ports.get(activePort);$('connection-help').textContent=port?.endType==='threaded'?'Salida NPT '+(port.threadGender==='male'?'macho: conecta un codo, una válvula o un manómetro de rosca hembra.':'hembra: continúa con un niple de rosca macho.'):port?'Siguiente conexión: '+port.label+'. '+(port.endType==='flanged'?'Se agrega la contraparte enflanchada al continuar con piping.':'La continuación se une por soldadura.'):'Selecciona otro extremo libre para continuar.';
  const current=result.nodes.find(n=>n.id===selected);
  $('build-mode').textContent=current?'Editando '+current.tag:'Agregar componente';
  $('kind-label').textContent=current?'Tipo del componente seleccionado':'Tipo de componente nuevo';
@@ -162,9 +163,9 @@ function drawBallValve(n,f,group){
  }
 }
 function threadDepth(od){return Math.min(25,Math.max(8,od*.3));}
-function drawThread(point,axis,od,parent,female=false){
+function drawThread(point,axis,od,parent,female=false,socketMaterial=valveMat){
  const length=threadDepth(od),radial=normal(axis),side=cross(axis,radial);
- if(female){const profile=[[od*.48,0],[od*.70,0],[od*.70,length],[od*.48,length],[od*.48,0]].map(([r,y])=>new THREE.Vector2(r,y));const socket=mesh(new THREE.LatheGeometry(profile,48),valveMat,parent);socket.position.copy(v(point));socket.quaternion.setFromUnitVectors(yaxis,v(axis));socket.name='Conexión hembra NPT';}
+ if(female){const profile=[[od*.48,0],[od*.70,0],[od*.70,length],[od*.48,length],[od*.48,0]].map(([r,y])=>new THREE.Vector2(r,y));const socket=mesh(new THREE.LatheGeometry(profile,48),socketMaterial,parent);socket.position.copy(v(point));socket.quaternion.setFromUnitVectors(yaxis,v(axis));socket.name='Conexión hembra NPT';}
  const curve=new THREE.Curve();curve.getPoint=t=>v(add(add(point,mul(axis,t*length)),add(mul(radial,Math.cos(t*Math.PI*12)*od*(female?.485:.505)),mul(side,Math.sin(t*Math.PI*12)*od*(female?.485:.505)))));const thread=mesh(new THREE.TubeGeometry(curve,96,Math.max(.55,od*.012),6,false),nutMat,parent);thread.name=female?'Rosca hembra NPT':'Rosca macho NPT';
 }
 function drawThreadedRV(n,group){
@@ -272,6 +273,50 @@ function drawFlangedGate(n,f,finish,group){
   cylinder(add(at(2.58),mul(radial,od*.11)),add(wheelCenter,mul(radial,od*.86)),od*.050,machined,group);
  }
 }
+function drawPressureGauge(n,group){
+ const od=n.odMM,radius=Math.max(32,od*.9),face=n.normal;
+ const steel=new THREE.MeshStandardMaterial({color:0xbabfc4,metalness:.62,roughness:.33});
+ const depth=radius*.39;
+ const back=sub(n.center,mul(face,depth*.58));
+ const front=add(n.center,mul(face,depth*.42));
+ const neckBase=add(n.start,mul(n.axis,threadDepth(od)));
+ const neckTop=sub(n.center,mul(n.axis,radius*.87));
+ cylinder(neckBase,neckTop,od*.61,steel,group,od*.46).name='Cuello del manómetro';
+ drawThread(n.start,n.axis,od,group,true,steel);
+ cylinder(back,front,radius,steel,group).name='Carcasa del manómetro';
+ const rim=mesh(new THREE.TorusGeometry(radius*.935,radius*.056,12,64),steel,group);
+ rim.position.copy(v(front));
+ rim.quaternion.setFromUnitVectors(zaxis,v(face));
+ rim.name='Bisel del manómetro';
+ const dialCanvas=document.createElement('canvas');
+ dialCanvas.width=dialCanvas.height=256;
+ const ctx=dialCanvas.getContext('2d');
+ ctx.fillStyle='#f5f8f9';
+ ctx.fillRect(0,0,256,256);
+ ctx.strokeStyle='#203342';
+ ctx.fillStyle='#203342';
+ ctx.textAlign='center';
+ ctx.textBaseline='middle';
+ ctx.font='bold 18px sans-serif';
+ for(let tick=0;tick<=50;tick++){
+  const angle=(135+270*tick/50)*Math.PI/180;
+  const major=tick%10===0,length=major?82:92;
+  const x=Math.cos(angle),y=Math.sin(angle);
+  ctx.lineWidth=major?3:1.5;
+  ctx.beginPath();ctx.moveTo(128+x*length,128+y*length);ctx.lineTo(128+x*104,128+y*104);ctx.stroke();
+  if(major)ctx.fillText(String(tick/5),128+x*68,128+y*68);
+ }
+ ctx.lineWidth=4;
+ ctx.beginPath();ctx.moveTo(146,110);ctx.lineTo(65,190);ctx.stroke();
+ ctx.beginPath();ctx.arc(128,128,7,0,2*Math.PI);ctx.fill();
+ ctx.font='bold 15px sans-serif';ctx.fillText('bar',128,192);
+ const texture=new THREE.CanvasTexture(dialCanvas);
+ texture.colorSpace=THREE.SRGBColorSpace;
+ const dial=mesh(new THREE.CircleGeometry(radius*.90,64),new THREE.MeshBasicMaterial({map:texture}),group);
+ dial.name='Carátula analógica del manómetro';
+ dial.position.copy(v(add(front,mul(face,radius*.009))));
+ dial.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(v(norm(cross(n.axis,face))),v(n.axis),v(face)));
+}
 function drawValve(n,f,group){
  if(n.valveType==='rv'&&n.valveConnection==='threaded'){drawThreadedRV(n,group);return;}
  const threaded=n.valveConnection==='threaded';if(threaded)f={...f,lengthMM:n.odMM*.4};
@@ -334,6 +379,7 @@ function renderModel(){
   else if(n.kind==='reducer')reducer(n,group);
   else if(n.kind==='flange')drawFlange(n.reverse?n.end:n.start,n.reverse?mul(n.axis,-1):n.axis,f,group);
   else if(n.kind==='cap')plate(n.start,n.axis,f,group,true);
+  else if(n.kind==='gauge')drawPressureGauge(n,group);
   else if(n.kind==='valve')drawValve(n,f,group);
  }
  const box=new THREE.Box3().setFromObject(model);totalSize=box.isEmpty()?1500:Math.max(box.getSize(new THREE.Vector3()).length(),500);grid.position.z=box.isEmpty()?-1:box.min.z-40;
@@ -447,7 +493,7 @@ for(const id of ['inlet-end','valve-connection','tee-entry','tee-run-nps','branc
  $(id).addEventListener('input',()=>{clearTimeout(liveTimer);if(selected)liveTimer=setTimeout(updateSelected,160);});
  $(id).addEventListener('change',()=>{if(selected)updateSelected();});
 }
-$('add').onclick=guard(()=>{if(selected)return;if(!activePort&&!['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))throw Error('No hay un extremo libre.');const c=form();c.id='c'+uid().slice(0,24);if(!isOlet(c))c.parentPort=activePort;if(!mutate(d=>d.components.push(c)))return;selected=null;continuationId=c.id;if(isOlet(c))$('kind').value='pipe';activePort=result.freePorts.find(p=>p.id===c.id+':out')?.id||result.freePorts.at(-1)?.id||'';defaults();renderModel();refresh();status(c.outletEnd==='vent45'?'Niple de venteo agregado. La boca a 45° es terminal.':c.kind==='cap'?'Extremo cerrado. Elige otro extremo libre para continuar.':c.kind==='tee'?'Tee agregada. Elige lado A, lado B o derivación entre las bocas libres.':'Elemento conectado. Puedes continuar desde su salida o elegir otro extremo libre.');});
+$('add').onclick=guard(()=>{if(selected)return;if(!activePort&&!['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))throw Error('No hay un extremo libre.');const c=form();c.id='c'+uid().slice(0,24);if(!isOlet(c))c.parentPort=activePort;if(!mutate(d=>d.components.push(c)))return;selected=null;continuationId=c.id;if(isOlet(c))$('kind').value='pipe';activePort=result.freePorts.find(p=>p.id===c.id+':out')?.id||result.freePorts.at(-1)?.id||'';defaults();renderModel();refresh();status(c.kind==='gauge'?'Manómetro conectado al niple NPT macho.':c.outletEnd==='vent45'?'Niple de venteo agregado. La boca a 45° es terminal.':c.kind==='cap'?'Extremo cerrado. Elige otro extremo libre para continuar.':c.kind==='tee'?'Tee agregada. Elige lado A, lado B o derivación entre las bocas libres.':'Elemento conectado. Puedes continuar desde su salida o elegir otro extremo libre.');});
 $('apply').onclick=()=>{if(!selected)return;const c=form();if(mutate(d=>{d.components[d.components.findIndex(n=>n.id===selected)]=c;}))selectNode(selected);};
 $('delete').onclick=()=>{
  const component=design.components.find(c=>c.id===selected);
