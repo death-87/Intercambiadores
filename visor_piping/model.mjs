@@ -10,7 +10,7 @@ export const mul=(v,s)=>v.map(x=>x*s);
 export const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 export const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export const norm=v=>mul(v,1/(Math.hypot(...v)||1));
-export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega',gauge:'Manómetro'};
+export const TYPES={pipe:'Tramo recto',sockolet:'Sockolet · SW',thredolet:'Thredolet · NPT',latrolet:'Latrolet · 45°',elbolet:'Elbolet',elbow:'Codo',tee:'Tee',reducer:'Reductor BW',valve:'Válvula',flange:'Brida WN',cap:'Brida ciega',gauge:'Manómetro'};
 export const VALVES={gate:'compuerta',ball:'bola',globe:'globo',check:'retención',butterfly:'mariposa',psv:'PSV · seguridad',rv:'RV · alivio'};
 export const isOlet=c=>['sockolet','thredolet','latrolet','elbolet'].includes(c.kind);
 export const isRelief=c=>c.kind==='valve'&&['psv','rv'].includes(c.valveType);

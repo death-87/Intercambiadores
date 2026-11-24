@@ -8,7 +8,7 @@ from piping_details import validar_detalles,REPAIRS
 
 CATALOGO = json.loads((Path(__file__).parent / 'visor_piping' / 'catalogo.json').read_text())
 MEDIDAS = {row['nps']: row for row in CATALOGO['items']}
-TIPOS = {'pipe':'Tramo recto','sockolet':'Sockolet · SW','thredolet':'Thredolet · NPT','latrolet':'Latrolet · 45°','elbolet':'Elbolet', 'elbow':'Codo', 'tee':'Tee', 'reducer':'Reductor', 'valve':'Válvula', 'flange':'Brida WN', 'cap':'Brida ciega','gauge':'Manómetro'}
+TIPOS = {'pipe':'Tramo recto','sockolet':'Sockolet · SW','thredolet':'Thredolet · NPT','latrolet':'Latrolet · 45°','elbolet':'Elbolet', 'elbow':'Codo', 'tee':'Tee', 'reducer':'Reductor BW', 'valve':'Válvula', 'flange':'Brida WN', 'cap':'Brida ciega','gauge':'Manómetro'}
 VALVULAS = {'gate':'compuerta','ball':'bola','globe':'globo','check':'retención','butterfly':'mariposa','psv':'PSV · seguridad','rv':'RV · alivio'}
 OLETS = {'sockolet','thredolet','latrolet','elbolet'}
 CLASES = {'150#','300#','600#'}

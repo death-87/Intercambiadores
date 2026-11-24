@@ -110,3 +110,10 @@ En **Soldaduras y división en segmentos**, selecciona el cordón por su nomencl
 - **Quitar solo cordón · conservar tramos** elimina el anillo y su identificación manteniendo las piezas independientes, incluso si cambiaste sus inclinaciones o curvaturas.
 
 Ambas acciones se guardan en el proyecto y admiten **Deshacer / Rehacer**. Si los segmentos tienen formas distintas, el intento de unión conserva el proyecto y muestra la alternativa de quitar solo el cordón.
+
+
+## Reducciones concéntricas y excéntricas para soldar
+
+El catálogo ofrece **Reducción concéntrica BW** y **Reducción excéntrica BW** directamente. Comparten el tipo `reducer` para mantener compatibles los proyectos anteriores. Las fotos de referencia representan accesorios BW (butt weld, soldadura a tope); WN corresponde a la brida welding neck que ya tiene su propia opción.
+
+Configura el diámetro de salida y el largo. La entrada hereda el NPS de la línea; la siguiente pieza hereda el NPS reducido. La excéntrica mantiene una generatriz plana: **Giro** permite orientarla arriba, abajo o lateralmente. El cambio de tipo se aplica inmediatamente al componente seleccionado. El perfil incluye cuellos rectos, transición suave, interior hueco y bordes de extremo; es una representación geométrica editable, no una tabla dimensional certificada. Los dos tipos quedan diferenciados en el listado de componentes y en los materiales exportados.

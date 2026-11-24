@@ -24,6 +24,9 @@ class PipingTests(unittest.TestCase):
         pipe['pipePitchDeg']=float('nan')
         with self.assertRaises(ValueError):validar_piping(self.design)
 
+    def test_perfil_reducciones_bw(self):
+        subprocess.run(['node',str(ROOT/'tests'/'reducer_profile.mjs')],check=True,capture_output=True,text=True)
+
     def test_catalogo_compartido(self):
         self.assertEqual(len(CATALOGO['items']),17)
         self.assertEqual(MEDIDAS[2]['odMM'],60.3)
