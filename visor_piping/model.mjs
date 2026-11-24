@@ -29,6 +29,7 @@ export function validateDesign(d,catalog){
   for(const field of ['nps','outNps','branchNps']){if(typeof c[field]!=='number'||!Number.isFinite(c[field]))throw Error('Medida nominal inválida.');item(catalog,c[field]);}
   if(!RATINGS.includes(c.rating)||typeof c.tag!=='string'||c.tag.length>40)throw Error('TAG o clase inválidos.');
   for(const [k,min,max] of [['lengthMM',10,100000],['radiusMM',10,100000],['branchLengthMM',10,100000],['rollDeg',-3600,3600]])if(typeof c[k]!=='number'||!Number.isFinite(c[k])||c[k]<min||c[k]>max)throw Error('Dimensión inválida: '+k);
+  if(c.kind==='gauge'&&c.gaugeDiameterMM!==undefined&&(!Number.isFinite(c.gaugeDiameterMM)||c.gaugeDiameterMM<10||c.gaugeDiameterMM>100000))throw Error('Diámetro exterior del manómetro inválido.');
   if(![45,90].includes(c.bendAngle)||!['concentric','eccentric'].includes(c.reduction)||!Object.hasOwn(VALVES,c.valveType))throw Error('Configuración de accesorio inválida.');
   if(c.outletRating!==undefined&&!RATINGS.includes(c.outletRating))throw Error('Clase de salida inválida.');
   for(const key of ['outletEnd','branchEnd'])if(c[key]!==undefined&&!['welded','flanged','threaded','vent45'].includes(c[key]))throw Error('Terminación de extremo inválida.');
@@ -88,7 +89,7 @@ export function compute(d,catalog){
     length=Math.max(c.lengthMM,flange.lengthMM+pipe.odMM*4.5);const bodyHeight=Math.max(flange.lengthMM+pipe.odMM*.8,length*.27);center=add(start,mul(axis,bodyHeight));endNps=c.outNps;endRating=c.outletRating||rating;outletFlange=item(catalog,endNps).flanges[endRating];const sideLength=Math.max(c.branchLengthMM,outletFlange.lengthMM+pipe.odMM*.9);end=add(center,mul(n,sideLength));endAxis=n;
    }else{length=Math.max(c.lengthMM,flange.lengthMM*2+pipe.odMM*1.3);end=add(start,mul(axis,length));center=mul(add(start,end),.5);}endType=femaleThreaded?'threaded':'flanged';
   }else if(c.kind==='gauge'){
-   const dialRadius=Math.max(32,pipe.odMM*.9);
+   const dialRadius=c.gaugeDiameterMM===undefined?Math.max(32,pipe.odMM*.9):c.gaugeDiameterMM/2;
    length=dialRadius*2+pipe.odMM*.85;
    center=add(start,mul(axis,length-dialRadius));
    end=add(start,mul(axis,length));

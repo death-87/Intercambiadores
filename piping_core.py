@@ -91,6 +91,10 @@ def validar_piping(diseno):
             value=c.get(k)
             if type(value) not in (int,float) or not math.isfinite(value) or not minimo<=value<=maximo:
                 raise ValueError('Dimensión inválida: '+k)
+        if c['kind']=='gauge' and 'gaugeDiameterMM' in c:
+            diameter=c['gaugeDiameterMM']
+            if type(diameter) not in (int,float) or not math.isfinite(diameter) or not 10<=diameter<=100000:
+                raise ValueError('Diámetro exterior del manómetro inválido.')
         if type(c.get('bendAngle')) not in (int,float) or c['bendAngle'] not in (45,90) or c.get('reduction') not in ('concentric','eccentric') or c.get('valveType') not in VALVULAS or c.get('outletRating',c.get('rating')) not in CLASES:
             raise ValueError('Configuración de accesorio inválida.')
         if any(c.get(key,'welded') not in ('welded','flanged','threaded','vent45') for key in ('outletEnd','branchEnd')):raise ValueError('Terminación de extremo inválida.')
