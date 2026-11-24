@@ -45,8 +45,39 @@ function conditional(){const kind=$('kind').value,relief=kind==='valve'&&['psv',
  $('attach').disabled=!selected||!activePort;$('apply').disabled=!selected;$('delete').disabled=!selected;
  $('add').disabled=Boolean(selected)||kind==='gauge'&&p?.threadGender!=='male'||(['sockolet','thredolet','latrolet','elbolet'].includes(kind)?!$('run-pipe').value:!activePort);
 }
-function form(){const source=selected?design.components.find(c=>c.id===selected):null;return {id:source?.id||'c'+uid().slice(0,24),parentPort:['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value)?$('run-pipe').value+':tap':source?.parentPort||activePort,branchYawDeg:Number($('branch-yaw').value),branchPitchDeg:Number($('branch-pitch').value),branchDirection:$('olet-angle').value,tapOffsetMM:$('kind').value==='elbolet'?0:Number($('tap-offset').value),teeEntry:$('tee-entry').value,teeRunNps:Number($('tee-run-nps').value),kind:$('kind').value,tag:$('tag').value.trim()||nextTag($('kind').value),nps:Number($('nps').value),outNps:Number($('out-nps').value),branchNps:Number($('out-nps').value),rating:$('rating').value,outletEnd:$('outlet-end').value,branchEnd:$('branch-end').value,outletRating:$('outlet-rating').value,lengthMM:$('kind').value==='gauge'?(source?.lengthMM??100):Number($('length').value),...($('kind').value==='gauge'?{gaugeDiameterMM:Number($('length').value)}:{}),radiusMM:Number($('radius').value),branchLengthMM:Number($('branch-length').value),rollDeg:Number($('roll').value),bendAngle:Number($('bend').value),reduction:$('reduction').value,inletEnd:$('inlet-end').value,valveConnection:$('valve-connection').value,valveType:$('valve-type').value};}
+function form(){const source=selected?design.components.find(c=>c.id===selected):null;return {id:source?.id||'c'+uid().slice(0,24),...(source?.lineColor?{lineColor:source.lineColor}:{}),parentPort:['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value)?$('run-pipe').value+':tap':source?.parentPort||activePort,branchYawDeg:Number($('branch-yaw').value),branchPitchDeg:Number($('branch-pitch').value),branchDirection:$('olet-angle').value,tapOffsetMM:$('kind').value==='elbolet'?0:Number($('tap-offset').value),teeEntry:$('tee-entry').value,teeRunNps:Number($('tee-run-nps').value),kind:$('kind').value,tag:$('tag').value.trim()||nextTag($('kind').value),nps:Number($('nps').value),outNps:Number($('out-nps').value),branchNps:Number($('out-nps').value),rating:$('rating').value,outletEnd:$('outlet-end').value,branchEnd:$('branch-end').value,outletRating:$('outlet-rating').value,lengthMM:$('kind').value==='gauge'?(source?.lengthMM??100):Number($('length').value),...($('kind').value==='gauge'?{gaugeDiameterMM:Number($('length').value)}:{}),radiusMM:Number($('radius').value),branchLengthMM:Number($('branch-length').value),rollDeg:Number($('roll').value),bendAngle:Number($('bend').value),reduction:$('reduction').value,inletEnd:$('inlet-end').value,valveConnection:$('valve-connection').value,valveType:$('valve-type').value};}
+function componentLineRoots(){
+ const roots=new Map();
+ for(const component of design.components){
+  const parentId=component.parentPort.split(':',1)[0];
+  roots.set(component.id,roots.get(parentId)||component);
+ }
+ return roots;
+}
+function savedLineColor(root){
+ const color=root?.lineColor;
+ return typeof color==='string'&&/^#[0-9a-f]{6}$/i.test(color)?color:null;
+}
+function refreshLineColor(){
+ const root=selected?componentLineRoots().get(selected):null;
+ $('line-color-controls').hidden=!root;
+ const color=savedLineColor(root);
+ $('line-color').value=color||'#3977aa';
+ $('line-color-reset').disabled=!color;
+ $('line-color-help').textContent=root?'Línea desde '+root.tag+' · incluye sus derivaciones conectadas.':'';
+}
+function setLineColor(color){
+ const root=selected?componentLineRoots().get(selected):null;
+ if(!root||savedLineColor(root)===color)return;
+ if(!mutate(next=>{
+  const start=next.components.find(c=>c.id===root.id);
+  if(color)start.lineColor=color;
+  else delete start.lineColor;
+ }))return;
+ status(color?'Color aplicado a la línea desde '+root.tag+'.':'Colores originales restaurados en la línea desde '+root.tag+'.');
+}
 function refresh(){
+ refreshLineColor();
  $('title').value=design.title;$('direction').value=design.direction;$('direction').disabled=design.components.length>0;$('count').textContent=design.components.length+' componentes';$('project').textContent=design.title;$('empty').hidden=design.components.length>0||(design.equipments||[]).length>0;
  $('port').replaceChildren(...result.freePorts.map(p=>new Option(p.label+(p.nps?' · '+item(catalog,p.nps).label:''),p.id)));$('port').value=activePort;
  const p=result.ports.get(activePort);$('port-info').textContent=p?`X ${p.position[0].toFixed(1)} · Y ${p.position[1].toFixed(1)} · Z ${p.position[2].toFixed(1)} mm${p.endType==='flanged'?' · Enflanchado '+p.rating:''}`:'No quedan extremos abiertos. Selecciona un elemento para modificarlo.';
@@ -80,7 +111,18 @@ const axes=new THREE.AxesHelper(300);scene.add(axes);
 const metal=new THREE.MeshStandardMaterial({color:0x7895a7,metalness:.6,roughness:.36,side:THREE.DoubleSide}),flangeMat=new THREE.MeshStandardMaterial({color:0xa7b9c5,metalness:.65,roughness:.3}),valveMat=new THREE.MeshStandardMaterial({color:0x168b78,metalness:.4,roughness:.37}),innerMat=new THREE.MeshStandardMaterial({color:0x415d70,roughness:.8,side:THREE.DoubleSide}),nutMat=new THREE.MeshStandardMaterial({color:0x445b6b,metalness:.65,roughness:.4});
 function planeQuaternion(axis){const n=normal(axis),b=cross(axis,n);return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(...n),new THREE.Vector3(...b),new THREE.Vector3(...axis)));}
 const v=a=>new THREE.Vector3(...a),yaxis=new THREE.Vector3(0,1,0),zaxis=new THREE.Vector3(0,0,1),shared=new Set([metal,flangeMat,valveMat,innerMat,nutMat]);
-function clear(group){while(group.children.length){const c=group.children[0];group.remove(c);c.traverse(o=>{o.geometry?.dispose();if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])if(!shared.has(m)){m.map?.dispose();m.dispose();}}});}}
+function clear(group){
+ const materials=new Set();
+ for(const child of [...group.children]){
+  group.remove(child);
+  child.traverse(object=>{
+   object.geometry?.dispose();
+   const list=Array.isArray(object.material)?object.material:[object.material];
+   for(const material of list)if(material&&!shared.has(material))materials.add(material);
+  });
+ }
+ for(const material of materials){material.map?.dispose();material.dispose();}
+}
 function mesh(geo,mat,parent=model){const m=new THREE.Mesh(geo,mat);parent.add(m);return m;}
 function cylinder(a,b,r,mat=metal,parent=model,r2=r){const delta=v(sub(b,a)),m=mesh(new THREE.CylinderGeometry(r2,r,delta.length(),32,1,false),mat,parent);m.position.copy(v(mul(add(a,b),.5)));m.quaternion.setFromUnitVectors(yaxis,delta.normalize());return m;}
 function tube(a,b,od,parent,mat=metal){const axis=norm(sub(b,a)),len=Math.hypot(...sub(b,a)),r=od/2,inside=r*.86;
@@ -469,7 +511,22 @@ function openElboletBores(geometry,elbow){
  }
  geometry.setIndex(kept);return geometry;
 }
+function colorPipeGroup(group,color){
+ const variants=new Map();
+ group.traverse(object=>{
+  const material=object.material;
+  if(!object.isMesh||!material?.color||material.map)return;
+  if(!shared.has(material)){material.color.set(color);return;}
+  if(!variants.has(material)){
+   const tinted=material.clone();
+   tinted.color.set(color);
+   variants.set(material,tinted);
+  }
+  object.material=variants.get(material);
+ });
+}
 function renderModel(){
+ const lineRoots=componentLineRoots();
  clear(pipeModel);clear(portsGroup);clear(labelsGroup);syncEquipmentModels();
  for(const n of result.nodes){const group=new THREE.Group();group.userData.id=n.id;pipeModel.add(group);const f={...n.flange,rating:n.rating};
   if(n.outletEndFlange)drawFlange(n.end,n.endAxis,{...n.outletEndFlange,rating:n.rating},group);
@@ -487,6 +544,8 @@ function renderModel(){
   else if(n.kind==='cap')plate(n.start,n.axis,f,group,true);
   else if(n.kind==='gauge')drawPressureGauge(n,group);
   else if(n.kind==='valve')drawValve(n,f,group);
+  const color=savedLineColor(lineRoots.get(n.id));
+  if(color)colorPipeGroup(group,color);
  }
  const box=new THREE.Box3().setFromObject(model);totalSize=box.isEmpty()?1500:Math.max(box.getSize(new THREE.Vector3()).length(),500);grid.position.z=box.isEmpty()?-1:box.min.z-40;
  for(const e of design.equipments||[]){const group=equipmentModel.children.find(g=>g.userData.equipmentId===e.id),box=new THREE.Box3().setFromObject(group),center=box.getCenter(new THREE.Vector3());label(e.tag,[center.x,center.y,box.max.z+totalSize*.04]);}
@@ -622,6 +681,8 @@ $('equipment-remove').onclick=()=>mutate(d=>{const id=$('equipment').value;if(d.
 $('attach').onclick=()=>{if(!selected||!activePort)return;const target=activePort,id=selected;if(mutate(d=>{const c=d.components.find(c=>c.id===id);c.parentPort=target;d.components=sortComponents(d,catalog).components;}))status('Línea acoplada al extremo seleccionado, incluyendo su continuación.');};
 $('title').onchange=()=>mutate(d=>{d.title=$('title').value.trim()||'Línea de piping';});$('direction').onchange=()=>mutate(d=>{d.direction=$('direction').value;});
 $('undo').onclick=()=>{clearTimeout(liveTimer);liveSelection=null;if(!undo.length)return;redo.push(structuredClone(design));const d=undo.pop();selected=null;setDesign(d,false);defaults();};$('redo').onclick=()=>{clearTimeout(liveTimer);liveSelection=null;if(!redo.length)return;undo.push(structuredClone(design));const d=redo.pop();selected=null;setDesign(d,false);defaults();};
+$('line-color-apply').onclick=()=>setLineColor($('line-color').value);
+$('line-color-reset').onclick=()=>setLineColor(null);
 $('panel-undo').onclick=()=>$('undo').click();
 $('panel-redo').onclick=()=>$('redo').click();
 function flushProject(){
