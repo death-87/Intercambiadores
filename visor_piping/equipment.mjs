@@ -26,6 +26,6 @@ export function validateEquipmentList(design,catalog){
 }
 export function sortComponents(design,catalog){
  const available=new Set(['origin',...equipmentPorts(design,catalog).map(p=>p.id)]),ordered=[],pending=[...design.components];
- while(pending.length){let progress=false;for(let i=0;i<pending.length;){const c=pending[i];if(available.has(c.parentPort)){ordered.push(c);if(c.kind!=='cap')available.add(c.id+':out');if(c.kind==='pipe'||c.kind==='elbow')available.add(c.id+':tap');if(c.kind==='tee'){available.add(c.id+':branch');if(c.parentPort==='origin')available.add(c.id+':in');}pending.splice(i,1);progress=true;}else i++;}if(!progress)throw Error('No se puede acoplar: la conexión crearía un ciclo o usa una boquilla inexistente.');}
+ while(pending.length){let progress=false;for(let i=0;i<pending.length;){const c=pending[i];if(available.has(c.parentPort)){ordered.push(c);if(c.kind!=='cap'&&c.outletEnd!=='vent45')available.add(c.id+':out');if(c.kind==='pipe'||c.kind==='elbow')available.add(c.id+':tap');if(c.kind==='tee'){available.add(c.id+':branch');if(c.parentPort==='origin')available.add(c.id+':in');}pending.splice(i,1);progress=true;}else i++;}if(!progress)throw Error('No se puede acoplar: la conexión crearía un ciclo o usa una boquilla inexistente.');}
  return {...design,components:ordered};
 }

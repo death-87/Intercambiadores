@@ -50,10 +50,11 @@ def validar_equipos(diseno):
 
 
 def conexion_piping(c,extremo,parent_kind=None):
-    roscada=c['kind']=='valve' and c.get('valveConnection')=='threaded'
+    roscada=(c['kind']=='valve' and c.get('valveConnection')=='threaded' or
+             c['kind']=='elbow' and c.get('outletEnd')=='threaded')
     entrada='threaded' if (c['kind']=='pipe' and (c.get('inletEnd')=='threaded' or c.get('inletEnd')!='welded' and extremo=='threaded')) or roscada else 'plain'
     if c['parentPort']!='origin':
-        if extremo=='threaded' and entrada!='threaded':raise ValueError('El extremo NPT requiere un niple o una válvula roscada.')
+        if extremo=='threaded' and entrada!='threaded':raise ValueError('El extremo NPT requiere un niple, un codo o una válvula roscada.')
         if extremo!='threaded' and entrada=='threaded':raise ValueError('Configura primero una salida roscada NPT en el componente anterior.')
         if extremo=='threaded' and (parent_kind=='pipe')==(c['kind']=='pipe'):raise ValueError('La unión NPT necesita una rosca macho y una hembra.')
     return entrada,roscada
@@ -90,12 +91,16 @@ def validar_piping(diseno):
                 raise ValueError('Dimensión inválida: '+k)
         if type(c.get('bendAngle')) not in (int,float) or c['bendAngle'] not in (45,90) or c.get('reduction') not in ('concentric','eccentric') or c.get('valveType') not in VALVULAS or c.get('outletRating',c.get('rating')) not in CLASES:
             raise ValueError('Configuración de accesorio inválida.')
-        if any(c.get(key,'welded') not in ('welded','flanged','threaded') for key in ('outletEnd','branchEnd')):raise ValueError('Terminación de extremo inválida.')
-        if c.get('inletEnd','auto') not in ('auto','welded','threaded') or c.get('valveConnection','flanged') not in ('flanged','threaded') or c.get('outletEnd')=='threaded' and c['kind']!='pipe' or c.get('branchEnd')=='threaded':raise ValueError('Tipo de conexión inválido.')
+        if any(c.get(key,'welded') not in ('welded','flanged','threaded','vent45') for key in ('outletEnd','branchEnd')):raise ValueError('Terminación de extremo inválida.')
+        if c.get('inletEnd','auto') not in ('auto','welded','threaded') or c.get('valveConnection','flanged') not in ('flanged','threaded') or c.get('outletEnd')=='threaded' and c['kind'] not in ('pipe','elbow') or c.get('branchEnd')=='threaded':raise ValueError('Tipo de conexión inválido.')
+        if c.get('outletEnd')=='vent45' and c['kind']!='pipe' or c.get('branchEnd')=='vent45':
+            raise ValueError('El corte de venteo solo se admite en la salida de un niple.')
         entrada, extremo, clase=puertos[puerto]
         parent_kind=next((x['kind'] for x in componentes if x['id']==puerto.split(':')[0]),None)
         inlet_type,roscada=conexion_piping(c,extremo,parent_kind)
         inlet_nps=entrada if entrada is not None else c['nps']
+        if c.get('outletEnd')=='vent45' and c['lengthMM']<=MEDIDAS[inlet_nps]['odMM']/2:
+            raise ValueError('El largo del niple de venteo debe superar el radio exterior.')
         nps=c.get('teeRunNps',inlet_nps) if c['kind']=='tee' and c.get('teeEntry')=='branch' else inlet_nps
         if c['kind']=='tee' and (c.get('teeEntry','a') not in ('a','b','branch') or type(nps) not in (int,float) or nps not in MEDIDAS):raise ValueError('Entrada o medida principal de tee inválida.')
         rating=clase if extremo=='flanged' else c['rating']
@@ -112,7 +117,7 @@ def validar_piping(diseno):
         alivio=c['kind']=='valve' and c['valveType'] in ('psv','rv')
         salida=c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet','elbolet') or alivio else nps
         tipo_salida='threaded' if c['kind']=='thredolet' or roscada or c['kind']=='pipe' and c.get('outletEnd')=='threaded' else 'flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
-        if c['kind']!='cap':puertos[c['id']+':out']=(salida,tipo_salida,c.get('outletRating',rating) if alivio else rating)
+        if c['kind']!='cap' and c.get('outletEnd')!='vent45':puertos[c['id']+':out']=(salida,tipo_salida,c.get('outletRating',rating) if alivio else rating)
         if c['kind']=='tee':puertos[c['id']+':branch']=(nps if c.get('teeEntry')=='branch' else c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
         if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
         if c['kind']=='tee' and puerto=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
@@ -130,7 +135,7 @@ def materiales_piping(diseno):
         if tipo=='valve':nombre+=' '+VALVULAS[detalle]
         nombre+=terminacion
         medida=MEDIDAS[nps]['label']+(' × '+MEDIDAS[salida]['label'] if salida is not None else '')
-        clase=rating if tipo in ('flange','valve','cap') else '—'
+        clase=rating if rating=='NPT' or tipo in ('flange','valve','cap') else '—'
         key=(nombre,medida,clase)
         if key not in rows:rows[key]={'description':nombre,'nps':medida,'rating':clase,'quantity':0,'lengthMM':0}
         rows[key]['quantity']+=1
@@ -150,10 +155,11 @@ def materiales_piping(diseno):
         alivio=c['kind']=='valve' and c['valveType'] in ('psv','rv')
         salida=c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet','elbolet') or alivio else branch_nps if c['kind']=='tee' and branch_nps!=nps else None
         end_thread=c['kind']=='pipe' and c.get('outletEnd')=='threaded'
-        terminacion=' · roscada NPT' if roscada else ' · NPT '+('ambos extremos' if inlet_type=='threaded' and end_thread else 'entrada' if inlet_type=='threaded' else 'salida') if c['kind']=='pipe' and (inlet_type=='threaded' or end_thread) else ''
+        terminacion=' · roscado NPT hembra' if roscada and c['kind']=='elbow' else ' · roscada NPT' if roscada else ' · NPT '+('ambos extremos' if inlet_type=='threaded' and end_thread else 'entrada' if inlet_type=='threaded' else 'salida') if c['kind']=='pipe' and (inlet_type=='threaded' or end_thread) else ''
+        if c.get('outletEnd')=='vent45':terminacion=' · venteo a 45°'+(' · entrada NPT macho' if inlet_type=='threaded' else '')
         agregar(c['kind'],nps,'NPT' if roscada else rating+' / '+c.get('outletRating',rating) if alivio else rating,salida,c['lengthMM'],c['bendAngle'] if c['kind']=='elbow' else c['valveType'] if c['kind']=='valve' else c['reduction'],terminacion)
         tipo='threaded' if c['kind']=='thredolet' or roscada or end_thread else 'flanged' if c['kind'] in ('pipe','elbow','tee','reducer') and c.get('outletEnd')=='flanged' or c['kind']=='valve' or c['kind']=='flange' and extremo!='flanged' else 'plain'
-        if c['kind']!='cap':puertos[c['id']+':out']=(c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet','elbolet') or alivio else nps,tipo,c.get('outletRating',rating) if alivio else rating)
+        if c['kind']!='cap' and c.get('outletEnd')!='vent45':puertos[c['id']+':out']=(c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet','elbolet') or alivio else nps,tipo,c.get('outletRating',rating) if alivio else rating)
         if c['kind']=='tee':puertos[c['id']+':branch']=(nps if c.get('teeEntry')=='branch' else c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
         if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
         if c['kind']=='tee' and c['parentPort']=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
