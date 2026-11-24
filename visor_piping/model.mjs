@@ -33,6 +33,7 @@ export function validateDesign(d,catalog){
   for(const [k,min,max] of [['lengthMM',10,100000],['radiusMM',10,100000],['branchLengthMM',10,100000],['rollDeg',-3600,3600]])if(typeof c[k]!=='number'||!Number.isFinite(c[k])||c[k]<min||c[k]>max)throw Error('Dimensión inválida: '+k);
   for(const [key,limit] of [['pipeXMM',100000],['pipeYMM',100000],['pipeZMM',100000],['pipeYawDeg',3600],['pipePitchDeg',90],['pipeCurveDeg',170],['pipeCurveRollDeg',3600]])if(c[key]!==undefined&&(typeof c[key]!=='number'||!Number.isFinite(c[key])||Math.abs(c[key])>limit))throw Error('Ángulo del tramo inválido: '+key);
   for(const key of ['segmentBase','segmentGroup'])if(c[key]!==undefined&&(typeof c[key]!=='string'||c[key].length>64))throw Error('Identificación de segmento inválida.');
+  if(c.hideInletWeld!==undefined&&typeof c.hideInletWeld!=='boolean')throw Error('Visibilidad de soldadura inválida.');
   if(c.weldTag!==undefined&&(typeof c.weldTag!=='string'||c.weldTag.length>40))throw Error('Identificación de soldadura inválida.');
   if(c.kind==='pipe'&&c.parentPort==='origin')ports.add(c.id+':in');
   if(c.kind==='gauge'&&c.gaugeDiameterMM!==undefined&&(!Number.isFinite(c.gaugeDiameterMM)||c.gaugeDiameterMM<10||c.gaugeDiameterMM>100000))throw Error('Diámetro exterior del manómetro inválido.');

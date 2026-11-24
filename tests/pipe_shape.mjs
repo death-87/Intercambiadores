@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {compute,normal,dot} from '../visor_piping/model.mjs';
 import {pipeFrame,pipeDistance} from '../visor_piping/pipe_path.mjs';
-import {splitPipe} from '../visor_piping/split_pipe.mjs';
+import {splitPipe,removeWeld} from '../visor_piping/split_pipe.mjs';
 import {componentCoordinates,annotationPoint} from '../visor_piping/details.mjs';
 const catalog=JSON.parse(fs.readFileSync(new URL('../visor_piping/catalogo.json',import.meta.url))),example=JSON.parse(fs.readFileSync(new URL('../visor_piping/ejemplo.json',import.meta.url)));
 const near=(a,b)=>assert.ok(Math.hypot(...a.map((x,i)=>x-b[i]))<1e-6,JSON.stringify({a,b}));
@@ -21,3 +21,10 @@ const olet={...example.components[0],kind:'sockolet',id:'so',tag:'SO',parentPort
 for(const angle of [-120,-.001,0,.001,120]){const x=structuredClone(d);x.components=x.components.slice(0,1);delete x.repairs;delete x.annotations;x.components[0].pipeCurveDeg=angle;const initial=compute(x,catalog);const y=splitPipe(x,'p',1700,catalog,'second');near(compute(y.design,catalog).nodes[1].end,initial.nodes[0].end);}
 console.log('Inclinación 3D, arco, soldaduras, puertos, detalles y división repetida: OK');
 
+
+// Eliminar soldaduras revierte la división sin perder derivaciones, marcas ni reparaciones.
+let joined=removeWeld(output.design,'p3',catalog);let joinedResult=compute(joined.design,catalog);near(joinedResult.nodes.find(n=>n.id==='child').end,end);near(annotationPoint(joined.design.annotations[0],joinedResult,joined.design),point.point);assert.equal(joined.design.repairs[0].startMM,1100);assert.equal(joined.design.components.filter(c=>c.weldTag).length,1);
+joined=removeWeld(joined.design,'p2',catalog);joinedResult=compute(joined.design,catalog);near(joinedResult.nodes.find(n=>n.id==='child').end,end);assert.equal(joined.design.components.find(c=>c.id==='p').lengthMM,4000);assert.equal(joined.design.components.find(c=>c.id==='p').tag,'L-01');assert.equal(joined.design.repairs[0].startMM,2600);assert.equal(joined.design.repairs[0].hostId,'p');near(annotationPoint(joined.design.annotations[0],joinedResult,joined.design),point.point);
+const branchJoin=removeWeld(split.design,'p2',catalog);near(compute(branchJoin.design,catalog).nodes.find(n=>n.id==='so').end,bp);assert.equal(branchJoin.design.components.find(c=>c.id==='so').tapOffsetMM,3200);
+const edited=structuredClone(output.design);edited.components.find(c=>c.id==='p2').pipePitchDeg=10;assert.throws(()=>removeWeld(edited,'p2',catalog),/geometrías/);const hidden=removeWeld(edited,'p2',catalog,false);assert.equal(hidden.design.components.length,edited.components.length);assert.equal(hidden.design.components.find(c=>c.id==='p2').hideInletWeld,true);assert.ok(!hidden.design.components.find(c=>c.id==='p2').weldTag);assert.ok(edited.components.find(c=>c.id==='p2').weldTag);compute(hidden.design,catalog);
+console.log('Eliminar cordón: unión sin desplazamientos, detalles, derivaciones y conservación opcional de formas: OK');

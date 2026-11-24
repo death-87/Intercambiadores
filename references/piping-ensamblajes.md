@@ -101,3 +101,12 @@ Las reparaciones y marcas se guardan dentro del mismo proyecto, tanto en Mis pro
 - **Elegir punto de soldadura en el dibujo** activa un clic sobre la superficie de un tubo. Lo divide sin desplazar su salida: `P01-01`, `P01-02` y cordón `W001`. Se puede repetir la división para generar más segmentos y soldaduras. Deshacer revierte la operación completa.
 - Las derivaciones, marcas y reparaciones se reasignan al segmento correspondiente. Si el punto atraviesa una reparación, se pide elegir otro punto. Cada segmento debe conservar al menos 10 mm.
 - Orientación, curvatura, posición, segmentos y cordones se incluyen en el proyecto guardado; las identificaciones se muestran en el dibujo y su captura. El modelo representa geometría y no verifica esfuerzos ni la ejecución de una unión inclinada.
+
+### Eliminar un cordón
+
+En **Soldaduras y división en segmentos**, selecciona el cordón por su nomenclatura (también puedes hacer clic sobre su anillo en el dibujo):
+
+- **Eliminar cordón y unir tramos** recupera un solo tubo si los dos segmentos mantienen un recorrido continuo compatible. Conserva conexiones posteriores, derivaciones, marcas y reparaciones, y actualiza los TAG de los segmentos restantes.
+- **Quitar solo cordón · conservar tramos** elimina el anillo y su identificación manteniendo las piezas independientes, incluso si cambiaste sus inclinaciones o curvaturas.
+
+Ambas acciones se guardan en el proyecto y admiten **Deshacer / Rehacer**. Si los segmentos tienen formas distintas, el intento de unión conserva el proyecto y muestra la alternativa de quitar solo el cordón.

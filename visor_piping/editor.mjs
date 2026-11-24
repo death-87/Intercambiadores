@@ -1,5 +1,5 @@
 import {pipeFrame,pipeDistance} from './pipe_path.mjs';
-import {splitPipe} from './split_pipe.mjs';
+import {splitPipe,removeWeld} from './split_pipe.mjs';
 import {REPAIRS,componentCoordinates,removeDetails} from './details.mjs';
 import {drawRepairs,createAnnotations,arrangeAnnotations} from './details_view.mjs';
 import * as THREE from 'three';
@@ -550,7 +550,7 @@ function renderModel(){
   if(n.outletEndFlange)drawFlange(n.end,n.endAxis,{...n.outletEndFlange,rating:n.rating},group);
   if(n.branch?.flangeSpec)drawFlange(n.branch.bodyPosition,n.branch.axis,{...n.branch.flangeSpec,rating:n.rating},group);
   if(n.adapter)drawFlange(n.adapter.start,n.adapter.axis,f,group);
-  if(n.origin.id!=='origin'&&n.origin.endType==='plain'){const weld=mesh(new THREE.TorusGeometry(item(catalog,n.origin.nps??n.nps).odMM/2,Math.max(1.3,n.odMM*.018),8,40),nutMat,group);weld.name='Cordón de soldadura';weld.position.copy(v(n.origin.position));weld.quaternion.setFromUnitVectors(zaxis,v(n.axis));}
+  if(n.origin.id!=='origin'&&n.origin.endType==='plain'&&!n.hideInletWeld){const weld=mesh(new THREE.TorusGeometry(item(catalog,n.origin.nps??n.nps).odMM/2,Math.max(1.3,n.odMM*.018),8,40),nutMat,group);weld.name='Cordón de soldadura';if(n.weldTag)weld.userData.weldComponentId=n.id;weld.position.copy(v(n.origin.position));weld.quaternion.setFromUnitVectors(zaxis,v(n.axis));}
   if(n.origin.endType==='flanged'){bolts(add(n.origin.position,mul(n.axis,1.5)),n.axis,f,group);}else if(n.adapter&&!n.adapter.reverse){bolts(add(n.adapter.start,mul(n.axis,f.lengthMM+1.5)),n.axis,f,group);}
   if(n.kind==='elbolet')drawElbolet(n,group);
   else if(isOlet(n)){const od=item(catalog,n.outNps).odMM;const neck=add(n.start,mul(n.axis,n.length*.65));cylinder(n.start,neck,od*.88,metal,group,od*.57);tube(neck,n.end,od,group);if(n.kind==='thredolet'){for(let i=0;i<5;i++){const thread=mesh(new THREE.TorusGeometry(od*.43,Math.max(.8,od*.012),6,32),nutMat,group);thread.name='Rosca NPT thredolet';thread.position.copy(v(sub(n.end,mul(n.axis,2+i*2))));thread.quaternion.setFromUnitVectors(zaxis,v(n.axis));}}const weld=mesh(new THREE.TorusGeometry(od*.85,Math.max(2,od*.055),10,40),nutMat,group);weld.name='Soldadura sockolet a línea principal';weld.position.copy(v(n.start));weld.quaternion.setFromUnitVectors(zaxis,v(n.axis));}
@@ -654,6 +654,7 @@ canvas.addEventListener('pointerup',event=>{
   hit=nearby[0];
  }
  if(!hit)return;
+ if(hit.object.userData.weldComponentId){const id=hit.object.userData.weldComponentId;selectNode(id);$('weld-list').value=id;status('Cordón seleccionado. Puedes eliminarlo desde Soldaduras y división en segmentos.');return;}
  if(hit.object.userData.portId){continueFrom(hit.object.userData.portId);return;}
  let part=hit.object;
  while(part&&!part.userData.id&&!part.userData.equipmentId&&!part.userData.repairId)part=part.parent;
@@ -670,7 +671,7 @@ async function capture(){
   scene.background=old.bg;portsGroup.visible=true;grid.visible=true;axes.visible=true;if(box)box.visible=true;renderer.setPixelRatio(pixel);renderer.setSize(size.x,size.y,false);camera.position.copy(old.position);controls.target.copy(old.target);camera.up.copy(old.up);for(const key of ['left','right','top','bottom','zoom','near','far'])camera[key]=old[key];camera.updateProjectionMatrix();controls.enabled=true;controls.update();capturing=false;arrangeLabels();arrangeAnnotations(annotationsGroup,design,result,camera,renderer);
  }
 }
-function refreshDetailUI(){
+function refreshDetailUI(){const weldId=$('weld-list').value,welds=design.components.filter(c=>c.weldTag);$('weld-list').replaceChildren(...welds.map(c=>new Option(c.weldTag+' · '+(design.components.find(a=>c.parentPort===a.id+':out')?.tag||'entrada')+' / '+c.tag,c.id)));if(welds.some(c=>c.id===weldId))$('weld-list').value=weldId;else if(welds.some(c=>c.id===selected))$('weld-list').value=selected;$('weld-remove').disabled=$('weld-hide').disabled=!welds.length;
  const old=$('repair-host').value;$('repair-host').replaceChildren(...result.nodes.filter(n=>n.kind==='pipe').map(n=>new Option(n.tag+' · '+item(catalog,n.nps).label,n.id)));if(result.nodes.some(n=>n.id===old&&n.kind==='pipe'))$('repair-host').value=old;
  if(!(design.repairs||[]).some(r=>r.id===selectedRepairId))selectedRepairId=null;if(!(design.annotations||[]).some(a=>a.id===selectedAnnotationId))selectedAnnotationId=null;
  $('repair-list').replaceChildren(...(design.repairs||[]).map(r=>new Option(r.tag+' · '+REPAIRS[r.type],r.id)));$('repair-list').value=selectedRepairId||'';
@@ -700,6 +701,8 @@ for(const id of ['annotation-number','annotation-text','annotation-style','annot
 function guard(fn){return async()=>{try{await fn();}catch(e){status(e.message,true);}};}
 let liveTimer=null,liveUndoTimer=null,liveSelection=null;
 function setWeldMode(on){weldMode=on;$('weld-mode').classList.toggle('active',on);$('weld-mode').textContent=on?'Cancelar elección de soldadura':'Elegir punto de soldadura en el dibujo';renderer.domElement.style.cursor=on?'crosshair':'';}
+function deleteWeld(join){try{if(!updateSelected())return;const output=removeWeld(design,$('weld-list').value,catalog,join);setWeldMode(false);selected=null;setDesign(output.design);selectNode(output.id);status('Cordón '+output.weldTag+' eliminado. '+(join?'Los tramos quedaron unidos.':'Se conservan los segmentos y sus formas.'));}catch(error){status(error.message,true);}}
+$('weld-remove').onclick=()=>deleteWeld(true);$('weld-hide').onclick=()=>deleteWeld(false);
 $('weld-mode').onclick=()=>{if(!updateSelected())return;marking=false;$('annotation-place').textContent='Elegir punto para nueva marca';setWeldMode(!weldMode);status(weldMode?'Haz clic en el punto del tubo donde irá el cordón de soldadura.':'Selección de soldadura cancelada.');};
 function updateSelected(){
  clearTimeout(liveTimer);if(!selected)return true;const current=design.components.find(c=>c.id===selected);if(!current)return true;

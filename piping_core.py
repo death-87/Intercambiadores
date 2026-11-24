@@ -97,6 +97,7 @@ def validar_piping(diseno):
             if type(value) not in (int,float) or not math.isfinite(value) or abs(value)>limit:raise ValueError('Ángulo del tramo inválido: '+key)
         for key in ('segmentBase','segmentGroup'):
             if key in c and (not isinstance(c[key],str) or len(c[key])>64):raise ValueError('Identificación de segmento inválida.')
+        if 'hideInletWeld' in c and type(c['hideInletWeld']) is not bool:raise ValueError('Visibilidad de soldadura inválida.')
         if 'weldTag' in c and (not isinstance(c['weldTag'],str) or len(c['weldTag'])>40):raise ValueError('Identificación de soldadura inválida.')
         if c['kind']=='gauge' and 'gaugeDiameterMM' in c:
             diameter=c['gaugeDiameterMM']
