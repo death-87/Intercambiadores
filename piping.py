@@ -90,9 +90,10 @@ def mostrar_piping(validar_equipo=None):
             try:
                 raw=upload.getvalue()
                 if len(raw)>32_000_000:raise ValueError('El JSON supera 32 MB.')
-                design=validar_piping(json.loads(raw));st.session_state['jn_piping_design']=design;st.session_state['jn_piping_import_sequence']=st.session_state.get('jn_piping_import_sequence',0)+1;st.session_state['jn_piping_load_token']=hashlib.sha256(raw).hexdigest()+':'+str(st.session_state['jn_piping_import_sequence']);st.session_state['jn_piping_imported']=True
+                design=validar_piping(json.loads(raw));st.session_state.pop('jn_r2_target', None);st.session_state['jn_piping_design']=design;st.session_state['jn_piping_import_sequence']=st.session_state.get('jn_piping_import_sequence',0)+1;st.session_state['jn_piping_load_token']=hashlib.sha256(raw).hexdigest()+':'+str(st.session_state['jn_piping_import_sequence']);st.session_state['jn_piping_imported']=True
             except (ValueError,TypeError,KeyError) as e:st.error(str(e))
-    value=declarar_piping()(initial_data=st.session_state.get('jn_piping_design'),load_token=st.session_state['jn_piping_load_token'],imported=st.session_state.get('jn_piping_imported',False),equipment_import=st.session_state.get('jn_piping_pending_equipment'),equipment_import_token=st.session_state.get('jn_piping_equipment_import_token'),project_cloud_ready=project_authorized, owner_exports=project_authorized,project_ack=st.session_state.get('jn_project_ack'),height=940,key='jn_piping_editor',default=None)
+    target = st.session_state.get('jn_r2_target') if project_authorized else None
+    value=declarar_piping()(initial_data=st.session_state.get('jn_piping_design'),load_token=st.session_state['jn_piping_load_token'],imported=st.session_state.get('jn_piping_imported',False),equipment_import=st.session_state.get('jn_piping_pending_equipment'),equipment_import_token=st.session_state.get('jn_piping_equipment_import_token'),project_cloud_ready=project_authorized, owner_exports=project_authorized, project_target={'name': target['name'], 'designId': target['design_id']} if target else None,project_ack=st.session_state.get('jn_project_ack'),height=940,key='jn_piping_editor',default=None)
     st.session_state['jn_piping_imported']=False
     if isinstance(value,dict) and value.get('token') == st.session_state['jn_piping_load_token'] and value.get('action') in ('update','export_pdf','equipment_applied','equipment_error','edit_equipment','save_project'):
         try:
@@ -102,8 +103,13 @@ def mostrar_piping(validar_equipo=None):
                 try:
                     if not project_authorized:
                         raise ValueError('Solo el propietario puede guardar en la nube.')
-                    project = guardar_proyecto(project_config, value['eventId'], value.get('projectName'), design)
-                    st.session_state['jn_project_ack'] = {'eventId': value['eventId'], 'ok': True, 'project': project}
+                    overwrite = value.get('overwrite') is True
+                    if overwrite and (not target or target['design_id'] != design['id']):
+                        raise ValueError('Abre el archivo desde Mis diseños antes de sobrescribirlo.')
+                    name = target['name'] if overwrite else value.get('projectName')
+                    project = guardar_proyecto(project_config, value['eventId'], name, design, target if overwrite else None)
+                    st.session_state['jn_r2_target'] = project
+                    st.session_state['jn_project_ack'] = {'eventId': value['eventId'], 'ok': True, 'project': {'name': project['name']}, 'overwrite': overwrite}
                     st.session_state.pop('jn_r2_projects', None)
                 except ValueError as error:st.session_state['jn_project_ack']={'eventId':value['eventId'],'ok':False,'error':str(error)}
                 st.rerun()
