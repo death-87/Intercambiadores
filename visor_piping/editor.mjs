@@ -41,7 +41,8 @@ function conditional(){const kind=$('kind').value,relief=kind==='valve'&&['psv',
  if(['tee','sockolet','thredolet','latrolet','elbolet'].includes(kind)&&Number($('out-nps').value)>nps)$('out-nps').value=nps;
  const spec=item(catalog,nps),f=spec.flanges[$('rating').value];$('dim-info').textContent=`DE cañería: ${spec.odMM} mm · Brida ${$('rating').value}: Ø ${f.diameterMM.toFixed(1)} mm · espesor ${f.thicknessMM.toFixed(1)} mm · ${f.boltCount} pernos.`;
  if(kind==='valve'&&$('valve-connection').value==='threaded')$('dim-info').textContent='Entrada y salida NPT hembra. Para conectarlas se utiliza un niple con rosca macho; las medidas se heredan del extremo elegido.';if(['sockolet','thredolet','latrolet','elbolet'].includes(kind))$('dim-info').textContent='Principal: '+item(catalog,nps).label+' · Salida: '+item(catalog,Number($('out-nps').value)).label+' · '+(kind==='thredolet'?'Rosca NPT':kind==='sockolet'?'Soldadura socket · SW':kind==='latrolet'?'Derivación soldada a 45°':'Derivación soldada en codo');
- $('attach').disabled=!selected||!activePort;$('apply').disabled=!selected;$('delete').disabled=!selected;$('add').disabled=['sockolet','thredolet','latrolet','elbolet'].includes(kind)?!$('run-pipe').value:!activePort;
+ $('attach').disabled=!selected||!activePort;$('apply').disabled=!selected;$('delete').disabled=!selected;
+ $('add').disabled=Boolean(selected)||(['sockolet','thredolet','latrolet','elbolet'].includes(kind)?!$('run-pipe').value:!activePort);
 }
 function form(){const source=selected?design.components.find(c=>c.id===selected):null;return {id:source?.id||'c'+uid().slice(0,24),parentPort:['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value)?$('run-pipe').value+':tap':source?.parentPort||activePort,branchYawDeg:Number($('branch-yaw').value),branchPitchDeg:Number($('branch-pitch').value),branchDirection:$('olet-angle').value,tapOffsetMM:$('kind').value==='elbolet'?0:Number($('tap-offset').value),teeEntry:$('tee-entry').value,teeRunNps:Number($('tee-run-nps').value),kind:$('kind').value,tag:$('tag').value.trim()||nextTag($('kind').value),nps:Number($('nps').value),outNps:Number($('out-nps').value),branchNps:Number($('out-nps').value),rating:$('rating').value,outletEnd:$('outlet-end').value,branchEnd:$('branch-end').value,outletRating:$('outlet-rating').value,lengthMM:Number($('length').value),radiusMM:Number($('radius').value),branchLengthMM:Number($('branch-length').value),rollDeg:Number($('roll').value),bendAngle:Number($('bend').value),reduction:$('reduction').value,inletEnd:$('inlet-end').value,valveConnection:$('valve-connection').value,valveType:$('valve-type').value};}
 function refresh(){
@@ -50,15 +51,20 @@ function refresh(){
  const p=result.ports.get(activePort);$('port-info').textContent=p?`X ${p.position[0].toFixed(1)} · Y ${p.position[1].toFixed(1)} · Z ${p.position[2].toFixed(1)} mm${p.endType==='flanged'?' · Enflanchado '+p.rating:''}`:'No quedan extremos abiertos. Selecciona un elemento para modificarlo.';
  const eqid=$('equipment').value;$('equipment').replaceChildren(...(design.equipments||[]).map(e=>new Option(e.tag,e.id)));if((design.equipments||[]).some(e=>e.id===eqid))$('equipment').value=eqid;equipmentForm();
  const run=$('run-pipe').value;$('run-pipe').replaceChildren(...result.nodes.filter(n=>(n.kind==='pipe'||n.kind==='elbow')).map(n=>new Option(n.tag+' · '+item(catalog,n.nps).label+' · '+n.length.toFixed(0)+' mm',n.id)));if(result.nodes.some(n=>(n.kind==='pipe'||n.kind==='elbow')&&n.id===run))$('run-pipe').value=run;
- $('component-list').replaceChildren(...result.nodes.map(n=>new Option(n.tag+' · '+TYPES[n.kind]+(n.kind==='valve'?' '+VALVES[n.valveType]:'')+' · '+item(catalog,n.nps).label,n.id)));$('component-list').value=selected||'';$('undo').disabled=!undo.length;$('redo').disabled=!redo.length;conditional();refreshContinuation();height();
+ $('component-list').replaceChildren(...result.nodes.map(n=>new Option(n.tag+' · '+TYPES[n.kind]+(n.kind==='valve'?' '+VALVES[n.valveType]:'')+' · '+item(catalog,n.nps).label,n.id)));$('component-list').value=selected||'';$('undo').disabled=$('panel-undo').disabled=!undo.length;$('redo').disabled=$('panel-redo').disabled=!redo.length;conditional();refreshContinuation();height();
 }
-function continueFrom(id){clearTimeout(liveTimer);liveSelection=null;activePort=id;selected=null;const parent=id.split(':')[0];continuationId=design.components.some(c=>c.id===parent)?parent:null;defaults();renderModel();refresh();status('Continúa desde '+result.ports.get(id).label+'. Elige el siguiente elemento y pulsa Conectar.');}
+function continueFrom(id){if(!result.freePorts.some(p=>p.id===id))return;clearTimeout(liveTimer);liveSelection=null;activePort=id;if(selected)$('kind').value='pipe';selected=null;selectedEquipmentId=null;const parent=id.split(':')[0];continuationId=design.components.some(c=>c.id===parent)?parent:null;defaults();renderModel();refresh();status('Continúa desde '+result.ports.get(id).label+'. Elige el tipo y pulsa Agregar componente.');}
 function refreshContinuation(){
  const source=[selected,continuationId].find(id=>design.components.some(c=>c.id===id)),ports=result.freePorts.filter(p=>source?p.id.startsWith(source+':'):p.id===activePort);
- $('continuation').replaceChildren(...ports.map(p=>{const button=document.createElement('button');button.type='button';button.textContent='Continuar: '+p.label+' · '+(p.endType==='flanged'?'enflanchado':p.endType==='threaded'?'roscado NPT':'para soldar');button.className=p.id===activePort?'primary':'';button.onclick=()=>continueFrom(p.id);return button;}));
- const host=result.nodes.find(n=>n.id===source);if(host?.kind==='tee'){const free=new Set(result.freePorts.map(p=>p.id));$('continuation').replaceChildren(...['in','out','branch'].map(suffix=>{const id=host.id+':'+suffix,port=result.ports.get(id),entryName=host.teeEntry==='branch'?'derivación':host.teeEntry==='b'?'lado B':'lado A',button=document.createElement('button');button.textContent=(free.has(id)?'Continuar: ':'Ocupada: ')+(port?.label||host.tag+' · '+entryName);button.disabled=!free.has(id);button.className=id===activePort?'primary':'';button.onclick=()=>continueFrom(id);return button;}));}if(host&&(host.kind==='pipe'||host.kind==='elbow'&&host.bendAngle===90)){const button=document.createElement('button');button.textContent=host.kind==='pipe'?'Agregar derivación sobre este tramo':'Agregar derivación al centro del codo';button.onclick=()=>{selected=null;$('kind').value=host.kind==='pipe'?'sockolet':'elbolet';$('run-pipe').value=host.id;defaults();refresh();};$('continuation').append(button);}
+ $('continuation').replaceChildren(...ports.map(p=>{const button=document.createElement('button');button.type='button';button.textContent=(selected?'Agregar después de ':'Continuar desde ')+p.label+' · '+(p.endType==='flanged'?'enflanchado':p.endType==='threaded'?'roscado NPT':'para soldar');button.className=p.id===activePort?'primary':'';button.onclick=()=>continueFrom(p.id);return button;}));
+ const host=result.nodes.find(n=>n.id===source);if(host?.kind==='tee'){const free=new Set(result.freePorts.map(p=>p.id));$('continuation').replaceChildren(...['in','out','branch'].map(suffix=>{const id=host.id+':'+suffix,port=result.ports.get(id),entryName=host.teeEntry==='branch'?'derivación':host.teeEntry==='b'?'lado B':'lado A',button=document.createElement('button');button.textContent=(free.has(id)?(selected?'Agregar después de ':'Continuar desde '):'Ocupada: ')+(port?.label||host.tag+' · '+entryName);button.disabled=!free.has(id);button.className=id===activePort?'primary':'';button.onclick=()=>continueFrom(id);return button;}));}if(host&&(host.kind==='pipe'||host.kind==='elbow'&&host.bendAngle===90)){const button=document.createElement('button');button.textContent=host.kind==='pipe'?'Agregar derivación sobre este tramo':'Agregar derivación al centro del codo';button.onclick=()=>{selected=null;$('kind').value=host.kind==='pipe'?'sockolet':'elbolet';$('run-pipe').value=host.id;defaults();refresh();};$('continuation').append(button);}
  const port=result.ports.get(activePort);$('connection-help').textContent=port?.endType==='threaded'?'Salida NPT '+(port.threadGender==='male'?'macho: conecta un codo o una válvula roscada hembra.':'hembra: continúa con un niple de rosca macho.'):port?'Siguiente conexión: '+port.label+'. '+(port.endType==='flanged'?'Se agrega la contraparte enflanchada al continuar con piping.':'La continuación se une por soldadura.'):'Selecciona otro extremo libre para continuar.';
- $('add').textContent=['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value)?'+ Soldar derivación a la línea principal':port?'+ Conectar a '+port.label:'+ Sin extremos libres';
+ const current=result.nodes.find(n=>n.id===selected);
+ $('build-mode').textContent=current?'Editando '+current.tag:'Agregar componente';
+ $('kind-label').textContent=current?'Tipo del componente seleccionado':'Tipo de componente nuevo';
+ $('delete').textContent=current?'Eliminar '+current.tag:'Eliminar seleccionado';
+ $('build-context').textContent=current?(ports.length?'Elige una salida de '+current.tag+' para agregar el siguiente componente.':'Este componente no tiene salidas libres. Elige otro punto de conexión para continuar.'):(host?'El nuevo componente se conectará después de '+host.tag+'.':'Selecciona un punto de conexión y el tipo de componente.');
+ $('add').textContent=current?'Elige una salida para continuar':['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value)?'+ Agregar derivación':port?'+ Agregar componente a '+port.label:'Sin extremos libres';
 }
 function selectNode(id){const component=design.components.find(c=>c.id===id);if(component&&isOlet(component)){$('run-pipe').value=component.parentPort.split(':')[0];$('tap-offset').value=component.tapOffsetMM;$('branch-yaw').value=component.branchYawDeg??0;$('branch-pitch').value=component.branchPitchDeg??0;$('olet-angle').value=component.branchDirection||(component.branchAngle===45?'inlet':'outlet');}continuationId=id;clearTimeout(liveTimer);liveSelection=null;selected=id;selectedEquipmentId=null;const c=design.components.find(c=>c.id===id);if(c){for(const [field,key] of [['outlet-end','outletEnd'],['branch-end','branchEnd'],['tee-entry','teeEntry'],['tee-run-nps','teeRunNps'],['inlet-end','inletEnd'],['valve-connection','valveConnection'],['kind','kind'],['tag','tag'],['nps','nps'],['rating','rating'],['outlet-rating','outletRating'],['length','lengthMM'],['radius','radiusMM'],['branch-length','branchLengthMM'],['roll','rollDeg'],['bend','bendAngle'],['reduction','reduction'],['valve-type','valveType']])$(field).value=c[key]??(key==='inletEnd'?'auto':key==='valveConnection'?'flanged':key==='teeEntry'?'a':key==='teeRunNps'?c.nps:['outletEnd','branchEnd'].includes(key)?'welded':c.rating);$('out-nps').value=c.kind==='tee'?c.branchNps:c.outNps;status('Seleccionado '+c.tag+'. Los cambios se actualizan automáticamente.');}refresh();highlight();}
 const wrap=$('viewport'),scene=new THREE.Scene();scene.background=new THREE.Color('#edf3f7');
@@ -215,6 +221,48 @@ function drawThreadedRV(n,group){
  seal.position.copy(v(sealEnd));
  seal.quaternion.setFromUnitVectors(yaxis,v(norm(sub(sealEnd,sealStart))));
 }
+function drawFlangedGate(n,f,finish,group){
+ const od=n.odMM,up=n.normal,side=norm(cross(n.axis,up));
+ const seat=add(n.start,mul(n.axis,f.lengthMM));
+ tube(seat,finish,od,group,valveMat);
+ const body=mesh(new THREE.SphereGeometry(1,40,28),valveMat,group);
+ body.name='Cuerpo fundido de compuerta';
+ body.position.copy(v(n.center));
+ body.quaternion.setFromUnitVectors(zaxis,v(n.axis));
+ body.scale.set(od*.76,od*.93,Math.min(od*.95,Math.hypot(...sub(finish,seat))*.46));
+ const at=h=>add(n.center,mul(up,h*od));
+ cylinder(at(.43),at(.91),od*.62,valveMat,group,od*.67).name='Cuello del cuerpo';
+ cylinder(at(.91),at(1.07),od*.78,valveMat,group).name='Unión apernada del bonete';
+ cylinder(at(1.07),at(1.53),od*.64,valveMat,group,od*.35).name='Bonete de compuerta';
+ for(let i=0;i<8;i++){
+  const angle=i*Math.PI/4;
+  const offset=add(mul(n.axis,Math.cos(angle)*od*.69),mul(side,Math.sin(angle)*od*.69));
+  const bolt=mesh(new THREE.CylinderGeometry(od*.061,od*.061,od*.095,6),nutMat,group);
+  bolt.position.copy(v(add(at(1.085),offset)));
+  bolt.quaternion.setFromUnitVectors(yaxis,v(up));
+ }
+ cylinder(at(1.47),at(1.68),od*.33,valveMat,group).name='Prensaestopas';
+ for(const sign of [-1,1]){
+  const foot=add(at(1.47),mul(side,sign*od*.34));
+  const shoulder=add(at(1.79),mul(side,sign*od*.48));
+  const crown=add(at(2.36),mul(side,sign*od*.37));
+  cylinder(foot,shoulder,od*.10,valveMat,group);
+  cylinder(shoulder,crown,od*.10,valveMat,group).name='Puente del vástago';
+ }
+ cylinder(add(at(2.36),mul(side,-od*.37)),add(at(2.36),mul(side,od*.37)),od*.10,valveMat,group);
+ cylinder(at(1.55),at(2.98),od*.073,flangeMat,group).name='Vástago ascendente';
+ const handwheelCenter=at(2.67);
+ const wheel=mesh(new THREE.TorusGeometry(od*.69,od*.057,12,56),nutMat,group);
+ wheel.name='Volante de compuerta';
+ wheel.position.copy(v(handwheelCenter));
+ wheel.quaternion.setFromUnitVectors(zaxis,v(up));
+ cylinder(at(2.58),at(2.76),od*.17,nutMat,group).name='Cubo del volante';
+ for(let i=0;i<4;i++){
+  const angle=i*Math.PI/2;
+  const direction=add(mul(n.axis,Math.cos(angle)),mul(side,Math.sin(angle)));
+  cylinder(handwheelCenter,add(handwheelCenter,mul(direction,od*.67)),od*.043,nutMat,group);
+ }
+}
 function drawValve(n,f,group){
  if(n.valveType==='rv'&&n.valveConnection==='threaded'){drawThreadedRV(n,group);return;}
  const threaded=n.valveConnection==='threaded';if(threaded)f={...f,lengthMM:n.odMM*.4};
@@ -230,6 +278,7 @@ function drawValve(n,f,group){
   const curve=new THREE.Curve();curve.getPoint=t=>v(add(add(bottom,mul(n.axis,height*t)),add(mul(a,Math.cos(t*Math.PI*18)*n.odMM*.36),mul(b,Math.sin(t*Math.PI*18)*n.odMM*.36))));mesh(new THREE.TubeGeometry(curve,144,n.odMM*.045,8,false),nutMat,group);
   cylinder(top,add(n.start,mul(n.axis,n.length)),n.odMM*.4,valveMat,group);const leverBase=add(n.center,mul(n.normal,-n.odMM*1.05)),leverTop=add(leverBase,mul(n.axis,n.length*.28));cylinder(leverBase,leverTop,n.odMM*.045,nutMat,group).name='Palanca lateral '+n.valveType.toUpperCase();return;
  }
+ if(!threaded&&n.valveType==='gate'){drawFlangedGate(n,f,finish,group);return;}
  tube(add(n.start,mul(n.axis,f.lengthMM)),finish,n.odMM,group,valveMat);
  if(n.valveType==='ball'){drawBallValve(n,f,group);return;}
  const body=mesh(['globe','check'].includes(n.valveType)?new THREE.SphereGeometry(n.odMM*.85,32,24):n.valveType==='butterfly'?new THREE.CylinderGeometry(n.odMM*.95,n.odMM*.95,n.odMM*.35,40):new THREE.BoxGeometry(n.odMM*1.8,n.odMM*1.4,n.odMM*1.8),valveMat,group);body.position.copy(v(n.center));body.quaternion.setFromUnitVectors(yaxis,v(n.axis));
@@ -389,9 +438,21 @@ for(const id of ['inlet-end','valve-connection','tee-entry','tee-run-nps','branc
  $(id).addEventListener('input',()=>{clearTimeout(liveTimer);if(selected)liveTimer=setTimeout(updateSelected,160);});
  $(id).addEventListener('change',()=>{if(selected)updateSelected();});
 }
-$('add').onclick=guard(()=>{if(!activePort&&!['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))throw Error('No hay un extremo libre.');const c=form();c.id='c'+uid().slice(0,24);if(!isOlet(c))c.parentPort=activePort;if(!mutate(d=>d.components.push(c)))return;selected=null;continuationId=c.id;if(isOlet(c))$('kind').value='pipe';activePort=result.freePorts.find(p=>p.id===c.id+':out')?.id||result.freePorts.at(-1)?.id||'';defaults();renderModel();refresh();status(c.outletEnd==='vent45'?'Niple de venteo agregado. La boca a 45° es terminal.':c.kind==='cap'?'Extremo cerrado. Elige otro extremo libre para continuar.':c.kind==='tee'?'Tee agregada. Elige lado A, lado B o derivación entre las bocas libres.':'Elemento conectado. Puedes continuar desde su salida o elegir otro extremo libre.');});
+$('add').onclick=guard(()=>{if(selected)return;if(!activePort&&!['sockolet','thredolet','latrolet','elbolet'].includes($('kind').value))throw Error('No hay un extremo libre.');const c=form();c.id='c'+uid().slice(0,24);if(!isOlet(c))c.parentPort=activePort;if(!mutate(d=>d.components.push(c)))return;selected=null;continuationId=c.id;if(isOlet(c))$('kind').value='pipe';activePort=result.freePorts.find(p=>p.id===c.id+':out')?.id||result.freePorts.at(-1)?.id||'';defaults();renderModel();refresh();status(c.outletEnd==='vent45'?'Niple de venteo agregado. La boca a 45° es terminal.':c.kind==='cap'?'Extremo cerrado. Elige otro extremo libre para continuar.':c.kind==='tee'?'Tee agregada. Elige lado A, lado B o derivación entre las bocas libres.':'Elemento conectado. Puedes continuar desde su salida o elegir otro extremo libre.');});
 $('apply').onclick=()=>{if(!selected)return;const c=form();if(mutate(d=>{d.components[d.components.findIndex(n=>n.id===selected)]=c;}))selectNode(selected);};
-$('delete').onclick=()=>{if(!selected)return;const ids=descendants(design,selected);if(ids.size>1&&!confirm('Se eliminarán '+ids.size+' componentes, incluyendo las continuaciones. Puedes deshacerlo.'))return;mutate(d=>{d.components=d.components.filter(c=>!ids.has(c.id));});selected=null;defaults();refresh();};
+$('delete').onclick=()=>{
+ const component=design.components.find(c=>c.id===selected);
+ if(!component)return;
+ const ids=descendants(design,component.id);
+ if(ids.size>1&&!confirm('¿Eliminar '+component.tag+' y sus '+(ids.size-1)+' componentes conectados aguas abajo? Puedes deshacerlo.'))return;
+ clearTimeout(liveTimer);
+ liveSelection=null;
+ if(!mutate(d=>{d.components=d.components.filter(c=>!ids.has(c.id));}))return;
+ continuationId=null;
+ if(result.freePorts.some(p=>p.id===component.parentPort))activePort=component.parentPort;
+ defaults();renderModel();refresh();
+ status('Se eliminó '+component.tag+(ids.size>1?' y su continuación.':'.')+' Puedes recuperarlo con Deshacer.');
+};
 $('clear').onclick=()=>{selected=null;defaults();refresh();highlight();};$('valve-connection').onchange=conditional;$('outlet-end').onchange=conditional;$('tee-entry').onchange=()=>{conditional();height();};$('olet-angle').onchange=()=>{conditional();height();};$('run-pipe').onchange=()=>{const run=result.nodes.find(n=>n.id===$('run-pipe').value);if(run){$('tap-offset').max=run.length;if(!selected)$('tap-offset').value=run.length/2;}conditional();refreshContinuation();};$('kind').onchange=()=>{if(['psv','rv'].includes($('kind').value)){$('valve-type').value=$('kind').value;$('kind').value='valve';}if(selected){conditional();updateSelected();}else defaults();};$('nps').onchange=()=>{if(selected){conditional();updateSelected();}else defaults();};$('rating').onchange=conditional;$('valve-type').onchange=conditional;$('port').onchange=()=>{activePort=$('port').value;if(!selected)defaults();renderModel();refresh();};$('component-list').onchange=()=>selectNode($('component-list').value);
 $('equipment').onchange=()=>selectEquipment($('equipment').value);$('equipment-edit').onclick=()=>{if(equipmentTimer){clearTimeout(equipmentTimer);equipmentTimer=null;$('equipment-apply').click();}const id=$('equipment').value;if(!id)return;notify('edit_equipment',{equipmentId:id,eventId:uid()});};
 $('equipment-apply').onclick=()=>mutate(d=>{const e=d.equipments.find(e=>e.id===$('equipment').value);e.position=['equipment-x','equipment-y','equipment-z'].map(id=>Number($(id).value));e.rotationDeg=Number($('equipment-rotation').value);});
@@ -400,6 +461,8 @@ $('equipment-remove').onclick=()=>mutate(d=>{const id=$('equipment').value;if(d.
 $('attach').onclick=()=>{if(!selected||!activePort)return;const target=activePort,id=selected;if(mutate(d=>{const c=d.components.find(c=>c.id===id);c.parentPort=target;d.components=sortComponents(d,catalog).components;}))status('Línea acoplada al extremo seleccionado, incluyendo su continuación.');};
 $('title').onchange=()=>mutate(d=>{d.title=$('title').value.trim()||'Línea de piping';});$('direction').onchange=()=>mutate(d=>{d.direction=$('direction').value;});
 $('undo').onclick=()=>{clearTimeout(liveTimer);liveSelection=null;if(!undo.length)return;redo.push(structuredClone(design));const d=undo.pop();selected=null;setDesign(d,false);defaults();};$('redo').onclick=()=>{clearTimeout(liveTimer);liveSelection=null;if(!redo.length)return;undo.push(structuredClone(design));const d=redo.pop();selected=null;setDesign(d,false);defaults();};
+$('panel-undo').onclick=()=>$('undo').click();
+$('panel-redo').onclick=()=>$('redo').click();
 function flushProject(){
  if(updateSelected()===false)throw Error('Corrige los valores del componente antes de guardar.');
  if(equipmentTimer){clearTimeout(equipmentTimer);equipmentTimer=null;if($('equipment-apply').onclick()===false)throw Error('Revisa la posición del equipo.');}
