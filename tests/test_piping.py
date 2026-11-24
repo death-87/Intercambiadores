@@ -36,6 +36,9 @@ class PipingTests(unittest.TestCase):
             invalid=copy.deepcopy(design);invalid['components'][1].update(change)
             with self.subTest(change=change),self.assertRaises(ValueError):validar_piping(invalid)
 
+    def test_reemplazo_componentes(self):
+        subprocess.run(['node',str(ROOT/'tests'/'replace_component.mjs')],check=True,capture_output=True,text=True)
+
     def test_catalogo_compartido(self):
         self.assertEqual(len(CATALOGO['items']),17)
         self.assertEqual(MEDIDAS[2]['odMM'],60.3)

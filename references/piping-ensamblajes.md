@@ -124,3 +124,12 @@ Configura el diámetro de salida y el largo. La entrada hereda el NPS de la lín
 Selecciona un tubo y pulsa **Agregar poncho de refuerzo sobre este tramo**, o elige **Poncho de refuerzo · ramal soldado** en el catálogo. Define línea principal, posición desde su inicio, NPS del ramal, altura de salida y giro. La placa tiene largo axial, espesor y cobertura angular editables; abraza la superficie del tubo y muestra una abertura para el ramal, soldadura perimetral y soldadura alrededor de la derivación.
 
 La placa completa debe quedar dentro del tramo y rodear la abertura del ramal. La salida es para soldar: al agregar el siguiente tubo se usa automáticamente el diámetro del ramal. La línea principal mantiene libres sus extremos; admite varias derivaciones. El poncho sigue los cambios de posición y orientación de la línea, se conserva al guardar y reabrir el proyecto y aparece en el listado de materiales con sus medidas de placa. Al dividir el tubo por soldadura, el poncho se reasigna al segmento correspondiente; un corte que dejaría la placa fuera del segmento se rechaza sin modificar el proyecto.
+
+
+## Reemplazar componentes
+
+Selecciona una pieza en el dibujo o listado. En **Reemplazar componente seleccionado**, elige el nuevo tipo: el editor indica si puede conservar las conexiones actuales y habilita **Reemplazar conservando conexiones**. También se puede cambiar el tipo desde el selector habitual de componentes.
+
+Se conserva la identificación interna, el TAG, la conexión de entrada y los componentes enlazados a las bocas compatibles. En **sockolet → poncho**, se conserva la posición y orientación del ramal, su diámetro y su continuación; se calculan dimensiones iniciales de placa que caben en el tubo disponible. Las dimensiones del poncho siguen siendo editables. Los cambios entre otras piezas pueden desplazar la continuación según la geometría del nuevo componente.
+
+No se desconectan ramales ni se cambia de línea principal automáticamente: por ejemplo, una tee con una derivación ocupada no se puede sustituir por un codo, ni una conexión sobre un tubo se puede convertir en un accesorio en línea. Si no resulta compatible, aparece el motivo y el proyecto queda intacto. El reemplazo admite **Deshacer / Rehacer** y se conserva en el proyecto guardado.
