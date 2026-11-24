@@ -145,22 +145,61 @@ function syncEquipmentModels(){
  for(const group of [...equipmentModel.children]){const e=(design.equipments||[]).find(e=>e.id===group.userData.equipmentId);if(!e||group.userData.assetKey!==equipmentKey(e)){equipmentModel.remove(group);clear(group);}}
  for(const e of design.equipments||[]){let group=equipmentModel.children.find(g=>g.userData.equipmentId===e.id);if(!group){group=new THREE.Group();group.add(loadAsset(e.asset));group.userData={equipmentId:e.id,assetKey:equipmentKey(e)};addNameplate(group,e);equipmentModel.add(group);}group.position.set(...e.position);group.rotation.z=e.rotationDeg*Math.PI/180;}
 }
-function drawBallValve(n,f,group){
- const D=n.odMM,axis=n.axis,up=n.normal,side=norm(cross(axis,up));
- const body=mesh(new THREE.SphereGeometry(1,40,28),metal,group);body.name='Cuerpo fundido válvula de bola';body.position.copy(v(n.center));body.scale.set(D*.84,D*.84,Math.max(D*.8,(n.length-2*f.lengthMM)*.46));body.quaternion.setFromUnitVectors(zaxis,v(axis));
- // Uniones del cuerpo partido, con sus espárragos y tuercas visibles.
- const half=Math.min(D*.68,(n.length-2*f.lengthMM)*.32),r=D*.88,t=D*.10;
- for(const sign of [-1,1]){const seat=add(n.center,mul(axis,sign*half));const ring=cylinder(sub(seat,mul(axis,t/2)),add(seat,mul(axis,t/2)),r,metal,group);ring.name='Unión apernada del cuerpo de bola';
-  for(let i=0;i<8;i++){const a=(i+.5)*Math.PI/4,offset=add(mul(up,Math.cos(a)*r*.86),mul(side,Math.sin(a)*r*.86)),point=add(seat,offset);cylinder(sub(point,mul(axis,t*1.5)),add(point,mul(axis,t*1.5)),D*.035,nutMat,group);for(const end of [-1,1]){const nut=mesh(new THREE.CylinderGeometry(D*.075,D*.075,D*.075,6),nutMat,group);nut.position.copy(v(add(point,mul(axis,end*t))));nut.quaternion.setFromUnitVectors(yaxis,v(axis));}}
+function drawBallValve(n,f,finish,group){
+ const od=n.odMM,axis=n.axis,up=n.normal,side=norm(cross(axis,up));
+ const cast=new THREE.MeshStandardMaterial({color:0x9ca5ab,metalness:.56,roughness:.48,side:THREE.DoubleSide});
+ const blue=new THREE.MeshStandardMaterial({color:0x1766be,metalness:.24,roughness:.39});
+ const seat=add(n.start,mul(axis,f.lengthMM));
+ const halfRun=Math.hypot(...sub(finish,seat))/2;
+ tube(seat,finish,od,group,cast);
+ const body=mesh(new THREE.SphereGeometry(1,40,28),cast,group);
+ body.name='Cuerpo fundido de válvula de bola';
+ body.position.copy(v(n.center));
+ const basis=new THREE.Matrix4().makeBasis(v(axis),v(up),v(side));
+ body.quaternion.setFromRotationMatrix(basis);
+ body.scale.set(Math.min(od*1.18,halfRun*.94),od*.87,od*.83);
+ const joint=add(n.center,mul(axis,Math.min(od*.48,halfRun*.36)));
+ const jointFace=offset=>add(joint,mul(axis,od*offset));
+ cylinder(jointFace(-.14),jointFace(-.015),od*.86,cast,group).name='Unión del cuerpo partido';
+ cylinder(jointFace(-.015),jointFace(.015),od*.843,nutMat,group).name='Junta del cuerpo';
+ cylinder(jointFace(.015),jointFace(.14),od*.86,cast,group).name='Tapa apernada del cuerpo';
+ for(let i=0;i<4;i++){
+  const angle=(i+.5)*Math.PI/2;
+  const radial=add(mul(up,Math.cos(angle)),mul(side,Math.sin(angle)));
+  const offset=mul(radial,od*.82);
+  cylinder(add(jointFace(-.14),offset),add(jointFace(.14),offset),od*.20,cast,group);
+  const bolt=mesh(new THREE.CylinderGeometry(od*.11,od*.11,od*.12,6),nutMat,group);
+  bolt.position.copy(v(add(jointFace(.19),offset)));
+  bolt.quaternion.setFromUnitVectors(yaxis,v(axis));
+  bolt.name='Perno de la unión del cuerpo';
  }
- const neck=add(n.center,mul(up,D*.72)),packing=add(n.center,mul(up,D*1.25)),top=add(n.center,mul(up,D*1.65));
- cylinder(neck,packing,D*.27,metal,group).name='Prensaestopa válvula de bola';cylinder(packing,top,D*.105,nutMat,group).name='Vástago válvula de bola';
- // Mando de la referencia: palanca elevada que termina en un aro vertical.
- const elbow=add(add(top,mul(axis,D*.55)),mul(up,D*.30)),tip=add(elbow,mul(axis,D*2.25));
- cylinder(top,add(top,mul(axis,D*.32)),D*.085,nutMat,group);cylinder(add(top,mul(axis,D*.32)),elbow,D*.085,nutMat,group);cylinder(elbow,tip,D*.085,nutMat,group).name='Palanca válvula de bola';
- if(n.valveConnection!=='threaded'){
-  const wheel=mesh(new THREE.TorusGeometry(D*.48,D*.065,12,48),nutMat,group);wheel.name='Aro de mando válvula de bola';wheel.position.copy(v(sub(tip,mul(up,D*.42))));wheel.quaternion.setFromUnitVectors(zaxis,v(side));
+ const at=h=>add(n.center,mul(up,h*od));
+ cylinder(at(.68),at(1.14),od*.35,cast,group,od*.30).name='Cuello de válvula de bola';
+ cylinder(at(1.14),at(1.31),od*.42,cast,group).name='Brida del prensaestopas';
+ cylinder(at(1.31),at(1.66),od*.24,flangeMat,group).name='Prensaestopas';
+ for(const sign of [-1,1]){
+  const offset=mul(side,od*.32*sign);
+  cylinder(add(at(1.28),offset),add(at(1.69),offset),od*.052,nutMat,group).name='Espárrago del prensaestopas';
  }
+ cylinder(at(1.62),at(2.35),od*.115,flangeMat,group).name='Vástago largo de válvula de bola';
+ cylinder(at(2.10),at(2.31),od*.29,blue,group).name='Cubo de la manilla';
+ const lever=new THREE.Shape();
+ lever.moveTo(0,0);
+ lever.lineTo(od*.82,0);
+ lever.lineTo(od*1.60,od*.40);
+ lever.lineTo(od*3.75,od*.40);
+ lever.quadraticCurveTo(od*3.89,od*.40,od*3.89,od*.48);
+ lever.quadraticCurveTo(od*3.89,od*.56,od*3.75,od*.56);
+ lever.lineTo(od*1.56,od*.56);
+ lever.lineTo(od*.78,od*.16);
+ lever.lineTo(0,od*.16);
+ lever.closePath();
+ const geometry=new THREE.ExtrudeGeometry(lever,{depth:od*.25,bevelEnabled:false,curveSegments:8});
+ geometry.translate(0,0,-od*.125);
+ const handle=mesh(geometry,blue,group);
+ handle.position.copy(v(at(2.14)));
+ handle.quaternion.setFromRotationMatrix(basis);
+ handle.name='Manilla azul de válvula de bola';
 }
 function threadDepth(od){return Math.min(25,Math.max(8,od*.3));}
 function drawThread(point,axis,od,parent,female=false,socketMaterial=valveMat){
@@ -333,8 +372,8 @@ function drawValve(n,f,group){
   cylinder(top,add(n.start,mul(n.axis,n.length)),n.odMM*.4,valveMat,group);const leverBase=add(n.center,mul(n.normal,-n.odMM*1.05)),leverTop=add(leverBase,mul(n.axis,n.length*.28));cylinder(leverBase,leverTop,n.odMM*.045,nutMat,group).name='Palanca lateral '+n.valveType.toUpperCase();return;
  }
  if(!threaded&&n.valveType==='gate'){drawFlangedGate(n,f,finish,group);return;}
+ if(n.valveType==='ball'){drawBallValve(n,f,finish,group);return;}
  tube(add(n.start,mul(n.axis,f.lengthMM)),finish,n.odMM,group,valveMat);
- if(n.valveType==='ball'){drawBallValve(n,f,group);return;}
  const body=mesh(['globe','check'].includes(n.valveType)?new THREE.SphereGeometry(n.odMM*.85,32,24):n.valveType==='butterfly'?new THREE.CylinderGeometry(n.odMM*.95,n.odMM*.95,n.odMM*.35,40):new THREE.BoxGeometry(n.odMM*1.8,n.odMM*1.4,n.odMM*1.8),valveMat,group);body.position.copy(v(n.center));body.quaternion.setFromUnitVectors(yaxis,v(n.axis));
  if(n.valveType==='check'){cylinder(add(n.center,mul(n.normal,n.odMM*.65)),add(n.center,mul(n.normal,n.odMM)),n.odMM*.7,flangeMat,group);return;}
  const stemStart=add(n.center,mul(n.normal,n.odMM*.6)),stemEnd=add(n.center,mul(n.normal,n.odMM*2.5));cylinder(stemStart,stemEnd,n.odMM*.09,nutMat,group);
