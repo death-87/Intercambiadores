@@ -1,3 +1,4 @@
+import {validateExternalObjects} from './external.mjs';
 import {ponchoDimensions} from './poncho.mjs';
 import {pipeHeading,pipeFrame} from './pipe_path.mjs';
 import {validateDetails,repairRows} from './details.mjs';
@@ -25,6 +26,7 @@ export function validateDesign(d,catalog){
  for(const c of d.components)if(c?.kind==='latrolet'&&typeof c.parentPort==='string'&&d.components.some(host=>host?.id===c.parentPort?.split(':')[0]&&host.kind==='elbow'))c.kind='elbolet';
  const axes=['+X','-X','+Y','-Y','+Z','-Z'];if(!axes.includes(d.direction))throw Error('Dirección inicial inválida.');
  if(typeof d.id!=='string'||d.id.length>80||typeof d.title!=='string'||d.title.length>120)throw Error('Identificación de proyecto inválida.');
+ validateExternalObjects(d.externalObjects);
  validateEquipmentList(d,catalog);const ids=new Set(),ports=new Set(['origin',...equipmentPorts(d,catalog).map(p=>p.id)]),used=new Set();
  for(const c of d.components){
   if(!c||typeof c.id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(c.id)||ids.has(c.id)||!TYPES[c.kind])throw Error('Componente inválido o repetido.');
