@@ -15,7 +15,7 @@ function status(text,error=false){$('status').textContent=text+(storageWarning&&
 function notify(action='update',extra={}){clearTimeout(timer);const transmit=()=>send('streamlit:setComponentValue',{value:{action,token:loadToken,design:structuredClone(design),materials:materialRows(result,catalog),...extra},dataType:'json'});if(action==='update')timer=setTimeout(transmit,350);else transmit();}
 let lastBackupAt=null,lastBackupFile='',pendingCloud=null,lastProjectAck=null;function backupInfo(dirty=true){$('backup-info').textContent=dirty?(lastBackupAt?'Hay cambios posteriores a la última copia. ':'')+'Guarda el proyecto por nombre en Mis proyectos. El guardado local pertenece a este navegador; Google Drive permite continuar en otro computador.':'Copia preparada el '+lastBackupAt+'. Archivo: '+lastBackupFile+'. Revisa Descargas y conserva el archivo JSON. Para continuar en otro computador, abre ese archivo; esta copia no se guarda en la nube.';}
 function persist(){backupInfo();design.updatedAt=new Date().toISOString();try{localStorage.setItem(STORAGE,JSON.stringify(design));storageWarning='';}catch{storageWarning='El respaldo automático rápido no está disponible. Usa Guardar proyecto o descarga una copia JSON.';status(storageWarning,true);}notify();}
-function setDesign(next,record=true){validateDesign(next,catalog);for(const e of next.equipments||[])validateAsset(e.asset);const layout=compute(next,catalog);if(record){undo.push(structuredClone(design));if(undo.length>30)undo.shift();redo=[];}design=next;result=layout;selected=design.components.some(c=>c.id===selected)?selected:null;if(!result.freePorts.some(p=>p.id===activePort))activePort=result.freePorts.at(-1)?.id||'';refresh();persist();renderModel();}
+function setDesign(next,record=true,reframe=false){const wasEmpty=!design.components.length&&!design.equipments?.length;validateDesign(next,catalog);for(const e of next.equipments||[])validateAsset(e.asset);const layout=compute(next,catalog);if(record){undo.push(structuredClone(design));if(undo.length>30)undo.shift();redo=[];}design=next;result=layout;selected=design.components.some(c=>c.id===selected)?selected:null;if(!result.freePorts.some(p=>p.id===activePort))activePort=result.freePorts.at(-1)?.id||'';refresh();persist();renderModel();if(reframe||(wasEmpty&&(design.components.length||design.equipments?.length)))fit('current');}
 function mutate(fn){try{const next=structuredClone(design);fn(next);setDesign(next);return true;}catch(e){status(e.message,true);return false;}}
 function exportFile(name,content,mime){const url=URL.createObjectURL(new Blob([content],{type:mime})),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function filename(){return (design.title||'Piping').replace(/[^\p{L}\p{N}_.-]+/gu,'_').slice(0,100);}
@@ -253,7 +253,7 @@ function renderModel(){
  for(const e of design.equipments||[]){const group=equipmentModel.children.find(g=>g.userData.equipmentId===e.id),box=new THREE.Box3().setFromObject(group),center=box.getCenter(new THREE.Vector3());label(e.tag,[center.x,center.y,box.max.z+totalSize*.04]);}
  for(const n of result.nodes){const shift=Math.max(n.odMM*(n.kind==='valve'?3.3:1.3),totalSize*.06),point=add(n.center,mul(n.normal,shift));const sprite=label(n.tag+(n.kind==='pipe'?' · '+n.length.toFixed(0)+' mm':''),point);const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([v(n.center),v(point)]),new THREE.LineBasicMaterial({color:0x607e90,transparent:true,opacity:.8,depthTest:false}));sprite.userData.line=line;sprite.userData.center=[...n.center];labelsGroup.add(line);}
  for(const p of result.freePorts){if(p.id!=='origin')label(p.label,add(p.position,mul(normal(p.axis),Math.max(80,totalSize*.035))));const r=Math.max(8,Math.min(40,totalSize*.012)),m=mesh(new THREE.SphereGeometry(r,20,16),new THREE.MeshStandardMaterial({color:p.id===activePort?0xf7a73b:0x20b99d,emissive:p.id===activePort?0x422200:0x003329}),portsGroup);m.position.copy(v(p.position));m.userData.portId=p.id;}
- labelsGroup.visible=labelsVisible;grid.scale.setScalar(Math.max(1,totalSize/6000));axes.scale.setScalar(Math.max(1,totalSize/2000));highlight();fit('current');
+ labelsGroup.visible=labelsVisible;grid.scale.setScalar(Math.max(1,totalSize/6000));axes.scale.setScalar(Math.max(1,totalSize/2000));highlight();
 }
 function highlight(){model.traverse(o=>{if(o.isMesh&&o.material){const id=o.parent?.userData.id;/* Materiales compartidos se mantienen neutros; la selección usa un recuadro. */}});const old=scene.getObjectByName('selection-box');if(old){scene.remove(old);old.geometry.dispose();old.material.dispose();}if(selected||selectedEquipmentId){const group=selected?pipeModel.children.find(g=>g.userData.id===selected):equipmentModel.children.find(g=>g.userData.equipmentId===selectedEquipmentId);if(group){const box=new THREE.BoxHelper(group,0x0c9b87);box.name='selection-box';scene.add(box);}}}
 function arrangeLabels(){
@@ -278,9 +278,68 @@ function fit(view='iso',aspectOverride=null){
  let width,height;if(Number.isFinite(minX)){width=(maxX-minX)/2;height=(maxY-minY)/2;const shift=new THREE.Vector3((minX+maxX)/2,(minY+maxY)/2,0).applyQuaternion(camera.quaternion);camera.position.add(shift);controls.target.add(shift);camera.updateMatrixWorld();}else{width=600;height=400;}
  const h=Math.max(150,height,width/aspect)*1.38;camera.left=-h*aspect;camera.right=h*aspect;camera.top=h;camera.bottom=-h;camera.near=.1;camera.far=Math.max(1e6,extent*10);camera.zoom=1;camera.updateProjectionMatrix();controls.update();
 }
-function resize(){const w=wrap.clientWidth||800,h=wrap.clientHeight||650;renderer.setSize(w,h,false);fit('current');height();}
+function resize(){
+ const width=wrap.clientWidth||800,heightPx=wrap.clientHeight||650;
+ renderer.setSize(width,heightPx,false);
+ const halfWidth=(camera.top-camera.bottom)/2*width/heightPx;
+ camera.left=-halfWidth;
+ camera.right=halfWidth;
+ camera.updateProjectionMatrix();
+ height();
+}
 new ResizeObserver(resize).observe(wrap);$('panel').addEventListener('toggle',()=>{setTimeout(resize,50);height();});
-let down=null;renderer.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});renderer.domElement.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const rect=renderer.domElement.getBoundingClientRect(),mouse=new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),ray=new THREE.Raycaster();ray.setFromCamera(mouse,camera);const ports=ray.intersectObjects(portsGroup.children);if(ports.length){continueFrom(ports[0].object.userData.portId);return;}const hits=ray.intersectObjects(model.children,true);if(hits.length){let node=hits[0].object;while(node&&!node.userData.id&&!node.userData.equipmentId)node=node.parent;if(node?.userData.id)selectNode(node.userData.id);else if(node?.userData.equipmentId){selectEquipment(node.userData.equipmentId);}}});
+const canvas=renderer.domElement;
+const pickRay=new THREE.Raycaster(),pickPointer=new THREE.Vector2();
+let clickStart=null;
+canvas.addEventListener('pointerdown',event=>{
+ clickStart=event.isPrimary&&event.button===0?{id:event.pointerId,x:event.clientX,y:event.clientY}:null;
+});
+canvas.addEventListener('pointermove',event=>{
+ if(clickStart?.id===event.pointerId&&Math.hypot(event.clientX-clickStart.x,event.clientY-clickStart.y)>4)clickStart=null;
+});
+canvas.addEventListener('pointercancel',()=>{clickStart=null;});
+canvas.addEventListener('pointerup',event=>{
+ const start=clickStart;
+ clickStart=null;
+ if(!start||start.id!==event.pointerId||event.button!==0||Math.hypot(event.clientX-start.x,event.clientY-start.y)>4)return;
+ const rect=canvas.getBoundingClientRect();
+ if(!rect.width||!rect.height)return;
+ const x=event.clientX-rect.left,y=event.clientY-rect.top;
+ if(x<0||y<0||x>=rect.width||y>=rect.height)return;
+ camera.updateMatrixWorld();
+ model.updateMatrixWorld(true);
+ portsGroup.updateMatrixWorld(true);
+ function hitAt(px,py,includePorts){
+  if(px<0||py<0||px>=rect.width||py>=rect.height)return null;
+  pickPointer.set(px/rect.width*2-1,1-py/rect.height*2);
+  pickRay.setFromCamera(pickPointer,camera);
+  const objects=includePorts?[model,portsGroup]:[model];
+  return pickRay.intersectObjects(objects,true).find(hit=>{
+   if(!hit.object.isMesh)return false;
+   for(let object=hit.object;object;object=object.parent)if(!object.visible)return false;
+   return true;
+  })||null;
+ }
+ let hit=hitAt(x,y,true);
+ // Busca cerca del cursor únicamente si el clic no tocó una superficie.
+ for(const radius of [1.5,3]){
+  if(hit)break;
+  const nearby=[];
+  for(let i=0;i<8;i++){
+   const angle=i*Math.PI/4;
+   const candidate=hitAt(x+Math.cos(angle)*radius,y+Math.sin(angle)*radius,false);
+   if(candidate)nearby.push(candidate);
+  }
+  nearby.sort((a,b)=>a.distance-b.distance);
+  hit=nearby[0];
+ }
+ if(!hit)return;
+ if(hit.object.userData.portId){continueFrom(hit.object.userData.portId);return;}
+ let part=hit.object;
+ while(part&&!part.userData.id&&!part.userData.equipmentId)part=part.parent;
+ if(part?.userData.id)selectNode(part.userData.id);
+ else if(part?.userData.equipmentId)selectEquipment(part.userData.equipmentId);
+});
 async function capture(){
  const old={position:camera.position.clone(),target:controls.target.clone(),up:camera.up.clone(),left:camera.left,right:camera.right,top:camera.top,bottom:camera.bottom,zoom:camera.zoom,near:camera.near,far:camera.far,bg:scene.background},size=renderer.getSize(new THREE.Vector2()),pixel=renderer.getPixelRatio(),box=scene.getObjectByName('selection-box');
  capturing=true;controls.enabled=false;
@@ -321,27 +380,27 @@ async function refreshProjects(){const projects=await listLocal();$('project-lis
 async function openProjectDialog(){try{$('project-name').value=design.title;await refreshProjects();$('project-save-cloud').disabled=!serverArgs.project_cloud_ready;$('project-location').textContent=serverArgs.project_cloud_ready?'Google Drive está conectado. Guarda allí para abrir el proyecto desde otro computador. La copia local pertenece a este navegador.':'Puedes guardar por nombre en este navegador. Para continuar desde otro computador, activa Google Drive en Proyectos entre computadores.';$('project-status').textContent='';$('project-dialog').showModal();}catch(error){status(error.message,true);}}
 $('project-save').onclick=openProjectDialog;$('project-open').onclick=openProjectDialog;$('project-close').onclick=()=>$('project-dialog').close();
 $('project-save-local').onclick=async()=>{try{flushProject();const name=$('project-name').value.trim();if(!name)throw Error('Escribe un nombre para el proyecto.');if(!mutate(d=>{d.title=name;}))return;$('project-status').textContent='Guardando copia completa…';await saveLocal(name,design);lastBackupAt=new Date().toLocaleString('es-CL');await refreshProjects();$('project-status').textContent='Guardado: '+name+'. Puedes abrirlo desde Mis proyectos en este navegador.';$('backup-info').textContent='Proyecto '+name+' guardado en este navegador el '+new Date().toLocaleString('es-CL')+'. Para otro computador usa Google Drive.';}catch(error){$('project-status').textContent=error.message;}};
-$('project-load-local').onclick=async()=>{try{const projects=await listLocal(),project=projects.find(p=>p.name===$('project-list').value);if(!project)return;selected=null;setDesign(structuredClone(project.design));defaults();refresh();$('project-dialog').close();status('Proyecto abierto: '+project.name);}catch(error){$('project-status').textContent=error.message;}};
+$('project-load-local').onclick=async()=>{try{const projects=await listLocal(),project=projects.find(p=>p.name===$('project-list').value);if(!project)return;selected=null;setDesign(structuredClone(project.design),true,true);defaults();refresh();$('project-dialog').close();status('Proyecto abierto: '+project.name);}catch(error){$('project-status').textContent=error.message;}};
 $('project-save-cloud').onclick=()=>{try{flushProject();const name=$('project-name').value.trim();if(!name)throw Error('Escribe un nombre para el proyecto.');if(!mutate(d=>{d.title=name;}))return;const eventId=uid();pendingCloud={eventId,snapshot:JSON.stringify(design)};notify('save_project',{eventId,projectName:name});$('project-status').textContent='Guardando y verificando en Google Drive…';}catch(error){$('project-status').textContent=error.message;}};
 $('save').onclick=guard(()=>{
  if(updateSelected()===false)throw Error('Corrige los valores del componente antes de guardar el proyecto.');
  if(equipmentTimer){clearTimeout(equipmentTimer);equipmentTimer=null;if(['equipment-x','equipment-y','equipment-z','equipment-rotation'].some(id=>$(id).value.trim()===''))throw Error('Completa la posición del equipo antes de guardar.');if($('equipment-apply').onclick()===false)throw Error('Revisa la posición del equipo antes de guardar.');}
  validateDesign(design,catalog);const now=new Date(),stamp=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+'_'+String(now.getHours()).padStart(2,'0')+'-'+String(now.getMinutes()).padStart(2,'0')+'-'+String(now.getSeconds()).padStart(2,'0');
  lastBackupFile=filename()+'_'+stamp+'.json';exportFile(lastBackupFile,JSON.stringify(design,null,2),'application/json');lastBackupAt=now.toLocaleString('es-CL');backupInfo(false);status('Respaldo completo preparado: '+(design.equipments||[]).length+' equipos y '+design.components.length+' componentes. Revisa la descarga del archivo JSON.');
-});$('load').onclick=()=>$('file').click();$('file').onchange=guard(async()=>{const f=$('file').files[0];if(!f)return;if(f.size>32e6)throw Error('El JSON supera 32 MB.');setDesign(JSON.parse(await f.text()));selected=null;defaults();refresh();status('Proyecto abierto: '+(design.equipments||[]).length+' equipos y '+design.components.length+' componentes. Puedes continuar editando.');backupInfo();$('file').value='';});
+});$('load').onclick=()=>$('file').click();$('file').onchange=guard(async()=>{const f=$('file').files[0];if(!f)return;if(f.size>32e6)throw Error('El JSON supera 32 MB.');setDesign(JSON.parse(await f.text()),true,true);selected=null;defaults();refresh();status('Proyecto abierto: '+(design.equipments||[]).length+' equipos y '+design.components.length+' componentes. Puedes continuar editando.');backupInfo();$('file').value='';});
 $('example').onclick=guard(async()=>{if((design.components.length||(design.equipments||[]).length)&&!confirm('¿Abrir el ejemplo? Podrás recuperar el diseño actual con Deshacer.'))return;selected=null;setDesign(await fetch('./ejemplo.json').then(r=>r.json()));activePort=result.freePorts.at(-1)?.id||'';defaults();refresh();fit('iso');status('Ejemplo cargado. Selecciona un elemento para editarlo o continúa desde un extremo.');});
-$('new').onclick=()=>{if((design.components.length||(design.equipments||[]).length)&&!confirm('¿Comenzar una línea nueva? Descarga antes el JSON si deseas conservar la actual.'))return;selected=null;activePort='origin';setDesign(blankDesign('p'+uid()));defaults();refresh();};
+$('new').onclick=()=>{if((design.components.length||(design.equipments||[]).length)&&!confirm('¿Comenzar una línea nueva? Descarga antes el JSON si deseas conservar la actual.'))return;selected=null;activePort='origin';setDesign(blankDesign('p'+uid()),true,true);defaults();refresh();};
 for(const b of document.querySelectorAll('[data-view]'))b.onclick=()=>fit(b.dataset.view==='fit'?'current':b.dataset.view);
 $('labels').onclick=()=>{labelsVisible=!labelsVisible;labelsGroup.visible=labelsVisible;$('labels').textContent=labelsVisible?'Ocultar TAG':'Mostrar TAG';};
 $('png').onclick=guard(async()=>{const data=await capture();const a=document.createElement('a');a.href=data;a.download=filename()+'.png';a.click();});
 $('pdf').onclick=guard(async()=>{if(!design.components.length&&!(design.equipments||[]).length)throw Error('Agrega componentes o equipos antes de exportar.');status('Preparando isométrico y materiales…');notify('export_pdf',{image:await capture()});status('Captura lista. Descarga el PDF debajo del editor.');});
 window.addEventListener('message',e=>{if(e.data.type!=='streamlit:render')return;serverArgs=e.data.args||{};const initialize=!loaded||loadToken!==serverArgs.load_token;loadToken=serverArgs.load_token;loaded=true;
  try{if(serverArgs.project_ack&&serverArgs.project_ack.eventId!==lastProjectAck){const ack=serverArgs.project_ack;lastProjectAck=ack.eventId;if(ack.ok&&pendingCloud?.eventId===ack.eventId){const dirty=pendingCloud&&JSON.stringify(design)!==pendingCloud.snapshot;design.cloudProject=ack.project;if(!dirty)lastBackupAt=new Date().toLocaleString('es-CL');try{localStorage.setItem(STORAGE,JSON.stringify(design));}catch{}$('project-status').textContent='Guardado y verificado en Google Drive: '+ack.project.name+(dirty?'. Hay cambios posteriores pendientes.':'.');$('backup-info').textContent=$('project-status').textContent;}else if(!ack.ok)$('project-status').textContent='No se pudo confirmar el guardado: '+ack.error;pendingCloud=null;}if(initialize){let initial=serverArgs.initial_data||blankDesign();if(!serverArgs.imported){try{const saved=JSON.parse(localStorage.getItem(STORAGE));if(saved?.version===1&&(!initial.components.length||saved.updatedAt>initial.updatedAt))initial=saved;}catch{}}
- validateDesign(initial,catalog);for(const e of initial.equipments||[])validateAsset(e.asset);design=structuredClone(initial);result=compute(design,catalog);activePort=result.freePorts.at(-1)?.id||'';selected=null;renderModel();refresh();$('nps').value=2;defaults();notify();status('Diseño listo. El respaldo automático se conserva en este navegador.');}
+ validateDesign(initial,catalog);for(const e of initial.equipments||[])validateAsset(e.asset);design=structuredClone(initial);result=compute(design,catalog);activePort=result.freePorts.at(-1)?.id||'';selected=null;renderModel();fit('iso');refresh();$('nps').value=2;defaults();notify();status('Diseño listo. El respaldo automático se conserva en este navegador.');}
  if(serverArgs.equipment_import&&serverArgs.equipment_import_token!==design.equipmentImportToken){const token=serverArgs.equipment_import_token,e=serverArgs.equipment_import;const ok=mutate(d=>{d.equipments ||= [];const i=d.equipments.findIndex(old=>old.id===e.id);if(i>=0)d.equipments[i]={...e,position:d.equipments[i].position,rotationDeg:d.equipments[i].rotationDeg};else d.equipments.push(e);d.equipmentImportToken=token;});if(ok){notify('equipment_applied',{equipmentApplied:token});status('Equipo incorporado. Elige una boquilla para continuar el piping.');}else notify('equipment_error',{equipmentApplied:token});}
  else if(serverArgs.equipment_import_token&&serverArgs.equipment_import_token===design.equipmentImportToken)notify('equipment_applied',{equipmentApplied:design.equipmentImportToken});
  }catch(err){status(err.message,true);}
 });
-function animate(){requestAnimationFrame(animate);controls.update();arrangeLabels();renderer.render(scene,camera);}animate();renderModel();refresh();$('nps').value=2;defaults();send('streamlit:componentReady',{apiVersion:1});height();
+function animate(){requestAnimationFrame(animate);controls.update();arrangeLabels();renderer.render(scene,camera);}animate();renderModel();fit('iso');refresh();$('nps').value=2;defaults();send('streamlit:componentReady',{apiVersion:1});height();
 // Inspección de geometría sin datos privados para pruebas y soporte.
 window.pipingEditor={getDesign:()=>structuredClone(design),getResult:()=>result,load:d=>setDesign(d),capture,scene,camera,model,renderer};
