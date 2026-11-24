@@ -122,7 +122,9 @@ function drawBallValve(n,f,group){
  // Mando de la referencia: palanca elevada que termina en un aro vertical.
  const elbow=add(add(top,mul(axis,D*.55)),mul(up,D*.30)),tip=add(elbow,mul(axis,D*2.25));
  cylinder(top,add(top,mul(axis,D*.32)),D*.085,nutMat,group);cylinder(add(top,mul(axis,D*.32)),elbow,D*.085,nutMat,group);cylinder(elbow,tip,D*.085,nutMat,group).name='Palanca válvula de bola';
- const wheel=mesh(new THREE.TorusGeometry(D*.48,D*.065,12,48),nutMat,group);wheel.name='Aro de mando válvula de bola';wheel.position.copy(v(sub(tip,mul(up,D*.42))));wheel.quaternion.setFromUnitVectors(zaxis,v(side));
+ if(n.valveConnection!=='threaded'){
+  const wheel=mesh(new THREE.TorusGeometry(D*.48,D*.065,12,48),nutMat,group);wheel.name='Aro de mando válvula de bola';wheel.position.copy(v(sub(tip,mul(up,D*.42))));wheel.quaternion.setFromUnitVectors(zaxis,v(side));
+ }
 }
 function threadDepth(od){return Math.min(25,Math.max(8,od*.3));}
 function drawThread(point,axis,od,parent,female=false){
