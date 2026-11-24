@@ -1,8 +1,6 @@
 """Piping e isométricos: diseño local y exportaciones, sin servicios externos."""
 import base64
 import hashlib
-import hmac
-import time
 import uuid
 import json
 import re
@@ -71,38 +69,6 @@ def pdf_piping(diseno,imagen):
     doc.build(story,onFirstPage=pie,onLaterPages=pie);return output.getvalue()
 
 
-def proyectos_remotos():
-    from piping_projects import settings,configured,call
-    try:config=settings(st.secrets.to_dict())
-    except (FileNotFoundError,st.errors.StreamlitSecretNotFoundError):config=settings({})
-    ready=configured(config);auth=hashlib.sha256(config['PIPING_PROJECTS_PASSWORD'].encode()).hexdigest()
-    authorized=ready and st.session_state.get('jn_project_auth')==auth
-    with st.expander('Proyectos entre computadores · Google Drive'):
-        if not ready:
-            st.caption('Puedes guardar proyectos con nombre en este navegador. Para abrirlos desde otros computadores falta activar el almacenamiento en Google Drive.')
-            st.link_button('Configurar guardado entre computadores','https://github.com/death-87/Intercambiadores/blob/desarrollo-jndigital/apps_script/PROYECTOS_PIPING.md')
-        elif not authorized:
-            password=st.text_input('Contraseña privada de proyectos',type='password',key='jn_project_password')
-            if st.button('Entrar a mis proyectos'):
-                if hmac.compare_digest(password.encode(),config['PIPING_PROJECTS_PASSWORD'].encode()):st.session_state['jn_project_auth']=auth;st.rerun()
-                else:st.error('La contraseña no coincide.')
-        else:
-            if st.button('Actualizar lista de proyectos'):st.session_state.pop('jn_remote_projects',None)
-            if 'jn_remote_projects' not in st.session_state or time.time()-st.session_state.get('jn_remote_projects_at',0)>60:
-                try:
-                    st.session_state['jn_remote_projects']=call(config,'list')['projects'];st.session_state['jn_remote_projects_at']=time.time()
-                except ValueError as error:st.error(str(error))
-            projects=st.session_state.get('jn_remote_projects',[])
-            selected=st.selectbox('Proyectos guardados en Google Drive',[None]+[p['id'] for p in projects],format_func=lambda id:next((p['name']+' · v'+str(p['revision']) for p in projects if p['id']==id),'Seleccionar proyecto…'))
-            if st.button('Abrir proyecto de Google Drive',disabled=selected is None):
-                try:
-                    design=validar_piping(call(config,'load',id=selected)['design'])
-                    st.session_state['jn_piping_design']=design;st.session_state['jn_piping_load_token']=uuid.uuid4().hex;st.session_state['jn_piping_imported']=True
-                except (ValueError,KeyError,TypeError) as error:st.error(str(error))
-            if st.button('Salir de mis proyectos'):st.session_state.pop('jn_project_auth',None);st.rerun()
-    return config,authorized
-
-
 def mostrar_piping(validar_equipo=None):
     from portal import ir_inicio
     st.markdown('''<style>[data-testid="stSidebar"],[data-testid="stSidebarNav"],[data-testid="collapsedControl"]{display:none}.jn-piping-head{padding:23px 27px;background:#102a3b;border-radius:14px;margin:12px 0 22px;color:white}.jn-piping-head small{color:#76d4bd;letter-spacing:1.5px;font-size:10px}.jn-piping-head h1{color:#f4f9fb;font-size:27px;margin:8px 0;padding:0}.jn-piping-head p{color:#acc5d3;font-size:12px;margin:0}</style>''',unsafe_allow_html=True)
@@ -116,7 +82,8 @@ def mostrar_piping(validar_equipo=None):
         mostrar_herramientas_equipo(validar_equipo)
         return
     if 'jn_piping_load_token' not in st.session_state:st.session_state['jn_piping_load_token']='inicio'
-    project_config,project_authorized=proyectos_remotos()
+    from piping_r2 import mostrar_cuenta, guardar_proyecto
+    project_config, project_authorized = mostrar_cuenta()
     with st.expander('Continuar un proyecto guardado en otro equipo'):
         upload=st.file_uploader('Diseño de piping',type=['json'],key='jn_piping_import')
         if st.button('Cargar este diseño',key='jn_piping_import_apply',disabled=upload is None):
@@ -125,7 +92,7 @@ def mostrar_piping(validar_equipo=None):
                 if len(raw)>32_000_000:raise ValueError('El JSON supera 32 MB.')
                 design=validar_piping(json.loads(raw));st.session_state['jn_piping_design']=design;st.session_state['jn_piping_import_sequence']=st.session_state.get('jn_piping_import_sequence',0)+1;st.session_state['jn_piping_load_token']=hashlib.sha256(raw).hexdigest()+':'+str(st.session_state['jn_piping_import_sequence']);st.session_state['jn_piping_imported']=True
             except (ValueError,TypeError,KeyError) as e:st.error(str(e))
-    value=declarar_piping()(initial_data=st.session_state.get('jn_piping_design'),load_token=st.session_state['jn_piping_load_token'],imported=st.session_state.get('jn_piping_imported',False),equipment_import=st.session_state.get('jn_piping_pending_equipment'),equipment_import_token=st.session_state.get('jn_piping_equipment_import_token'),project_cloud_ready=project_authorized,project_ack=st.session_state.get('jn_project_ack'),height=940,key='jn_piping_editor',default=None)
+    value=declarar_piping()(initial_data=st.session_state.get('jn_piping_design'),load_token=st.session_state['jn_piping_load_token'],imported=st.session_state.get('jn_piping_imported',False),equipment_import=st.session_state.get('jn_piping_pending_equipment'),equipment_import_token=st.session_state.get('jn_piping_equipment_import_token'),project_cloud_ready=project_authorized, owner_exports=project_authorized,project_ack=st.session_state.get('jn_project_ack'),height=940,key='jn_piping_editor',default=None)
     st.session_state['jn_piping_imported']=False
     if isinstance(value,dict) and value.get('token') == st.session_state['jn_piping_load_token'] and value.get('action') in ('update','export_pdf','equipment_applied','equipment_error','edit_equipment','save_project'):
         try:
@@ -133,14 +100,11 @@ def mostrar_piping(validar_equipo=None):
             if value['action']=='save_project' and value.get('eventId')!=st.session_state.get('jn_project_save_event'):
                 st.session_state['jn_project_save_event']=value.get('eventId')
                 try:
-                    if not project_authorized:raise ValueError('Entra a tus proyectos antes de guardar en Google Drive.')
-                    from piping_projects import call
-                    name=str(value.get('projectName','')).strip()
-                    revision=design.get('cloudProject',{}).get('revision') if str(design.get('cloudProject',{}).get('name','')).lower()==name.lower() else None
-                    result=call(project_config,'save',name=name,design=design,revision=revision)
-                    design['cloudProject']=result['project'];st.session_state['jn_piping_design']=design
-                    st.session_state['jn_project_ack']={'eventId':value['eventId'],'ok':True,'project':result['project']}
-                    st.session_state.pop('jn_remote_projects',None)
+                    if not project_authorized:
+                        raise ValueError('Solo el propietario puede guardar en la nube.')
+                    project = guardar_proyecto(project_config, value['eventId'], value.get('projectName'), design)
+                    st.session_state['jn_project_ack'] = {'eventId': value['eventId'], 'ok': True, 'project': project}
+                    st.session_state.pop('jn_r2_projects', None)
                 except ValueError as error:st.session_state['jn_project_ack']={'eventId':value['eventId'],'ok':False,'error':str(error)}
                 st.rerun()
             if value['action']=='edit_equipment' and value.get('eventId')!=st.session_state.get('jn_piping_edit_event'):
@@ -155,7 +119,7 @@ def mostrar_piping(validar_equipo=None):
             if value.get('equipmentApplied')==st.session_state.get('jn_piping_equipment_import_token') and value.get('equipmentApplied'):
                 st.session_state.pop('jn_piping_pending_equipment',None);st.session_state.pop('jn_piping_equipment_import_token',None)
                 if value['action']=='equipment_error':st.error('No se actualizó el equipo. Verifica que sus boquillas conectadas sigan existiendo; el ensamblaje anterior se conserva.')
-            if value['action']=='export_pdf':
+            if value['action']=='export_pdf' and project_authorized:
                 image=value.get('image','')
                 if not isinstance(image,str) or not image.startswith('data:image/png;base64,') or len(image)>11_000_000:raise ValueError('Captura no válida.')
                 content=base64.b64decode(image.split(',',1)[1],validate=True)
@@ -169,13 +133,14 @@ def mostrar_piping(validar_equipo=None):
             for warning in equipment.get('warnings',[]):st.caption(equipment['tag']+' · '+warning)
         name=re.sub(r'[^\w.-]+','_',design['title'])[:100] or 'Piping'
         prepared=st.session_state.get('jn_piping_pdf');digest=hashlib.sha256(json.dumps(design,sort_keys=True).encode()).hexdigest()
-        if prepared and prepared[0]==digest:st.download_button('Descargar isométrico PDF',prepared[1],name+'.pdf','application/pdf',key='jn_piping_download_pdf',type='primary')
-        elif prepared:st.caption('El diseño cambió. Pulsa «Isométrico PDF» en el editor para actualizar el documento.')
+        if project_authorized and prepared and prepared[0]==digest:st.download_button('Descargar isométrico PDF',prepared[1],name+'.pdf','application/pdf',key='jn_piping_download_pdf',type='primary')
+        elif project_authorized and prepared:st.caption('El diseño cambió. Pulsa «Isométrico PDF» en el editor para actualizar el documento.')
         rows=materiales_piping(design)
         if rows:
             st.subheader('Listado de materiales')
             frame=pd.DataFrame(rows).rename(columns={'description':'Elemento','nps':'Medida NPS','rating':'Clase','quantity':'Cantidad','lengthMM':'Largo total (mm)'})
             st.dataframe(frame,hide_index=True,use_container_width=True)
-            st.download_button('Descargar materiales CSV',frame.to_csv(index=False).encode('utf-8-sig'),name+'_materiales.csv','text/csv',key='jn_piping_csv')
+            if project_authorized:
+                st.download_button('Descargar materiales CSV',frame.to_csv(index=False).encode('utf-8-sig'),name+'_materiales.csv','text/csv',key='jn_piping_csv')
         st.download_button('Descargar respaldo JSON',json.dumps(design,ensure_ascii=False,indent=2).encode(),name+'.json','application/json',key='jn_piping_json')
-    st.caption('Guarda por nombre y abre desde Mis proyectos en este navegador. Google Drive permite continuar desde otros computadores después de activar la conexión. La descarga JSON queda como respaldo opcional. Los largos de accesorios y válvulas son configurables; bridas y diámetros usan el catálogo de Intercambiadores.')
+    st.caption('Descarga el JSON para conservar tu diseño y volver a abrirlo en otro equipo. El propietario también puede guardar copias privadas en la nube. Los largos de accesorios y válvulas son configurables; bridas y diámetros usan el catálogo de Intercambiadores.')
