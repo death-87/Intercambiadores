@@ -15,6 +15,15 @@ class PipingTests(unittest.TestCase):
     def setUp(self):
         self.design=json.loads((ROOT/'visor_piping'/'ejemplo.json').read_text())
 
+    def test_inclinacion_curva_y_soldaduras(self):
+        subprocess.run(['node',str(ROOT/'tests'/'pipe_shape.mjs')],check=True,capture_output=True,text=True)
+        self.design['components']=self.design['components'][:1]
+        pipe=self.design['components'][0]
+        pipe.update(pipeYawDeg=30,pipePitchDeg=-20,pipeCurveDeg=15,pipeCurveRollDeg=90,pipeZMM=500,weldTag='W001')
+        validar_piping(self.design)
+        pipe['pipePitchDeg']=float('nan')
+        with self.assertRaises(ValueError):validar_piping(self.design)
+
     def test_catalogo_compartido(self):
         self.assertEqual(len(CATALOGO['items']),17)
         self.assertEqual(MEDIDAS[2]['odMM'],60.3)

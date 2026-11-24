@@ -1,0 +1,7 @@
+// Geometría analítica del tubo; distancia medida sobre su eje desarrollado.
+const add=(a,b)=>a.map((x,i)=>x+b[i]),mul=(a,k)=>a.map(x=>x*k),dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
+export const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+export function pipeHeading(axis,yaw=0,pitch=0){if(!yaw&&!pitch)return [...axis];const a=Math.atan2(axis[1],axis[0])+yaw*Math.PI/180,b=Math.asin(Math.max(-1,Math.min(1,axis[2])))+pitch*Math.PI/180;return [Math.cos(a)*Math.cos(b),Math.sin(a)*Math.cos(b),Math.sin(b)];}
+export function pipeFrame(n,s=0){const a=(n.pipeCurveDeg||0)*Math.PI/180,t=Math.max(0,Math.min(n.length,s))/n.length,theta=a*t,u=n.curveNormal||n.normal,axis=n.axis;const sinc=Math.abs(theta)<1e-7?1-theta*theta/6:Math.sin(theta)/theta,cosc=Math.abs(theta)<1e-7?theta/2-theta**3/24:(1-Math.cos(theta))/theta;
+ return {point:add(n.start,add(mul(axis,n.length*t*sinc),mul(u,n.length*t*cosc))),axis:add(mul(axis,Math.cos(theta)),mul(u,Math.sin(theta))),normal:add(mul(axis,-Math.sin(theta)),mul(u,Math.cos(theta))),binormal:cross(axis,u)};}
+export function pipeDistance(n,point){const q=point.map((x,i)=>x-n.start[i]),a=(n.pipeCurveDeg||0)*Math.PI/180;if(Math.abs(a)<1e-8)return Math.max(0,Math.min(n.length,dot(q,n.axis)));const R=n.length/a,theta=Math.atan2(dot(q,n.axis)/R,1-dot(q,n.curveNormal||n.normal)/R);return Math.max(0,Math.min(n.length,theta/a*n.length));}

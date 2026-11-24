@@ -1,3 +1,4 @@
+import {pipeFrame} from './pipe_path.mjs';
 import * as THREE from 'three';
 import {add,sub,mul,norm,normal,cross} from './model.mjs';
 import {annotationPoint} from './details.mjs';
@@ -5,11 +6,11 @@ const v=a=>new THREE.Vector3(...a),zaxis=new THREE.Vector3(0,0,1);
 export function drawRepairs(parent,design,result,repairMaterial,weldMaterial){
  for(const repair of design.repairs||[]){const node=result.nodes.find(n=>n.id===repair.hostId),axis=node.axis,u=normal(axis,repair.rollDeg),b=cross(axis,u),start=add(node.start,mul(axis,repair.startMM)),r=node.odMM/2+1,R=r+repair.thicknessMM,angle=repair.type==='type_b'?Math.PI*2:repair.coverageDeg*Math.PI/180,begin=-angle/2,group=new THREE.Group();group.userData={repairId:repair.id,componentId:node.id};group.name=repair.tag+' · '+repair.type;parent.add(group);
   const shape=new THREE.Shape();shape.absarc(0,0,R,begin,begin+angle,false);if(repair.type==='type_b'){shape.closePath();const hole=new THREE.Path();hole.absarc(0,0,r,0,Math.PI*2,true);shape.holes.push(hole);}else{shape.lineTo(Math.cos(begin+angle)*r,Math.sin(begin+angle)*r);shape.absarc(0,0,r,begin+angle,begin,true);shape.closePath();}
-  const body=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:repair.lengthMM,bevelEnabled:false,curveSegments:64}),repairMaterial);body.name=repair.type==='type_b'?'Camisa Tipo B soldada':'Parche curvo soldado';body.position.copy(v(start));body.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(v(u),v(b),v(axis)));group.add(body);
-  function point(t,x){return add(add(start,mul(axis,x)),add(mul(u,Math.cos(t)*R),mul(b,Math.sin(t)*R)));}
+  const body=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:repair.lengthMM,steps:node.pipeCurveDeg?48:1,bevelEnabled:false,curveSegments:64}),repairMaterial);if(node.pipeCurveDeg){const attr=body.geometry.attributes.position;for(let i=0;i<attr.count;i++){const f=pipeFrame(node,repair.startMM+attr.getZ(i)),roll=repair.rollDeg*Math.PI/180,rad=add(mul(f.normal,Math.cos(roll)),mul(f.binormal,Math.sin(roll))),bin=cross(f.axis,rad),p=add(f.point,add(mul(rad,attr.getX(i)),mul(bin,attr.getY(i))));attr.setXYZ(i,...p);}body.geometry.computeVertexNormals();}body.name=repair.type==='type_b'?'Camisa Tipo B soldada':'Parche curvo soldado';body.position.copy(v(start));body.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(v(u),v(b),v(axis)));if(node.pipeCurveDeg){body.position.set(0,0,0);body.quaternion.identity();}group.add(body);
+  function point(t,x){if(node.pipeCurveDeg){const f=pipeFrame(node,repair.startMM+x),a=t+repair.rollDeg*Math.PI/180;return add(f.point,add(mul(f.normal,Math.cos(a)*R),mul(f.binormal,Math.sin(a)*R)));}return add(add(start,mul(axis,x)),add(mul(u,Math.cos(t)*R),mul(b,Math.sin(t)*R)));}
   function seam(points,name){const curve=new THREE.CatmullRomCurve3(points.map(v)),weld=new THREE.Mesh(new THREE.TubeGeometry(curve,Math.max(8,points.length*2),Math.max(1.5,repair.thicknessMM*.25),8,false),weldMaterial);weld.name=name;group.add(weld);}
   for(const x of [0,repair.lengthMM])seam(Array.from({length:65},(_,i)=>point(begin+angle*i/64,x)),'Soldadura de extremo de reparación');
-  for(const t of repair.type==='type_b'?[begin,begin+Math.PI]:[begin,begin+angle])seam([point(t,0),point(t,repair.lengthMM)],'Soldadura longitudinal de reparación');
+  for(const t of repair.type==='type_b'?[begin,begin+Math.PI]:[begin,begin+angle])seam(Array.from({length:33},(_,i)=>point(t,repair.lengthMM*i/32)),'Soldadura longitudinal de reparación');
  }
 }
 function bubbleTexture(annotation){

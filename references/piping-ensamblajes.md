@@ -91,3 +91,13 @@ En **Reparaciones / refuerzos**, elige un tramo recto y registra **Camisa Tipo B
 En **Marcas y comentarios**, pulsa **Elegir punto para nueva marca**, escribe número / comentario y haz clic sobre una superficie del dibujo. La marca puede ser flecha con círculo, flecha o círculo; permite cambiar color y desplazamiento del comentario. El punto se vincula al componente o equipo elegido y acompaña su ubicación. Selecciona una marca de la lista para editar o eliminarla. El texto largo se conserva completo y figura en la leyenda del PDF.
 
 Las reparaciones y marcas se guardan dentro del mismo proyecto, tanto en Mis proyectos como en JSON o Google Drive configurado. PNG y PDF incluyen las marcas visibles; el PDF agrega tablas con las reparaciones y referencias completas. Las reparaciones también aparecen en materiales. Al eliminar un componente se eliminan sus reparaciones y marcas; Deshacer recupera el conjunto. La representación no realiza cálculo estructural del refuerzo ni clasificación normativa de una ejecución real.
+
+
+## Dirección, curvas y soldaduras de tramos
+
+- El encabezado ámbar **Editar seleccionado** aplica los cambios al componente existente. El verde **Configurar próximo componente** prepara un elemento nuevo; indica el extremo elegido. Elegir otra salida cambia al modo de creación.
+- **Dirección y curvatura del tramo** permite giro horizontal, inclinación vertical y curvatura continua sin insertar fittings. Los ángulos de dirección son relativos a la llegada; los componentes posteriores acompañan el cambio. El largo del tubo se mide sobre su eje desarrollado. Curvatura 0 mantiene una recta.
+- **Posición del inicio libre** permite trasladar X/Y/Z del primer tubo y su continuación. Los componentes unidos a otro extremo conservan la posición de esa conexión. El inicio del primer tubo está disponible para prolongar hacia atrás, salvo que esté ocupado.
+- **Elegir punto de soldadura en el dibujo** activa un clic sobre la superficie de un tubo. Lo divide sin desplazar su salida: `P01-01`, `P01-02` y cordón `W001`. Se puede repetir la división para generar más segmentos y soldaduras. Deshacer revierte la operación completa.
+- Las derivaciones, marcas y reparaciones se reasignan al segmento correspondiente. Si el punto atraviesa una reparación, se pide elegir otro punto. Cada segmento debe conservar al menos 10 mm.
+- Orientación, curvatura, posición, segmentos y cordones se incluyen en el proyecto guardado; las identificaciones se muestran en el dibujo y su captura. El modelo representa geometría y no verifica esfuerzos ni la ejecución de una unión inclinada.

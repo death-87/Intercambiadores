@@ -1,3 +1,4 @@
+import {pipeFrame,pipeDistance} from './pipe_path.mjs';
 const add=(a,b)=>a.map((x,i)=>x+b[i]),mul=(a,k)=>a.map(x=>x*k),dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export const REPAIRS={type_b:'Camisa Tipo B · soldada',patch:'Parche soldado'};
 export const COLORS=['#c74336','#276caa','#16846a','#d28a24'];
@@ -18,9 +19,9 @@ export function validateDetails(d){
  }
 }
 export function componentFrame(node){const radius=node.odMM/2;return {origin:node.start,axes:[node.axis,node.normal,cross(node.axis,node.normal)],scale:[Math.max(node.length,10),node.kind==='elbow'?Math.max(node.radiusMM,radius):node.kind==='tee'?Math.max(node.branchLengthMM,radius):radius,radius]};}
-export function componentCoordinates(node,point){const f=componentFrame(node),q=point.map((x,i)=>x-f.origin[i]);return f.axes.map((a,i)=>dot(q,a)/f.scale[i]);}
+export function componentCoordinates(node,point){if(node.kind==='pipe'&&node.pipeCurveDeg){const s=pipeDistance(node,point),f=pipeFrame(node,s),q=point.map((x,i)=>x-f.point[i]);return [s/node.length,dot(q,f.normal)/(node.odMM/2),dot(q,f.binormal)/(node.odMM/2)];}const f=componentFrame(node),q=point.map((x,i)=>x-f.origin[i]);return f.axes.map((a,i)=>dot(q,a)/f.scale[i]);}
 export function annotationPoint(annotation,result,design){
- if(annotation.hostType==='component'){const node=result.nodes.find(n=>n.id===annotation.hostId),f=componentFrame(node);return annotation.coordinates.reduce((p,value,i)=>add(p,mul(f.axes[i],value*f.scale[i])),[...f.origin]);}
+ if(annotation.hostType==='component'){const node=result.nodes.find(n=>n.id===annotation.hostId);if(node.kind==='pipe'&&node.pipeCurveDeg){const [t,y,z]=annotation.coordinates,f=pipeFrame(node,t*node.length);return add(f.point,add(mul(f.normal,y*node.odMM/2),mul(f.binormal,z*node.odMM/2)));}const f=componentFrame(node);return annotation.coordinates.reduce((p,value,i)=>add(p,mul(f.axes[i],value*f.scale[i])),[...f.origin]);}
  const e=design.equipments.find(e=>e.id===annotation.hostId),a=e.rotationDeg*Math.PI/180,[x,y,z]=annotation.coordinates;return add([Math.cos(a)*x-Math.sin(a)*y,Math.sin(a)*x+Math.cos(a)*y,z],e.position);
 }
 export function removeDetails(d,componentIds,equipmentIds=new Set()){

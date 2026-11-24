@@ -92,6 +92,12 @@ def validar_piping(diseno):
             value=c.get(k)
             if type(value) not in (int,float) or not math.isfinite(value) or not minimo<=value<=maximo:
                 raise ValueError('Dimensión inválida: '+k)
+        for key,limit in (('pipeXMM',100000),('pipeYMM',100000),('pipeZMM',100000),('pipeYawDeg',3600),('pipePitchDeg',90),('pipeCurveDeg',170),('pipeCurveRollDeg',3600)):
+            value=c.get(key,0)
+            if type(value) not in (int,float) or not math.isfinite(value) or abs(value)>limit:raise ValueError('Ángulo del tramo inválido: '+key)
+        for key in ('segmentBase','segmentGroup'):
+            if key in c and (not isinstance(c[key],str) or len(c[key])>64):raise ValueError('Identificación de segmento inválida.')
+        if 'weldTag' in c and (not isinstance(c['weldTag'],str) or len(c['weldTag'])>40):raise ValueError('Identificación de soldadura inválida.')
         if c['kind']=='gauge' and 'gaugeDiameterMM' in c:
             diameter=c['gaugeDiameterMM']
             if type(diameter) not in (int,float) or not math.isfinite(diameter) or not 10<=diameter<=100000:
@@ -109,6 +115,7 @@ def validar_piping(diseno):
         if c.get('outletEnd')=='vent45' and c['lengthMM']<=MEDIDAS[inlet_nps]['odMM']/2:
             raise ValueError('El largo del niple de venteo debe superar el radio exterior.')
         nps=c.get('teeRunNps',inlet_nps) if c['kind']=='tee' and c.get('teeEntry')=='branch' else inlet_nps
+        if c['kind']=='pipe' and c.get('pipeCurveDeg',0) and c['lengthMM']/(abs(c['pipeCurveDeg'])*math.pi/180)<=MEDIDAS[nps]['odMM']/2:raise ValueError('Radio de curvatura insuficiente.')
         if c['kind']=='tee' and (c.get('teeEntry','a') not in ('a','b','branch') or type(nps) not in (int,float) or nps not in MEDIDAS):raise ValueError('Entrada o medida principal de tee inválida.')
         rating=clase if extremo=='flanged' else c['rating']
         if c['kind']=='tee' and (inlet_nps if c.get('teeEntry')=='branch' else c['branchNps'])>nps:
@@ -127,7 +134,7 @@ def validar_piping(diseno):
         if c['kind'] not in ('cap','gauge') and c.get('outletEnd')!='vent45':puertos[c['id']+':out']=(salida,tipo_salida,c.get('outletRating',rating) if alivio else rating)
         if c['kind']=='tee':puertos[c['id']+':branch']=(nps if c.get('teeEntry')=='branch' else c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
         if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
-        if c['kind']=='tee' and puerto=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
+        if c['kind'] in ('tee','pipe') and puerto=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
         ids.add(c['id']);usados.add(puerto)
     validar_detalles(diseno)
     return diseno
@@ -171,7 +178,7 @@ def materiales_piping(diseno):
         if c['kind'] not in ('cap','gauge') and c.get('outletEnd')!='vent45':puertos[c['id']+':out']=(c['outNps'] if c['kind'] in ('reducer','sockolet','thredolet','latrolet','elbolet') or alivio else nps,tipo,c.get('outletRating',rating) if alivio else rating)
         if c['kind']=='tee':puertos[c['id']+':branch']=(nps if c.get('teeEntry')=='branch' else c['branchNps'],'flanged' if c.get('branchEnd')=='flanged' else 'plain',rating)
         if c['kind'] in ('pipe','elbow'):puertos[c['id']+':tap']=(nps,'run',rating)
-        if c['kind']=='tee' and c['parentPort']=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
+        if c['kind'] in ('tee','pipe') and c['parentPort']=='origin':puertos[c['id']+':in']=(inlet_nps,'plain',rating)
     output=list(rows.values())
     for repair in diseno.get('repairs',[]):
         host=next(c for c in diseno['components'] if c['id']==repair['hostId'])
