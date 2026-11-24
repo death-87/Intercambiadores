@@ -224,43 +224,52 @@ function drawThreadedRV(n,group){
 function drawFlangedGate(n,f,finish,group){
  const od=n.odMM,up=n.normal,side=norm(cross(n.axis,up));
  const seat=add(n.start,mul(n.axis,f.lengthMM));
- tube(seat,finish,od,group,valveMat);
- const body=mesh(new THREE.SphereGeometry(1,40,28),valveMat,group);
- body.name='Cuerpo fundido de compuerta';
- body.position.copy(v(n.center));
- body.quaternion.setFromUnitVectors(zaxis,v(n.axis));
- body.scale.set(od*.76,od*.93,Math.min(od*.95,Math.hypot(...sub(finish,seat))*.46));
+ const cast=new THREE.MeshStandardMaterial({color:0xadb2b6,metalness:.58,roughness:.48,side:THREE.DoubleSide});
+ const machined=new THREE.MeshStandardMaterial({color:0xc5cbd0,metalness:.67,roughness:.29});
  const at=h=>add(n.center,mul(up,h*od));
- cylinder(at(.43),at(.91),od*.62,valveMat,group,od*.67).name='Cuello del cuerpo';
- cylinder(at(.91),at(1.07),od*.78,valveMat,group).name='Unión apernada del bonete';
- cylinder(at(1.07),at(1.53),od*.64,valveMat,group,od*.35).name='Bonete de compuerta';
+ tube(seat,finish,od,group,cast);
+ const profile=[[0,-.79],[.32,-.77],[.56,-.63],[.72,-.38],[.78,-.03],[.73,.28],[.60,.51],[.58,.66],[0,.66]];
+ const body=mesh(new THREE.LatheGeometry(profile.map(([r,h])=>new THREE.Vector2(r*od,h*od)),48),cast,group);
+ body.name='Cuerpo de fundición de la compuerta';
+ body.position.copy(v(n.center));
+ body.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(v(n.axis),v(up),v(side)));
+ const halfRun=Math.hypot(...sub(finish,seat))/2;
+ body.scale.x=Math.min(1,halfRun/(od*.82));
+ cylinder(at(.60),at(.86),od*.84,cast,group).name='Brida del cuerpo';
+ cylinder(at(.86),at(.89),od*.824,nutMat,group).name='Junta cuerpo–bonete';
+ cylinder(at(.89),at(1.12),od*.84,machined,group).name='Brida del bonete';
+ cylinder(at(1.12),at(1.37),od*.60,cast,group,od*.37).name='Bonete de fundición';
  for(let i=0;i<8;i++){
-  const angle=i*Math.PI/4;
-  const offset=add(mul(n.axis,Math.cos(angle)*od*.69),mul(side,Math.sin(angle)*od*.69));
-  const bolt=mesh(new THREE.CylinderGeometry(od*.061,od*.061,od*.095,6),nutMat,group);
-  bolt.position.copy(v(add(at(1.085),offset)));
-  bolt.quaternion.setFromUnitVectors(yaxis,v(up));
+  const angle=(i+.5)*Math.PI/4;
+  const offset=add(mul(n.axis,Math.cos(angle)*od*.70),mul(side,Math.sin(angle)*od*.70));
+  const boltAt=h=>add(at(h),offset);
+  cylinder(boltAt(.49),boltAt(1.28),od*.042,machined,group).name='Espárrago del bonete';
+  for(const h of [.55,1.19]){
+   const nut=mesh(new THREE.CylinderGeometry(od*.083,od*.083,od*.12,6),machined,group);
+   nut.position.copy(v(boltAt(h)));
+   nut.quaternion.setFromUnitVectors(yaxis,v(up));
+   nut.name='Tuerca hexagonal del bonete';
+  }
  }
- cylinder(at(1.47),at(1.68),od*.33,valveMat,group).name='Prensaestopas';
+ cylinder(at(1.29),at(1.52),od*.31,cast,group).name='Alojamiento del prensaestopas';
+ cylinder(at(1.51),at(1.67),od*.27,machined,group).name='Prensaestopas';
  for(const sign of [-1,1]){
-  const foot=add(at(1.47),mul(side,sign*od*.34));
-  const shoulder=add(at(1.79),mul(side,sign*od*.48));
-  const crown=add(at(2.36),mul(side,sign*od*.37));
-  cylinder(foot,shoulder,od*.10,valveMat,group);
-  cylinder(shoulder,crown,od*.10,valveMat,group).name='Puente del vástago';
+  const point=(height,offset)=>v(add(at(height),mul(side,sign*offset*od)));
+  const curve=new THREE.CatmullRomCurve3([point(1.24,.32),point(1.58,.43),point(2.00,.41),point(2.39,.27)]);
+  mesh(new THREE.TubeGeometry(curve,24,od*.125,12,false),cast,group).name='Puente curvo del vástago';
  }
- cylinder(add(at(2.36),mul(side,-od*.37)),add(at(2.36),mul(side,od*.37)),od*.10,valveMat,group);
- cylinder(at(1.55),at(2.98),od*.073,flangeMat,group).name='Vástago ascendente';
- const handwheelCenter=at(2.67);
- const wheel=mesh(new THREE.TorusGeometry(od*.69,od*.057,12,56),nutMat,group);
- wheel.name='Volante de compuerta';
- wheel.position.copy(v(handwheelCenter));
+ cylinder(at(2.30),at(2.52),od*.29,cast,group).name='Cabezal del puente';
+ cylinder(at(1.49),at(2.93),od*.072,machined,group).name='Vástago ascendente';
+ const wheelCenter=at(2.69);
+ const wheel=mesh(new THREE.TorusGeometry(od*.87,od*.051,12,64),machined,group);
+ wheel.name='Volante metálico de tres radios';
+ wheel.position.copy(v(wheelCenter));
  wheel.quaternion.setFromUnitVectors(zaxis,v(up));
- cylinder(at(2.58),at(2.76),od*.17,nutMat,group).name='Cubo del volante';
- for(let i=0;i<4;i++){
-  const angle=i*Math.PI/2;
-  const direction=add(mul(n.axis,Math.cos(angle)),mul(side,Math.sin(angle)));
-  cylinder(handwheelCenter,add(handwheelCenter,mul(direction,od*.67)),od*.043,nutMat,group);
+ cylinder(at(2.53),at(2.79),od*.18,machined,group).name='Cubo del volante';
+ for(let i=0;i<3;i++){
+  const angle=i*2*Math.PI/3;
+  const radial=add(mul(n.axis,Math.cos(angle)),mul(side,Math.sin(angle)));
+  cylinder(add(at(2.58),mul(radial,od*.11)),add(wheelCenter,mul(radial,od*.86)),od*.050,machined,group);
  }
 }
 function drawValve(n,f,group){
