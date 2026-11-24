@@ -356,11 +356,78 @@ function drawPressureGauge(n,group){
  dial.position.copy(v(add(front,mul(face,radius*.009))));
  dial.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(v(norm(cross(n.axis,face))),v(n.axis),v(face)));
 }
+function drawFlangedPSV(n,inletFlange,finish,group){
+ const od=n.odMM,axis=n.axis,outlet=n.endAxis,side=norm(cross(axis,outlet));
+ const cast=new THREE.MeshStandardMaterial({color:0x66737b,metalness:.40,roughness:.62,side:THREE.DoubleSide});
+ const sealMaterial=new THREE.MeshStandardMaterial({color:0xb9472c,roughness:.62});
+ const at=h=>add(n.start,mul(axis,h));
+ const centerHeight=dot(sub(n.center,n.start),axis);
+ const available=n.length-centerHeight;
+ const base=centerHeight+available*.24;
+ const shoulder=centerHeight+available*.60;
+ const plateDepth=Math.min(od*.17,available*.075);
+ const boltHeight=Math.min(od*.095,plateDepth*.75);
+ const jointRotation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(v(outlet),v(side),v(axis)));
+ const inletSeat=at(inletFlange.lengthMM);
+ const outOD=item(catalog,n.endNps).odMM;
+ tube(inletSeat,n.center,od,group,cast);
+ tube(n.center,finish,outOD,group,cast);
+ const body=mesh(new THREE.SphereGeometry(1,40,28),cast,group);
+ body.name='Cuerpo fundido en ángulo de la PSV';
+ body.position.copy(v(n.center));
+ body.quaternion.copy(jointRotation);
+ body.scale.set(od*.96,od*.89,Math.min(od*.94,available*.24));
+ cylinder(n.center,at(base),od*.75,cast,group,od*.72).name='Cuello del cuerpo PSV';
+ function plateAt(height,radius,depth,material,name){
+  const corner=radius*.18;
+  const outline=new THREE.Shape();
+  const points=[[-radius+corner,-radius],[radius-corner,-radius],[radius,-radius+corner],[radius,radius-corner],[radius-corner,radius],[-radius+corner,radius],[-radius,radius-corner],[-radius,-radius+corner]];
+  outline.moveTo(...points[0]);
+  for(const point of points.slice(1))outline.lineTo(...point);
+  outline.closePath();
+  const geometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:false});
+  const part=mesh(geometry,material,group);
+  part.position.copy(v(at(height)));
+  part.quaternion.copy(jointRotation);
+  part.name=name;
+ }
+ const jointRadius=od*.87;
+ plateAt(base-plateDepth,jointRadius,plateDepth,cast,'Unión inferior del cuerpo PSV');
+ plateAt(base,jointRadius,plateDepth*.12,nutMat,'Junta cuerpo–bonete PSV');
+ plateAt(base+plateDepth*.12,jointRadius,plateDepth,cast,'Base del bonete PSV');
+ cylinder(at(base+plateDepth),at(shoulder),od*.62,cast,group,od*.59).name='Bonete cerrado de la PSV';
+ plateAt(shoulder,od*.81,plateDepth,cast,'Placa superior apernada PSV');
+ for(const [height,offset] of [[base+plateDepth*1.12,od*.64],[shoulder+plateDepth,od*.60]]){
+  for(const x of [-1,1])for(const y of [-1,1]){
+   const point=add(add(at(height+boltHeight/2),mul(outlet,x*offset)),mul(side,y*offset));
+   const bolt=mesh(new THREE.CylinderGeometry(od*.078,od*.078,boltHeight,6),flangeMat,group);
+   bolt.position.copy(v(point));
+   bolt.quaternion.setFromUnitVectors(yaxis,v(axis));
+   bolt.name='Perno hexagonal del bonete PSV';
+  }
+ }
+ const capBase=shoulder+plateDepth;
+ const capRadius=od*.43,capHeight=n.length-capBase;
+ const crown=Math.min(capRadius*.55,capHeight*.25);
+ const capProfile=[[0,0],[capRadius,0],[capRadius,capHeight-crown],[capRadius*.94,capHeight-crown*.50],[capRadius*.73,capHeight-crown*.18],[capRadius*.35,capHeight],[0,capHeight]];
+ const cover=mesh(new THREE.LatheGeometry(capProfile.map(([r,h])=>new THREE.Vector2(r,h)),48),cast,group);
+ cover.position.copy(v(at(capBase)));
+ cover.quaternion.setFromUnitVectors(yaxis,v(axis));
+ cover.name='Tapa cilíndrica cerrada PSV';
+ const eye=add(at(shoulder+plateDepth*.50),mul(outlet,-od*.84));
+ const sealEnd=add(add(eye,mul(outlet,-od*.31)),mul(axis,-od*.29));
+ cylinder(eye,sealEnd,od*.018,nutMat,group).name='Alambre del precinto PSV';
+ const seal=mesh(new THREE.BoxGeometry(od*.10,od*.42,od*.065),sealMaterial,group);
+ seal.position.copy(v(sealEnd));
+ seal.quaternion.setFromUnitVectors(yaxis,v(norm(sub(sealEnd,eye))));
+ seal.name='Precinto de seguridad PSV';
+}
 function drawValve(n,f,group){
  if(n.valveType==='rv'&&n.valveConnection==='threaded'){drawThreadedRV(n,group);return;}
  const threaded=n.valveConnection==='threaded';if(threaded)f={...f,lengthMM:n.odMM*.4};
  if(threaded)drawThread(n.start,n.axis,n.odMM,group,true);else drawFlange(add(n.start,mul(n.axis,f.lengthMM)),mul(n.axis,-1),f,group);
  const out=threaded?{...f,lengthMM:item(catalog,n.endNps).odMM*.4}:isRelief(n)?{...n.outletFlange,rating:n.endRating}:f,finish=sub(n.end,mul(n.endAxis,out.lengthMM));if(threaded)drawThread(n.end,mul(n.endAxis,-1),item(catalog,n.endNps).odMM,group,true);else drawFlange(finish,n.endAxis,out,group);
+ if(n.valveType==='psv'&&!threaded){drawFlangedPSV(n,f,finish,group);return;}
  if(isRelief(n)){
   tube(add(n.start,mul(n.axis,f.lengthMM)),n.center,n.odMM,group,valveMat);tube(n.center,finish,item(catalog,n.endNps).odMM,group,valveMat);
   const body=mesh(new THREE.SphereGeometry(n.odMM*.9,32,24),valveMat,group);body.position.copy(v(n.center));
