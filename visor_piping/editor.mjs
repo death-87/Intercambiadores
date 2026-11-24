@@ -769,11 +769,41 @@ function flushProject(){
  validateDesign(design,catalog);
 }
 async function refreshProjects(){const projects=await listLocal();$('project-list').replaceChildren(...projects.map(p=>new Option(p.name+' · '+new Date(p.updatedAt).toLocaleString('es-CL'),p.name)));$('project-load-local').disabled=!projects.length;}
-async function openProjectDialog(){try{$('project-name').value=design.title;$('project-save-cloud').disabled=!serverArgs.project_cloud_ready;$('project-location').textContent=serverArgs.project_cloud_ready?'Cada guardado en R2 crea una copia privada. Para abrirla, usa Mis diseños arriba del editor.':'Descarga el JSON para conservar el diseño.';$('project-status').textContent='';$('project-dialog').showModal();}catch(error){status(error.message,true);}}
+function syncCloudButtons(){
+ const target=serverArgs.project_target;
+ const canOverwrite=serverArgs.project_cloud_ready&&target?.designId===design.id;
+ $('project-save-cloud').disabled=!serverArgs.project_cloud_ready||!!pendingCloud;
+ $('project-overwrite').hidden=!canOverwrite;
+ $('project-overwrite').disabled=!canOverwrite||!!pendingCloud;
+ $('project-location').textContent=canOverwrite?'Archivo abierto: '+target.name+'. Puedes actualizarlo o guardar una copia.':'Para actualizar un archivo existente, ábrelo desde Mis diseños.';
+}
+function openProjectDialog(){
+ $('project-name').value=design.title;
+ syncCloudButtons();
+ $('project-status').textContent='';
+ $('project-dialog').showModal();
+}
 $('project-save').onclick=openProjectDialog;$('project-open').onclick=openProjectDialog;$('project-close').onclick=()=>$('project-dialog').close();
 $('project-save-local').onclick=async()=>{try{flushProject();const name=$('project-name').value.trim();if(!name)throw Error('Escribe un nombre para el proyecto.');if(!mutate(d=>{d.title=name;}))return;$('project-status').textContent='Guardando copia completa…';await saveLocal(name,design);lastBackupAt=new Date().toLocaleString('es-CL');await refreshProjects();$('project-status').textContent='Guardado: '+name+'. Puedes abrirlo desde Mis proyectos en este navegador.';$('backup-info').textContent='Proyecto '+name+' guardado en este navegador el '+new Date().toLocaleString('es-CL')+'. Para otro computador usa R2.';}catch(error){$('project-status').textContent=error.message;}};
 $('project-load-local').onclick=async()=>{try{const projects=await listLocal(),project=projects.find(p=>p.name===$('project-list').value);if(!project)return;selected=null;setDesign(structuredClone(project.design),true,true);defaults();refresh();$('project-dialog').close();status('Proyecto abierto: '+project.name);}catch(error){$('project-status').textContent=error.message;}};
-$('project-save-cloud').onclick=()=>{try{flushProject();const name=$('project-name').value.trim();if(!name)throw Error('Escribe un nombre para el proyecto.');if(!mutate(d=>{d.title=name;}))return;const eventId=uid();pendingCloud={eventId,snapshot:JSON.stringify(design)};notify('save_project',{eventId,projectName:name});$('project-status').textContent='Guardando y verificando en R2…';}catch(error){$('project-status').textContent=error.message;}};
+function saveCloud(overwrite){
+ try{
+  if(!serverArgs.project_cloud_ready||pendingCloud)return;
+  flushProject();
+  const target=serverArgs.project_target;
+  if(overwrite&&target?.designId!==design.id)throw Error('Abre el archivo desde Mis diseños antes de sobrescribirlo.');
+  const name=overwrite?target.name:$('project-name').value.trim();
+  if(!name)throw Error('Escribe un nombre para el proyecto.');
+  if(!overwrite&&!mutate(d=>{d.title=name;}))return;
+  const eventId=uid();
+  pendingCloud={eventId,snapshot:JSON.stringify(design)};
+  syncCloudButtons();
+  notify('save_project',{eventId,projectName:name,overwrite});
+  $('project-status').textContent=overwrite?'Actualizando archivo en R2…':'Guardando copia en R2…';
+ }catch(error){$('project-status').textContent=error.message;}
+}
+$('project-save-cloud').onclick=()=>saveCloud(false);
+$('project-overwrite').onclick=()=>saveCloud(true);
 $('save').onclick=guard(()=>{if(detailTimer){clearTimeout(detailTimer);detailTimer=null;if(updateRepair()===false||updateAnnotation()===false)throw Error('Corrige los datos de la reparación o marca antes de guardar.');}
  if(updateSelected()===false)throw Error('Corrige los valores del componente antes de guardar el proyecto.');
  if(equipmentTimer){clearTimeout(equipmentTimer);equipmentTimer=null;if(['equipment-x','equipment-y','equipment-z','equipment-rotation'].some(id=>$(id).value.trim()===''))throw Error('Completa la posición del equipo antes de guardar.');if($('equipment-apply').onclick()===false)throw Error('Revisa la posición del equipo antes de guardar.');}
@@ -787,7 +817,7 @@ $('labels').onclick=()=>{labelsVisible=!labelsVisible;labelsGroup.visible=labels
 $('png').onclick=guard(async()=>{const data=await capture();const a=document.createElement('a');a.href=data;a.download=filename()+'.png';a.click();});
 $('pdf').onclick=guard(async()=>{if(!design.components.length&&!(design.equipments||[]).length)throw Error('Agrega componentes o equipos antes de exportar.');status('Preparando isométrico y materiales…');notify('export_pdf',{image:await capture()});status('Captura lista. Descarga el PDF debajo del editor.');});
 window.addEventListener('message',e=>{if(e.data.type!=='streamlit:render')return;serverArgs=e.data.args||{};for(const id of ['png','pdf','project-save'])$(id).style.display=serverArgs.owner_exports?'':'none';$('project-open').style.display='none';const initialize=!loaded||loadToken!==serverArgs.load_token;loadToken=serverArgs.load_token;loaded=true;
- try{if(serverArgs.project_ack&&serverArgs.project_ack.eventId!==lastProjectAck){const ack=serverArgs.project_ack;lastProjectAck=ack.eventId;if(ack.ok&&pendingCloud?.eventId===ack.eventId){const dirty=pendingCloud&&JSON.stringify(design)!==pendingCloud.snapshot;design.cloudProject=ack.project;if(!dirty)lastBackupAt=new Date().toLocaleString('es-CL');$('project-status').textContent='Guardado y verificado en R2: '+ack.project.name+(dirty?'. Hay cambios posteriores pendientes.':'.');$('backup-info').textContent=$('project-status').textContent;}else if(!ack.ok)$('project-status').textContent='No se pudo confirmar el guardado: '+ack.error;pendingCloud=null;}if(initialize){let initial=serverArgs.initial_data||blankDesign();if(!serverArgs.imported&&!serverArgs.owner_exports){try{const saved=JSON.parse(localStorage.getItem(STORAGE));if(saved?.version===1&&(!initial.components.length||saved.updatedAt>initial.updatedAt))initial=saved;}catch{}}
+ try{if(serverArgs.project_ack&&serverArgs.project_ack.eventId!==lastProjectAck){const ack=serverArgs.project_ack;lastProjectAck=ack.eventId;if(ack.ok&&pendingCloud?.eventId===ack.eventId){const dirty=pendingCloud&&JSON.stringify(design)!==pendingCloud.snapshot;if(!dirty)lastBackupAt=new Date().toLocaleString('es-CL');$('project-status').textContent=(ack.overwrite?'Archivo actualizado en R2: ':'Copia guardada en R2: ')+ack.project.name+(dirty?'. Hay cambios posteriores pendientes.':'.');$('backup-info').textContent=$('project-status').textContent;}else if(!ack.ok)$('project-status').textContent='No se pudo confirmar el guardado: '+ack.error;pendingCloud=null;syncCloudButtons();}if(initialize){if($('project-dialog').open)$('project-dialog').close();pendingCloud=null;let initial=serverArgs.initial_data||blankDesign();if(!serverArgs.imported&&!serverArgs.owner_exports){try{const saved=JSON.parse(localStorage.getItem(STORAGE));if(saved?.version===1&&(!initial.components.length||saved.updatedAt>initial.updatedAt))initial=saved;}catch{}}
  validateDesign(initial,catalog);for(const e of initial.equipments||[])validateAsset(e.asset);design=structuredClone(initial);result=compute(design,catalog);activePort=result.freePorts.at(-1)?.id||'';selected=null;renderModel();fit('iso');refresh();$('nps').value=2;defaults();notify();status(serverArgs.owner_exports?'Diseño listo. Guarda una copia en R2 o descarga el JSON.':'Diseño listo. Descarga el JSON para conservar una copia.');}
  if(serverArgs.equipment_import&&serverArgs.equipment_import_token!==design.equipmentImportToken){const token=serverArgs.equipment_import_token,e=serverArgs.equipment_import;const ok=mutate(d=>{d.equipments ||= [];const i=d.equipments.findIndex(old=>old.id===e.id);if(i>=0)d.equipments[i]={...e,position:d.equipments[i].position,rotationDeg:d.equipments[i].rotationDeg};else d.equipments.push(e);d.equipmentImportToken=token;});if(ok){notify('equipment_applied',{equipmentApplied:token});status('Equipo incorporado. Elige una boquilla para continuar el piping.');}else notify('equipment_error',{equipmentApplied:token});}
  else if(serverArgs.equipment_import_token&&serverArgs.equipment_import_token===design.equipmentImportToken)notify('equipment_applied',{equipmentApplied:design.equipmentImportToken});
