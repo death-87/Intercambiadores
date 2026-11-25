@@ -47,6 +47,67 @@ class PipingTests(unittest.TestCase):
         self.assertEqual(MEDIDAS[2]['flanges']['300#']['boltCount'],8)
         self.assertEqual(set(MEDIDAS[2]['flanges']),{'150#','300#','600#'})
 
+    def test_accesorios_asme(self):
+        component = self.design['components'][0]
+        component.update(nps=2, outNps=1, lengthMM=65)
+        for kind, standard in (
+            ('elbow', 'B16.9'), ('reducer', 'B16.9'), ('flangeSW', 'B16.5'),
+            ('couplingSW', 'B16.11'), ('halfCouplingSW', 'B16.11'),
+            ('couplingNPT', 'B16.11'), ('halfCouplingNPT', 'B16.11'),
+        ):
+            with self.subTest(kind=kind):
+                component.update(kind=kind, longRadius=kind == 'elbow')
+                self.design['components'] = [component]
+                script = """
+                    import fs from 'node:fs';
+                    import {compute, materialRows} from './visor_piping/model.mjs';
+                    const catalog = JSON.parse(fs.readFileSync('visor_piping/catalogo.json'));
+                    const design = JSON.parse(fs.readFileSync(0));
+                    const model = compute(design, catalog);
+                    console.log(JSON.stringify({
+                        rows: materialRows(model, catalog),
+                        length: model.nodes[0].length,
+                        endType: model.nodes[0].endType,
+                    }));
+                """
+                result = json.loads(subprocess.check_output(
+                    ['node', '--input-type=module', '-e', script],
+                    input=json.dumps(self.design), text=True, cwd=ROOT,
+                ))
+                self.assertEqual(materiales_piping(self.design), result['rows'])
+                self.assertIn(standard, result['rows'][0]['description'])
+                if kind == 'elbow':
+                    self.assertAlmostEqual(result['length'], 76.2 * 3.141592653589793 / 2)
+                if kind.endswith('NPT'):
+                    self.assertEqual(result['endType'], 'threaded' if kind == 'couplingNPT' else 'plain')
+
+    def test_derivaciones_de_catalogo(self):
+        host, fitting = self.design['components'][:2]
+        host.update(nps=2, lengthMM=500, outletEnd='welded')
+        fitting.update(parentPort=host['id'] + ':tap', outNps=0.5, kind='weldolet', tapOffsetMM=250)
+        self.design['components'] = [host, fitting]
+        script = """
+            import fs from 'node:fs';
+            import {compute, materialRows} from './visor_piping/model.mjs';
+            const catalog = JSON.parse(fs.readFileSync('visor_piping/catalogo.json'));
+            const design = JSON.parse(fs.readFileSync(0));
+            const model = compute(design, catalog);
+            console.log(JSON.stringify({length: model.nodes[1].length, rows: materialRows(model, catalog)}));
+        """
+        for kind, height in [('weldolet', 19.05), ('elbolet', 40.48125)]:
+            if kind == 'elbolet':
+                host.update(kind='elbow', bendAngle=90, longRadius=True)
+                fitting.update(kind=kind, tapOffsetMM=0, catalogElbolet=True)
+            result = json.loads(subprocess.check_output(
+                ['node', '--input-type=module', '-e', script],
+                input=json.dumps(self.design), text=True, cwd=ROOT,
+            ))
+            self.assertAlmostEqual(result['length'], height)
+            self.assertEqual(materiales_piping(self.design), result['rows'])
+        host['bendAngle'] = 45
+        with self.assertRaisesRegex(ValueError, 'LR de 90'):
+            validar_piping(self.design)
+
     def test_materiales_incluyen_contrapartes(self):
         rows=materiales_piping(self.design)
         self.assertEqual(sum(r['quantity'] for r in rows if r['description']=='Brida WN'),5)
