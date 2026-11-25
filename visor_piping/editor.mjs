@@ -5,7 +5,7 @@ import {drawPoncho as drawPonchoGeometry} from './poncho_view.mjs';
 import {reducerSection} from './reducer_profile.mjs';
 import {pipeFrame,pipeDistance} from './pipe_path.mjs';
 import {splitPipe,removeWeld} from './split_pipe.mjs';
-import {DEFAULT_PATCH_COLOR,REPAIRS,componentCoordinates,removeDetails} from './details.mjs';
+import {DEFAULT_REPAIR_COLOR,REPAIRS,componentCoordinates,removeDetails} from './details.mjs';
 import {drawRepairs,createAnnotations,arrangeAnnotations} from './details_view.mjs';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
@@ -763,9 +763,9 @@ function refreshDetailUI(){const weldId=$('weld-list').value,welds=design.compon
  if(!(design.repairs||[]).some(r=>r.id===selectedRepairId))selectedRepairId=null;if(!(design.annotations||[]).some(a=>a.id===selectedAnnotationId))selectedAnnotationId=null;
  $('repair-list').replaceChildren(...(design.repairs||[]).map(r=>new Option(r.tag+' · '+REPAIRS[r.type],r.id)));$('repair-list').value=selectedRepairId||'';
  $('annotation-list').replaceChildren(...(design.annotations||[]).map(a=>new Option(a.number+' · '+a.text.slice(0,55),a.id)));$('annotation-list').value=selectedAnnotationId||'';
- $('repair-delete').disabled=!selectedRepairId;$('annotation-delete').disabled=!selectedAnnotationId;$('repair-add').disabled=!$('repair-host').value;$('repair-coverage').disabled=$('repair-type').value==='type_b';$('repair-color-row').hidden=$('repair-type').value!=='patch';
+ $('repair-delete').disabled=!selectedRepairId;$('annotation-delete').disabled=!selectedAnnotationId;$('repair-add').disabled=!$('repair-host').value;$('repair-coverage').disabled=$('repair-type').value==='type_b';
 }
-function repairForm(id){return {id,hostId:$('repair-host').value,type:$('repair-type').value,tag:$('repair-tag').value.trim()||'REP'+String((design.repairs||[]).length+1).padStart(2,'0'),comment:$('repair-comment').value,startMM:Number($('repair-start').value),lengthMM:Number($('repair-length').value),thicknessMM:Number($('repair-thickness').value),coverageDeg:Number($('repair-coverage').value),rollDeg:Number($('repair-roll').value),...($('repair-type').value==='patch'?{color:$('repair-color').value}:{})};}
+function repairForm(id){return {id,hostId:$('repair-host').value,type:$('repair-type').value,tag:$('repair-tag').value.trim()||'REP'+String((design.repairs||[]).length+1).padStart(2,'0'),comment:$('repair-comment').value,startMM:Number($('repair-start').value),lengthMM:Number($('repair-length').value),thicknessMM:Number($('repair-thickness').value),coverageDeg:Number($('repair-coverage').value),rollDeg:Number($('repair-roll').value),color:$('repair-color').value};}
 function annotationFields(){return {number:$('annotation-number').value,text:$('annotation-text').value,color:$('annotation-color').value,style:$('annotation-style').value,offsetX:Number($('annotation-x').value),offsetY:Number($('annotation-y').value)};}
 function placeAnnotation(ray){
  const hits=ray.intersectObjects(model.children,true);if(!hits.length){status('Elige un punto sobre el piping o un equipo.',true);return;}const hit=hits[0];let object=hit.object;while(object&&!object.userData.id&&!object.userData.equipmentId&&!object.userData.componentId)object=object.parent;if(!object)return;
@@ -775,9 +775,9 @@ function placeAnnotation(ray){
 }
 function updateRepair(){if(!selectedRepairId)return true;const id=selectedRepairId;return mutate(d=>{const index=(d.repairs||[]).findIndex(r=>r.id===id);if(index>=0)d.repairs[index]=repairForm(id);});}
 function updateAnnotation(){if(!selectedAnnotationId)return true;return mutate(d=>{const a=(d.annotations||[]).find(a=>a.id===selectedAnnotationId);if(a)Object.assign(a,annotationFields());});}
-$('repair-new').onclick=()=>{selectedRepairId=null;$('repair-color').value=DEFAULT_PATCH_COLOR;$('repair-tag').value='REP'+String((design.repairs||[]).length+1).padStart(2,'0');$('repair-comment').value='';const host=result.nodes.find(n=>n.id===$('repair-host').value);$('repair-start').value=0;if(host)$('repair-length').value=Math.min(200,host.length);refreshDetailUI();};
+$('repair-new').onclick=()=>{selectedRepairId=null;$('repair-color').value=DEFAULT_REPAIR_COLOR;$('repair-tag').value='REP'+String((design.repairs||[]).length+1).padStart(2,'0');$('repair-comment').value='';const host=result.nodes.find(n=>n.id===$('repair-host').value);$('repair-start').value=0;if(host)$('repair-length').value=Math.min(200,host.length);refreshDetailUI();};
 $('repair-add').onclick=()=>{selected=null;selectedEquipmentId=null;const id='r'+uid().slice(0,24);selectedRepairId=id;mutate(d=>{d.repairs||=[];d.repairs.push(repairForm(id));});};
-$('repair-list').onchange=()=>{selected=null;selectedEquipmentId=null;selectedRepairId=$('repair-list').value;const r=(design.repairs||[]).find(r=>r.id===selectedRepairId);if(!r)return;for(const [id,key] of [['repair-host','hostId'],['repair-type','type'],['repair-tag','tag'],['repair-start','startMM'],['repair-length','lengthMM'],['repair-thickness','thicknessMM'],['repair-roll','rollDeg'],['repair-coverage','coverageDeg'],['repair-comment','comment']])$(id).value=r[key];$('repair-color').value=r.color||DEFAULT_PATCH_COLOR;refresh();highlight();};
+$('repair-list').onchange=()=>{selected=null;selectedEquipmentId=null;selectedRepairId=$('repair-list').value;const r=(design.repairs||[]).find(r=>r.id===selectedRepairId);if(!r)return;for(const [id,key] of [['repair-host','hostId'],['repair-type','type'],['repair-tag','tag'],['repair-start','startMM'],['repair-length','lengthMM'],['repair-thickness','thicknessMM'],['repair-roll','rollDeg'],['repair-coverage','coverageDeg'],['repair-comment','comment']])$(id).value=r[key];$('repair-color').value=r.color||DEFAULT_REPAIR_COLOR;refresh();highlight();};
 $('repair-delete').onclick=()=>{mutate(d=>{d.repairs=d.repairs.filter(r=>r.id!==selectedRepairId);});};
 $('repair-host').onchange=()=>{const n=result.nodes.find(n=>n.id===$('repair-host').value);if(n&&!selectedRepairId){$('repair-start').value=0;$('repair-length').value=Math.min(200,n.length);}updateRepair();};
 for(const id of ['repair-type','repair-color','repair-tag','repair-start','repair-length','repair-thickness','repair-roll','repair-coverage','repair-comment']){$(id).addEventListener('input',()=>{clearTimeout(detailTimer);detailTimer=setTimeout(updateRepair,160);});$(id).addEventListener('change',()=>{clearTimeout(detailTimer);updateRepair();refreshDetailUI();});}
