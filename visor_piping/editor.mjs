@@ -5,7 +5,7 @@ import {drawPoncho as drawPonchoGeometry} from './poncho_view.mjs';
 import {reducerSection} from './reducer_profile.mjs';
 import {pipeFrame,pipeDistance} from './pipe_path.mjs';
 import {splitPipe,removeWeld} from './split_pipe.mjs';
-import {REPAIRS,componentCoordinates,removeDetails} from './details.mjs';
+import {DEFAULT_PATCH_COLOR,REPAIRS,componentCoordinates,removeDetails} from './details.mjs';
 import {drawRepairs,createAnnotations,arrangeAnnotations} from './details_view.mjs';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
@@ -17,6 +17,16 @@ import {sortComponents} from './equipment.mjs';
 import {loadAsset,validateAsset} from './assets.mjs';
 const kindValue=()=>['reducer-concentric','reducer-eccentric'].includes(document.getElementById('kind').value)?'reducer':document.getElementById('kind').value;
 const $=id=>document.getElementById(id),catalog=await fetch('./catalogo.json').then(r=>r.json());
+const sectionPreferenceKey='jndigital.piping.sections.v1';
+let sectionPreferences={};
+try{sectionPreferences=JSON.parse(localStorage.getItem(sectionPreferenceKey))||{};}catch{}
+for(const section of document.querySelectorAll('details.control-section')){
+ if(typeof sectionPreferences[section.id]==='boolean')section.open=sectionPreferences[section.id];
+ section.addEventListener('toggle',()=>{
+  sectionPreferences[section.id]=section.open;
+  try{localStorage.setItem(sectionPreferenceKey,JSON.stringify(sectionPreferences));}catch{}
+ });
+}
 const uid=()=>((globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replaceAll('-',''));
 let selectedExternalId=null,externalFormObject=null;
 let selectedRepairId=null,selectedAnnotationId=null,marking=false,weldMode=false,detailTimer=null;
@@ -735,7 +745,7 @@ canvas.addEventListener('pointerup',event=>{
  if(hit.object.userData.portId){continueFrom(hit.object.userData.portId);return;}
  let part=hit.object;
  while(part&&!part.userData.id&&!part.userData.equipmentId&&!part.userData.repairId)part=part.parent;
- if(part?.userData.repairId){$('repair-list').value=part.userData.repairId;$('repair-list').onchange();status('Reparación seleccionada. Sus cambios se actualizan automáticamente.');}
+ if(part?.userData.repairId){$('section-repairs').open=true;$('repair-list').value=part.userData.repairId;$('repair-list').onchange();status('Reparación seleccionada. Sus cambios se actualizan automáticamente.');}
  else if(part?.userData.id)selectNode(part.userData.id);
  else if(part?.userData.equipmentId)selectEquipment(part.userData.equipmentId);
 });
@@ -753,9 +763,9 @@ function refreshDetailUI(){const weldId=$('weld-list').value,welds=design.compon
  if(!(design.repairs||[]).some(r=>r.id===selectedRepairId))selectedRepairId=null;if(!(design.annotations||[]).some(a=>a.id===selectedAnnotationId))selectedAnnotationId=null;
  $('repair-list').replaceChildren(...(design.repairs||[]).map(r=>new Option(r.tag+' · '+REPAIRS[r.type],r.id)));$('repair-list').value=selectedRepairId||'';
  $('annotation-list').replaceChildren(...(design.annotations||[]).map(a=>new Option(a.number+' · '+a.text.slice(0,55),a.id)));$('annotation-list').value=selectedAnnotationId||'';
- $('repair-delete').disabled=!selectedRepairId;$('annotation-delete').disabled=!selectedAnnotationId;$('repair-add').disabled=!$('repair-host').value;$('repair-coverage').disabled=$('repair-type').value==='type_b';
+ $('repair-delete').disabled=!selectedRepairId;$('annotation-delete').disabled=!selectedAnnotationId;$('repair-add').disabled=!$('repair-host').value;$('repair-coverage').disabled=$('repair-type').value==='type_b';$('repair-color-row').hidden=$('repair-type').value!=='patch';
 }
-function repairForm(id){return {id,hostId:$('repair-host').value,type:$('repair-type').value,tag:$('repair-tag').value.trim()||'REP'+String((design.repairs||[]).length+1).padStart(2,'0'),comment:$('repair-comment').value,startMM:Number($('repair-start').value),lengthMM:Number($('repair-length').value),thicknessMM:Number($('repair-thickness').value),coverageDeg:Number($('repair-coverage').value),rollDeg:Number($('repair-roll').value)};}
+function repairForm(id){return {id,hostId:$('repair-host').value,type:$('repair-type').value,tag:$('repair-tag').value.trim()||'REP'+String((design.repairs||[]).length+1).padStart(2,'0'),comment:$('repair-comment').value,startMM:Number($('repair-start').value),lengthMM:Number($('repair-length').value),thicknessMM:Number($('repair-thickness').value),coverageDeg:Number($('repair-coverage').value),rollDeg:Number($('repair-roll').value),...($('repair-type').value==='patch'?{color:$('repair-color').value}:{})};}
 function annotationFields(){return {number:$('annotation-number').value,text:$('annotation-text').value,color:$('annotation-color').value,style:$('annotation-style').value,offsetX:Number($('annotation-x').value),offsetY:Number($('annotation-y').value)};}
 function placeAnnotation(ray){
  const hits=ray.intersectObjects(model.children,true);if(!hits.length){status('Elige un punto sobre el piping o un equipo.',true);return;}const hit=hits[0];let object=hit.object;while(object&&!object.userData.id&&!object.userData.equipmentId&&!object.userData.componentId)object=object.parent;if(!object)return;
@@ -765,12 +775,12 @@ function placeAnnotation(ray){
 }
 function updateRepair(){if(!selectedRepairId)return true;const id=selectedRepairId;return mutate(d=>{const index=(d.repairs||[]).findIndex(r=>r.id===id);if(index>=0)d.repairs[index]=repairForm(id);});}
 function updateAnnotation(){if(!selectedAnnotationId)return true;return mutate(d=>{const a=(d.annotations||[]).find(a=>a.id===selectedAnnotationId);if(a)Object.assign(a,annotationFields());});}
-$('repair-new').onclick=()=>{selectedRepairId=null;$('repair-tag').value='REP'+String((design.repairs||[]).length+1).padStart(2,'0');$('repair-comment').value='';const host=result.nodes.find(n=>n.id===$('repair-host').value);$('repair-start').value=0;if(host)$('repair-length').value=Math.min(200,host.length);refreshDetailUI();};
+$('repair-new').onclick=()=>{selectedRepairId=null;$('repair-color').value=DEFAULT_PATCH_COLOR;$('repair-tag').value='REP'+String((design.repairs||[]).length+1).padStart(2,'0');$('repair-comment').value='';const host=result.nodes.find(n=>n.id===$('repair-host').value);$('repair-start').value=0;if(host)$('repair-length').value=Math.min(200,host.length);refreshDetailUI();};
 $('repair-add').onclick=()=>{selected=null;selectedEquipmentId=null;const id='r'+uid().slice(0,24);selectedRepairId=id;mutate(d=>{d.repairs||=[];d.repairs.push(repairForm(id));});};
-$('repair-list').onchange=()=>{selected=null;selectedEquipmentId=null;selectedRepairId=$('repair-list').value;const r=(design.repairs||[]).find(r=>r.id===selectedRepairId);if(!r)return;for(const [id,key] of [['repair-host','hostId'],['repair-type','type'],['repair-tag','tag'],['repair-start','startMM'],['repair-length','lengthMM'],['repair-thickness','thicknessMM'],['repair-roll','rollDeg'],['repair-coverage','coverageDeg'],['repair-comment','comment']])$(id).value=r[key];refresh();highlight();};
+$('repair-list').onchange=()=>{selected=null;selectedEquipmentId=null;selectedRepairId=$('repair-list').value;const r=(design.repairs||[]).find(r=>r.id===selectedRepairId);if(!r)return;for(const [id,key] of [['repair-host','hostId'],['repair-type','type'],['repair-tag','tag'],['repair-start','startMM'],['repair-length','lengthMM'],['repair-thickness','thicknessMM'],['repair-roll','rollDeg'],['repair-coverage','coverageDeg'],['repair-comment','comment']])$(id).value=r[key];$('repair-color').value=r.color||DEFAULT_PATCH_COLOR;refresh();highlight();};
 $('repair-delete').onclick=()=>{mutate(d=>{d.repairs=d.repairs.filter(r=>r.id!==selectedRepairId);});};
 $('repair-host').onchange=()=>{const n=result.nodes.find(n=>n.id===$('repair-host').value);if(n&&!selectedRepairId){$('repair-start').value=0;$('repair-length').value=Math.min(200,n.length);}updateRepair();};
-for(const id of ['repair-type','repair-tag','repair-start','repair-length','repair-thickness','repair-roll','repair-coverage','repair-comment']){$(id).addEventListener('input',()=>{clearTimeout(detailTimer);detailTimer=setTimeout(updateRepair,160);});$(id).addEventListener('change',()=>{clearTimeout(detailTimer);updateRepair();refreshDetailUI();});}
+for(const id of ['repair-type','repair-color','repair-tag','repair-start','repair-length','repair-thickness','repair-roll','repair-coverage','repair-comment']){$(id).addEventListener('input',()=>{clearTimeout(detailTimer);detailTimer=setTimeout(updateRepair,160);});$(id).addEventListener('change',()=>{clearTimeout(detailTimer);updateRepair();refreshDetailUI();});}
 $('annotation-place').onclick=()=>{setWeldMode(false);if(selectedAnnotationId){const n=Number($('annotation-number').value);if(Number.isFinite(n))$('annotation-number').value=n+1;}selectedAnnotationId=null;marking=!marking;renderer.domElement.style.cursor=marking?'crosshair':'';$('annotation-place').textContent=marking?'Cancelar elección de punto':'Elegir punto para nueva marca';refreshDetailUI();status(marking?'Haz clic sobre el punto del dibujo que quieres señalar.':'Marcado cancelado.');};
 $('annotation-list').onchange=()=>{selectedAnnotationId=$('annotation-list').value;const a=(design.annotations||[]).find(a=>a.id===selectedAnnotationId);if(!a)return;for(const [id,key] of [['annotation-number','number'],['annotation-text','text'],['annotation-style','style'],['annotation-color','color'],['annotation-x','offsetX'],['annotation-y','offsetY']])$(id).value=a[key];refreshDetailUI();};
 $('annotation-delete').onclick=()=>mutate(d=>{d.annotations=d.annotations.filter(a=>a.id!==selectedAnnotationId);});

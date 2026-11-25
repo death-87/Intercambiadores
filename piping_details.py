@@ -22,6 +22,8 @@ def validar_detalles(design):
                 if not host or host['kind']!='pipe' or value.get('type') not in REPAIRS or not text(value.get('tag'),40) or not text(value.get('comment'),500):raise ValueError('La reparación requiere un tramo recto.')
                 for field,low,high in (('startMM',0,100000),('lengthMM',10,100000),('thicknessMM',.5,100),('coverageDeg',10,300),('rollDeg',-3600,3600)):
                     if not numeric(value.get(field),low,high):raise ValueError('Dimensión de reparación inválida: '+field)
+                if 'color' in value and (not isinstance(value['color'], str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', value['color'])):
+                    raise ValueError('Color de parche inválido.')
                 if value['startMM']+value['lengthMM']>host['lengthMM']+.001:raise ValueError('La reparación debe quedar dentro del tramo.')
             else:
                 if value.get('hostType') not in ('component','equipment') or value.get('hostId') not in (components if value['hostType']=='component' else equipment) or not text(value.get('number'),20) or not text(value.get('text'),500) or value.get('style') not in ('both','arrow','circle') or value.get('color') not in COLORS:raise ValueError('Marca o punto de referencia inválido.')
