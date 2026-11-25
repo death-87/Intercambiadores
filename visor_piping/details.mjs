@@ -1,7 +1,7 @@
 import {pipeFrame,pipeDistance} from './pipe_path.mjs';
 const add=(a,b)=>a.map((x,i)=>x+b[i]),mul=(a,k)=>a.map(x=>x*k),dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export const REPAIRS={type_b:'Camisa Tipo B · soldada',patch:'Parche soldado'};
-export const DEFAULT_PATCH_COLOR='#c48c32';
+export const DEFAULT_REPAIR_COLOR='#c48c32';
 export const COLORS=['#c74336','#276caa','#16846a','#d28a24'];
 export function validateDetails(d){
  const components=new Map(d.components.filter(c=>c&&typeof c.id==='string').map(c=>[c.id,c])),equipment=new Set((d.equipments||[]).map(e=>e.id));
@@ -11,7 +11,7 @@ export function validateDetails(d){
    if(key==='repairs'){
     const host=components.get(x.hostId);if(!host||host.kind!=='pipe'||!Object.hasOwn(REPAIRS,x.type)||!text(x.tag,40)||!text(x.comment,500))throw Error('La reparación necesita un tramo recto y una identificación válida.');
     for(const [name,min,max] of [['startMM',0,100000],['lengthMM',10,100000],['thicknessMM',.5,100],['coverageDeg',10,300],['rollDeg',-3600,3600]])if(typeof x[name]!=='number'||!Number.isFinite(x[name])||x[name]<min||x[name]>max)throw Error('Dimensión de reparación inválida: '+name);
-    if(Object.hasOwn(x,'color')&&(typeof x.color!=='string'||!/^#[0-9a-f]{6}$/i.test(x.color)))throw Error('Color de parche inválido.');
+    if(Object.hasOwn(x,'color')&&(typeof x.color!=='string'||!/^#[0-9a-f]{6}$/i.test(x.color)))throw Error('Color de reparación inválido.');
     if(x.startMM+x.lengthMM>host.lengthMM+.001)throw Error('La reparación debe quedar dentro del largo del tramo.');
    }else{
     if(!['component','equipment'].includes(x.hostType)||!(x.hostType==='component'?components.has(x.hostId):equipment.has(x.hostId))||!Array.isArray(x.coordinates)||x.coordinates.length!==3||x.coordinates.some(v=>typeof v!=='number'||!Number.isFinite(v)||Math.abs(v)>1e6)||!text(x.number,20)||!text(x.text,500)||!COLORS.includes(x.color)||!['both','arrow','circle'].includes(x.style))throw Error('Marca o punto de referencia inválido.');
