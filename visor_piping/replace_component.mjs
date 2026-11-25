@@ -7,7 +7,7 @@ export function replaceComponent(design,id,value,catalog){
  const d=structuredClone(design),before=compute(d,catalog),c=d.components.find(c=>c.id===id),node=before.nodes.find(n=>n.id===id);if(!c)throw Error('Selecciona un componente.');
  const wasOlet=isOlet(c),oldKind=c.kind,wasThreaded=c.valveConnection==='threaded';
  if(wasOlet!==isOlet(choice))throw Error('Una derivación sobre el tubo debe reemplazarse por otra derivación; un elemento en línea, por otro elemento en línea.');
- c.kind=choice.kind;delete c.longRadius;
+ c.kind=choice.kind;delete c.longRadius;delete c.catalogElbolet;
  if(choice.longRadius)c.longRadius=true;
  if(choice.kind==='flangeSW'&&oldKind!=='flangeSW')c.lengthMM=item(catalog,node.nps).flanges[node.rating].lengthMM;
 if(choice.reduction)c.reduction=choice.reduction;if(choice.valveType)c.valveType=choice.valveType;
